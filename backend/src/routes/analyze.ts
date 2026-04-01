@@ -2,7 +2,11 @@ import { Router } from "express";
 import { parseBioressonancia } from "../utils/parserBio";
 import { pool } from "../db/client";
 import { gerarDiagnostico } from "../services/diagnostico.service";
-
+import {
+  salvarNovaAnalise,
+  buscarAnalisePorHashECliente,
+  buscarUltimaAnalisePorCliente,
+} from "../db/analises.repository";
 const router = Router();
 
 /**
