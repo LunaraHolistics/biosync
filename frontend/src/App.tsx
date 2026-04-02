@@ -3,16 +3,6 @@ import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import { processarPdf, type AiStructuredData } from "./services/api";
 import { ComparativoExames, type ComparacaoExames } from "./ComparativoExames";
-import {
-  buscarClientesPorNome,
-  contarAnalises,
-  contarAnalisesMesAtual,
-  contarClientes,
-  listarAnalises,
-  listarClientes,
-  type AnalysisRow,
-  type ClientRow,
-} from "./services/db";
 
 type ItemProcessado = {
   sistema: string;
