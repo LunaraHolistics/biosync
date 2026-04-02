@@ -322,32 +322,6 @@ function App() {
       setError("Informe o clientId.");
       return;
     }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const result = await processarPdf(pdfFiles, clientId);
-
-      console.log("RESULTADO:", result);
-
-      setAnalysis(result.data ?? null);
-      setDiagnostico(result.diagnostico ?? null);
-      setCreatedAt(new Date());
-
-      if (result.reused) {
-        setReusedNotice("Este exame já foi analisado anteriormente");
-      }
-
-      if (result.analysisId) {
-        setExistingAnalysisId(result.analysisId);
-      }
-    } catch (e: unknown) {
-      console.error(e);
-      setError(e instanceof Error ? e.message : "Erro ao processar.");
-    } finally {
-      setLoading(false);
-    }
   };
 
   useEffect(() => {
