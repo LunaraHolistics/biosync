@@ -5,7 +5,7 @@ import {
   type AnalysisRow,
 } from "./db";
 
-const API_URL = "http://localhost:3001";
+const API_URL = "https://biosync-e8ka.onrender.com";
 
 export type AiStructuredData = {
   interpretacao: string;

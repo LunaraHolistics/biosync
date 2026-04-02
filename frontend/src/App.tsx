@@ -178,32 +178,32 @@ function App() {
   });
 
   const relatorioData: RelatorioData | null = useMemo(() => {
-  if (!analysis) return null;
+    if (!analysis) return null;
 
-  return {
-    clientName: clientName.trim() || "Cliente",
-    createdAt: createdAt ?? new Date(),
+    return {
+      clientName: clientName.trim() || "Cliente",
+      createdAt: createdAt ?? new Date(),
 
-    interpretacao: analysis.interpretacao ?? "",
+      interpretacao: analysis.interpretacao ?? "",
 
-    pontos_criticos: Array.isArray(analysis.pontos_criticos)
-      ? analysis.pontos_criticos
-      : [],
+      pontos_criticos: Array.isArray(analysis.pontos_criticos)
+        ? analysis.pontos_criticos
+        : [],
 
-    protocolo: {
-      manha: analysis.protocolo?.manha ?? [],
-      tarde: analysis.protocolo?.tarde ?? [],
-      noite: analysis.protocolo?.noite ?? [],
-    },
+      protocolo: {
+        manha: analysis.protocolo?.manha ?? [],
+        tarde: analysis.protocolo?.tarde ?? [],
+        noite: analysis.protocolo?.noite ?? [],
+      },
 
-    frequencia_lunara: analysis.frequencia_lunara ?? "",
-    justificativa: analysis.justificativa ?? "",
+      frequencia_lunara: analysis.frequencia_lunara ?? "",
+      justificativa: analysis.justificativa ?? "",
 
-    // 🔥 NOVO
-    diagnostico: diagnostico ?? undefined,
-    comparacao: undefined,
-  };
-}, [analysis, clientName, createdAt, diagnostico]);
+      // 🔥 NOVO
+      diagnostico: diagnostico ?? undefined,
+      comparacao: undefined,
+    };
+  }, [analysis, clientName, createdAt, diagnostico]);
 
   const analiseSelecionadaData: AiStructuredData | null = useMemo(() => {
     const raw = analiseSelecionada?.result_text ?? "";
@@ -255,41 +255,41 @@ function App() {
   }, [analiseSelecionada]);
 
   const relatorioDataHistorico: RelatorioData | null = useMemo(() => {
-  if (!clienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
+    if (!clienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
 
-  // Prefer persisted comparacao; otherwise compute from neighboring analysis if possible.
-  const idx = analises.findIndex((x) => x.id === analiseSelecionada.id);
-  const next = idx >= 0 ? analises[idx + 1] : null; // next = older exam
-  const persistedComparacao = toComparacao((analiseSelecionada as any)?.comparacao);
-  const computedComparacao =
-    !persistedComparacao && next
-      ? compararExames(
+    // Prefer persisted comparacao; otherwise compute from neighboring analysis if possible.
+    const idx = analises.findIndex((x) => x.id === analiseSelecionada.id);
+    const next = idx >= 0 ? analises[idx + 1] : null; // next = older exam
+    const persistedComparacao = toComparacao((analiseSelecionada as any)?.comparacao);
+    const computedComparacao =
+      !persistedComparacao && next
+        ? compararExames(
           toItemProcessadoArray((analiseSelecionada as any)?.dados_processados),
           toItemProcessadoArray((next as any)?.dados_processados),
         )
-      : undefined;
+        : undefined;
 
-  return {
-    clientName: clienteSelecionado.name || "Cliente",
-    createdAt: analiseSelecionada.created_at || new Date(),
+    return {
+      clientName: clienteSelecionado.name || "Cliente",
+      createdAt: analiseSelecionada.created_at || new Date(),
 
-    interpretacao: analiseSelecionadaData.interpretacao ?? "",
-    pontos_criticos: analiseSelecionadaData.pontos_criticos ?? [],
+      interpretacao: analiseSelecionadaData.interpretacao ?? "",
+      pontos_criticos: analiseSelecionadaData.pontos_criticos ?? [],
 
-    protocolo: {
-      manha: analiseSelecionadaData.protocolo?.manha ?? [],
-      tarde: analiseSelecionadaData.protocolo?.tarde ?? [],
-      noite: analiseSelecionadaData.protocolo?.noite ?? [],
-    },
+      protocolo: {
+        manha: analiseSelecionadaData.protocolo?.manha ?? [],
+        tarde: analiseSelecionadaData.protocolo?.tarde ?? [],
+        noite: analiseSelecionadaData.protocolo?.noite ?? [],
+      },
 
-    frequencia_lunara: analiseSelecionadaData.frequencia_lunara ?? "",
-    justificativa: analiseSelecionadaData.justificativa ?? "",
+      frequencia_lunara: analiseSelecionadaData.frequencia_lunara ?? "",
+      justificativa: analiseSelecionadaData.justificativa ?? "",
 
-    // 🔥 ESSA LINHA É O OURO
-    diagnostico: toDiagnostico(analiseSelecionada?.diagnostico),
-    comparacao: persistedComparacao ?? computedComparacao,
-  };
-}, [clienteSelecionado, analiseSelecionada, analiseSelecionadaData, analises]);
+      // 🔥 ESSA LINHA É O OURO
+      diagnostico: toDiagnostico(analiseSelecionada?.diagnostico),
+      comparacao: persistedComparacao ?? computedComparacao,
+    };
+  }, [clienteSelecionado, analiseSelecionada, analiseSelecionadaData, analises]);
 
   const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
     if (analises.length < 2) return null;
@@ -412,27 +412,27 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [existingAnalysisId, analises]);
 
-	async function onSelecionarCliente(c: ClientRow) {
- 	 setClienteSelecionado(c);
+  async function onSelecionarCliente(c: ClientRow) {
+    setClienteSelecionado(c);
 
- 	 // 🔥 NOVO: sincroniza com formulário
- 	 setClientId(c.id);
- 	 setClientName(c.name ?? "");
+    // 🔥 NOVO: sincroniza com formulário
+    setClientId(c.id);
+    setClientName(c.name ?? "");
 
-  	setAnaliseSelecionada(null);
- 	 setAnalises([]);
- 	 setHistoryError(null);
- 	 setHistoryLoading(true);
+    setAnaliseSelecionada(null);
+    setAnalises([]);
+    setHistoryError(null);
+    setHistoryLoading(true);
 
- 	 try {
- 	  const list = await listarAnalises(c.id);
-  	  setAnalises(list);
- 	 } catch (e: unknown) {
- 	   setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");
- 	 } finally {
- 	   setHistoryLoading(false);
-  	}
-}
+    try {
+      const list = await listarAnalises(c.id);
+      setAnalises(list);
+    } catch (e: unknown) {
+      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
 
   return (
     <>
@@ -500,38 +500,38 @@ function App() {
 
         <main style={{ flex: 1, padding: 18 }}>
           <div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 12,
-    marginBottom: 20,
-  }}
->
-  {(
-    [
-      ["Total de clientes", dashboard.totalClientes],
-      ["Total de análises", dashboard.totalAnalises],
-      ["Análises no mês", dashboard.analisesMesAtual],
-    ] as const
-  ).map(([label, value]) => (
-    <div
-      key={label}
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 12,
-        padding: 14,
-        background: "rgba(255,255,255,0.02)",
-      }}
-    >
-      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
-        {value}
-      </div>
-    </div>
-  ))}
-</div>
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 12,
+              marginBottom: 20,
+            }}
+          >
+            {(
+              [
+                ["Total de clientes", dashboard.totalClientes],
+                ["Total de análises", dashboard.totalAnalises],
+                ["Análises no mês", dashboard.analisesMesAtual],
+              ] as const
+            ).map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: 14,
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
+                  {label}
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
 
           <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>
             Histórico de análises
@@ -545,98 +545,98 @@ function App() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <ComparativoExames comparacao={comparativoExamesData} />
               <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
-              <section
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 12,
-                  padding: 14,
-                }}
-              >
-                <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                  Análises — {clienteSelecionado.name}
-                </div>
-                {historyLoading ? (
-                  <div style={{ opacity: 0.8 }}>Carregando...</div>
-                ) : analises.length === 0 ? (
-                  <div style={{ opacity: 0.8 }}>Nenhuma análise encontrada.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {analises.map((a) => {
-                      const date = new Date(a.created_at);
-                      const label = Number.isNaN(date.getTime())
-                        ? a.created_at
-                        : date.toLocaleString();
-                      return (
-                        <div
-                          key={a.id}
-                          ref={(el) => {
-                            analysisRefs.current[a.id] = el;
-                          }}
-                          className={existingAnalysisId === a.id ? "analysis-pulse" : undefined}
-                          style={{
-                            border:
-                              existingAnalysisId === a.id
-                                ? "2px solid #f59e0b"
-                                : "1px solid var(--border)",
-                            borderRadius: 10,
-                            padding: 10,
-                            background:
-                              existingAnalysisId === a.id
-                                ? "rgba(245, 158, 11, 0.08)"
-                                : "transparent",
-                          }}
-                        >
-                          <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                            {label}
-                          </div>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button
-                              className="counter"
-                              onClick={() => {
-                                setAnaliseSelecionada(a);
-                                setModalOpen(true);
-                              }}
-                              style={{ marginBottom: 0 }}
-                            >
-                              Ver
-                            </button>
-                            <button
-                              className="counter"
-                              onClick={() => {
-                                setAnaliseSelecionada(a);
-                                const extractJson = (text: string): string | null => {
-                                  const t = text.trim();
-                                  if (!t) return null;
-                                  if (t.startsWith("{") && t.endsWith("}")) return t;
-                                  const m = t.match(/\{[\s\S]*\}/);
-                                  return m?.[0] ?? null;
-                                };
+                <section
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, marginBottom: 10 }}>
+                    Análises — {clienteSelecionado.name}
+                  </div>
+                  {historyLoading ? (
+                    <div style={{ opacity: 0.8 }}>Carregando...</div>
+                  ) : analises.length === 0 ? (
+                    <div style={{ opacity: 0.8 }}>Nenhuma análise encontrada.</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {analises.map((a) => {
+                        const date = new Date(a.created_at);
+                        const label = Number.isNaN(date.getTime())
+                          ? a.created_at
+                          : date.toLocaleString();
+                        return (
+                          <div
+                            key={a.id}
+                            ref={(el) => {
+                              analysisRefs.current[a.id] = el;
+                            }}
+                            className={existingAnalysisId === a.id ? "analysis-pulse" : undefined}
+                            style={{
+                              border:
+                                existingAnalysisId === a.id
+                                  ? "2px solid #f59e0b"
+                                  : "1px solid var(--border)",
+                              borderRadius: 10,
+                              padding: 10,
+                              background:
+                                existingAnalysisId === a.id
+                                  ? "rgba(245, 158, 11, 0.08)"
+                                  : "transparent",
+                            }}
+                          >
+                            <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                              {label}
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button
+                                className="counter"
+                                onClick={() => {
+                                  setAnaliseSelecionada(a);
+                                  setModalOpen(true);
+                                }}
+                                style={{ marginBottom: 0 }}
+                              >
+                                Ver
+                              </button>
+                              <button
+                                className="counter"
+                                onClick={() => {
+                                  setAnaliseSelecionada(a);
+                                  const extractJson = (text: string): string | null => {
+                                    const t = text.trim();
+                                    if (!t) return null;
+                                    if (t.startsWith("{") && t.endsWith("}")) return t;
+                                    const m = t.match(/\{[\s\S]*\}/);
+                                    return m?.[0] ?? null;
+                                  };
 
-                                const toStringArray = (v: unknown): string[] => {
-                                  if (Array.isArray(v)) return v.filter((x) => typeof x === "string");
-                                  if (typeof v === "string") return v.trim() ? [v.trim()] : [];
-                                  return [];
-                                };
+                                  const toStringArray = (v: unknown): string[] => {
+                                    if (Array.isArray(v)) return v.filter((x) => typeof x === "string");
+                                    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+                                    return [];
+                                  };
 
-                                const fallback: AiStructuredData = {
-                                  interpretacao: "",
-                                  pontos_criticos: [],
-                                  protocolo: { manha: [], tarde: [], noite: [] },
-                                  frequencia_lunara: "",
-                                  justificativa: "",
-                                };
+                                  const fallback: AiStructuredData = {
+                                    interpretacao: "",
+                                    pontos_criticos: [],
+                                    protocolo: { manha: [], tarde: [], noite: [] },
+                                    frequencia_lunara: "",
+                                    justificativa: "",
+                                  };
 
-                                let parsed: any = null;
-                                try {
-                                  const candidate = extractJson(a.result_text ?? "");
-                                  if (candidate) parsed = JSON.parse(candidate);
-                                } catch {
-                                  parsed = null;
-                                }
+                                  let parsed: any = null;
+                                  try {
+                                    const candidate = extractJson(a.result_text ?? "");
+                                    if (candidate) parsed = JSON.parse(candidate);
+                                  } catch {
+                                    parsed = null;
+                                  }
 
-                                const protocolo = parsed?.protocolo ?? {};
-                                const data: AiStructuredData = parsed
-                                  ? {
+                                  const protocolo = parsed?.protocolo ?? {};
+                                  const data: AiStructuredData = parsed
+                                    ? {
                                       interpretacao:
                                         typeof parsed.interpretacao === "string" ? parsed.interpretacao : "",
                                       pontos_criticos: toStringArray(parsed.pontos_criticos),
@@ -652,131 +652,131 @@ function App() {
                                       justificativa:
                                         typeof parsed.justificativa === "string" ? parsed.justificativa : "",
                                     }
-                                  : fallback;
+                                    : fallback;
 
-                                gerarRelatorioPDF({
-                                  clientName: clienteSelecionado?.name || "Cliente",
-                                  createdAt: a.created_at || new Date(),
-                                  interpretacao: data.interpretacao || "",
-                                  pontos_criticos: data.pontos_criticos || [],
-                                  protocolo: {
-                                    manha: data.protocolo?.manha ?? [],
-                                    tarde: data.protocolo?.tarde ?? [],
-                                    noite: data.protocolo?.noite ?? [],
-                                  },
-                                  frequencia_lunara: data.frequencia_lunara || "",
-                                  justificativa: data.justificativa || "",
-                                });
-                              }}
-                              style={{ marginBottom: 0 }}
-                              disabled={!a.result_text?.trim()}
-                            >
-                              Baixar PDF
-                            </button>
+                                  gerarRelatorioPDF({
+                                    clientName: clienteSelecionado?.name || "Cliente",
+                                    createdAt: a.created_at || new Date(),
+                                    interpretacao: data.interpretacao || "",
+                                    pontos_criticos: data.pontos_criticos || [],
+                                    protocolo: {
+                                      manha: data.protocolo?.manha ?? [],
+                                      tarde: data.protocolo?.tarde ?? [],
+                                      noite: data.protocolo?.noite ?? [],
+                                    },
+                                    frequencia_lunara: data.frequencia_lunara || "",
+                                    justificativa: data.justificativa || "",
+                                  });
+                                }}
+                                style={{ marginBottom: 0 }}
+                                disabled={!a.result_text?.trim()}
+                              >
+                                Baixar PDF
+                              </button>
+                            </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                <section
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    padding: 14,
+                    minHeight: 220,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, marginBottom: 10 }}>
+                    Detalhes da análise
+                  </div>
+                  {!analiseSelecionada ? (
+                    <div style={{ opacity: 0.8 }}>
+                      Selecione uma análise e clique em “Ver”.
+                    </div>
+                  ) : !analiseSelecionadaData ? (
+                    <div style={{ opacity: 0.8 }}>
+                      Não foi possível interpretar o resultado salvo desta análise.
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                          INTERPRETAÇÃO
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
+                        <div style={{ whiteSpace: "pre-wrap" }}>
+                          {analiseSelecionadaData.interpretacao || "—"}
+                        </div>
+                      </div>
 
-              <section
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 12,
-                  padding: 14,
-                  minHeight: 220,
-                }}
-              >
-                <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                  Detalhes da análise
-                </div>
-                {!analiseSelecionada ? (
-                  <div style={{ opacity: 0.8 }}>
-                    Selecione uma análise e clique em “Ver”.
-                  </div>
-                ) : !analiseSelecionadaData ? (
-                  <div style={{ opacity: 0.8 }}>
-                    Não foi possível interpretar o resultado salvo desta análise.
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    <div>
-                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                        INTERPRETAÇÃO
+                      <div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                          PONTOS CRÍTICOS
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
+                            analiseSelecionadaData.pontos_criticos.map((p, i) => (
+                              <li key={i}>{p}</li>
+                            ))
+                          ) : (
+                            <li>—</li>
+                          )}
+                        </ul>
                       </div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>
-                        {analiseSelecionadaData.interpretacao || "—"}
+
+                      <div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                          PROTOCOLO TERAPÊUTICO
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                          {(
+                            [
+                              ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
+                              ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
+                              ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
+                            ] as const
+                          ).map(([title, items]) => (
+                            <div
+                              key={title}
+                              style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}
+                            >
+                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
+                              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                {items.length ? items.map((x, i) => <li key={i}>{x}</li>) : <li>—</li>}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+
+                      <div className="lunara">
+                        <div className="sectionTitle" style={{ marginBottom: 8 }}>
+                          Frequência Lunara
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
+                          {analiseSelecionadaData.frequencia_lunara || "—"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                          JUSTIFICATIVA TERAPÊUTICA
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>
+                          {analiseSelecionadaData.justificativa || "—"}
+                        </div>
+                      </div>
+
+                      {relatorioDataHistorico ? (
+                        <button className="counter" onClick={() => gerarRelatorioPDF(relatorioDataHistorico)}>
+                          Baixar PDF
+                        </button>
+                      ) : null}
                     </div>
-
-                    <div>
-                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                        PONTOS CRÍTICOS
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                          analiseSelecionadaData.pontos_criticos.map((p, i) => (
-                            <li key={i}>{p}</li>
-                          ))
-                        ) : (
-                          <li>—</li>
-                        )}
-                      </ul>
-                    </div>
-
-                    <div>
-                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                        PROTOCOLO TERAPÊUTICO
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                        {(
-                          [
-                            ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
-                            ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
-                            ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
-                          ] as const
-                        ).map(([title, items]) => (
-                          <div
-                            key={title}
-                            style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}
-                          >
-                            <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
-                              {items.length ? items.map((x, i) => <li key={i}>{x}</li>) : <li>—</li>}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="lunara">
-                      <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                        Frequência Lunara
-                      </div>
-                      <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
-                        {analiseSelecionadaData.frequencia_lunara || "—"}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                        JUSTIFICATIVA TERAPÊUTICA
-                      </div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>
-                        {analiseSelecionadaData.justificativa || "—"}
-                      </div>
-                    </div>
-
-                    {relatorioDataHistorico ? (
-                      <button className="counter" onClick={() => gerarRelatorioPDF(relatorioDataHistorico)}>
-                        Baixar PDF
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </section>
+                  )}
+                </section>
               </div>
             </div>
           )}
@@ -1006,4 +1006,4 @@ function App() {
   )
 }
 
-export default App
+export default App;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { parseHtmlBioressonancia } from "../utils/parserHtml";
 
 const router = Router();
 const upload = multer();
@@ -25,6 +26,7 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
     }
 
     const textos: string[] = [];
+    const dadosEstruturados: any[] = [];
 
     for (const file of files) {
       try {
@@ -34,6 +36,18 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
         // 🔥 HTML
         if (mimetype.includes("html")) {
           const raw = file.buffer.toString("utf-8");
+
+          // ✅ NOVO: parser estruturado
+          const dados = parseHtmlBioressonancia(raw);
+
+          if (dados.length > 0) {
+            dadosEstruturados.push(...dados);
+            console.log("✅ Dados estruturados extraídos:", dados.length);
+          } else {
+            console.log("⚠️ Nenhum dado estruturado encontrado");
+          }
+
+          // mantém compatibilidade com fluxo antigo
           texto = limparHtml(raw);
 
           console.log("HTML processado");
@@ -46,16 +60,13 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
           console.log("TXT processado");
         }
 
-        // ⚠️ PDF (tentativa simples — pode falhar)
+        // ⚠️ PDF (fallback simples)
         else if (mimetype.includes("pdf")) {
           const raw = file.buffer.toString("utf-8");
 
           console.log("PDF detectado (provavelmente imagem)");
 
-          // fallback: tentar extrair algo bruto
           texto = raw;
-
-          // 👉 opcional: ignorar PDF vazio depois
         }
 
         else {
@@ -78,13 +89,17 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
       }
     }
 
-    if (textos.length === 0) {
+    if (textos.length === 0 && dadosEstruturados.length === 0) {
       return res.status(400).json({
         error: "Nenhum conteúdo útil encontrado nos arquivos",
       });
     }
 
-    return res.json({ textos });
+    return res.json({
+      sucesso: true,
+      textos,
+      dadosEstruturados, // 🚀 NOVO
+    });
 
   } catch (error: any) {
     console.error("Erro upload:", error);
