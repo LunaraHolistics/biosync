@@ -309,45 +309,45 @@ function App() {
     }
   }, [modalOpen]);
 
-  const onProcessarPdf = async () => {
+    const onProcessarPdf = async () => {
     console.log("🔥 BOTÃO CLICADO");
     console.log("FILES:", pdfFiles);
-
+  
     if (!pdfFiles || pdfFiles.length === 0) {
       setError("Selecione pelo menos um arquivo.");
       return;
     }
-
+  
     if (!clientId) {
       setError("Informe o clientId.");
       return;
     }
-
+  
     setLoading(true);
     setError(null);
-
+  
     try {
       const result = await processarPdf(pdfFiles, clientId);
-
+  
       console.log("RESULTADO:", result);
-
+  
       setAnalysis(result.data ?? null);
       setDiagnostico(result.diagnostico ?? null);
       setCreatedAt(new Date());
-
+  
       if (result.reused) {
         setReusedNotice("Este exame já foi analisado anteriormente");
       }
-
+  
       if (result.analysisId) {
         setExistingAnalysisId(result.analysisId);
       }
-
+  
       if (clienteSelecionado?.id === clientId) {
         const list = await listarAnalises(clientId);
         setAnalises(list);
       }
-
+  
     } catch (e: unknown) {
       console.error(e);
       setError(e instanceof Error ? e.message : "Erro ao processar.");
@@ -765,167 +765,166 @@ function App() {
             </div>
           </section>
         </main>
+      </div>
 
-        {modalOpen ? (
+      {modalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setModalOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+        >
           <div
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setModalOpen(false)}
+            onClick={(e) => e.stopPropagation()}
             style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.55)",
-              display: "grid",
-              placeItems: "center",
+              width: "min(920px, 96vw)",
+              maxHeight: "92vh",
+              overflow: "auto",
+              background: "rgba(17, 24, 39, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
               padding: 16,
-              zIndex: 50,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
             }}
           >
             <div
-              onClick={(e) => e.stopPropagation()}
               style={{
-                width: "min(920px, 96vw)",
-                maxHeight: "92vh",
-                overflow: "auto",
-                background: "rgba(17, 24, 39, 0.98)",
-                border: "1px solid var(--border)",
-                borderRadius: 14,
-                padding: 16,
-                boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 12,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 12,
-                }}
-              >
-                <div style={{ fontWeight: 900 }}>
-                  {clienteSelecionado?.name ?? "Cliente"} —{" "}
-                  {analiseSelecionada?.created_at ?? ""}
+              <div style={{ fontWeight: 900 }}>
+                {clienteSelecionado?.name ?? "Cliente"} —{" "}
+                {analiseSelecionada?.created_at ?? ""}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="counter"
+                  onClick={() => {
+                    if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
+                  }}
+                  disabled={!relatorioDataHistorico}
+                  style={{ marginBottom: 0 }}
+                >
+                  Gerar PDF
+                </button>
+                <button
+                  className="counter"
+                  onClick={() => setModalOpen(false)}
+                  style={{ marginBottom: 0 }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            {!analiseSelecionada ? (
+              <div style={{ opacity: 0.85 }}>Nenhuma análise selecionada.</div>
+            ) : !analiseSelecionadaData ? (
+              <div style={{ opacity: 0.85 }}>
+                Não foi possível interpretar o resultado salvo desta análise.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    INTERPRETAÇÃO
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    {analiseSelecionadaData.interpretacao || "—"}
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button
-                    className="counter"
-                    onClick={() => {
-                      if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    PONTOS CRÍTICOS
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
+                      analiseSelecionadaData.pontos_criticos.map((p, i) => (
+                        <li key={i}>{p}</li>
+                      ))
+                    ) : (
+                      <li>—</li>
+                    )}
+                  </ul>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    PROTOCOLO TERAPÊUTICO
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr 1fr",
+                      gap: 10,
                     }}
-                    disabled={!relatorioDataHistorico}
-                    style={{ marginBottom: 0 }}
                   >
-                    Gerar PDF
-                  </button>
-                  <button
-                    className="counter"
-                    onClick={() => setModalOpen(false)}
-                    style={{ marginBottom: 0 }}
-                  >
-                    Fechar
-                  </button>
+                    {(
+                      [
+                        ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
+                        ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
+                        ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
+                      ] as const
+                    ).map(([title, items]) => (
+                      <div
+                        key={title}
+                        style={{
+                          border: "1px solid var(--border)",
+                          borderRadius: 10,
+                          padding: 10,
+                        }}
+                      >
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                          {title}
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {items.length ? (
+                            items.map((x, i) => <li key={i}>{x}</li>)
+                          ) : (
+                            <li>—</li>
+                          )}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="lunara">
+                  <div className="sectionTitle" style={{ marginBottom: 8 }}>
+                    Frequência Lunara
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
+                    {analiseSelecionadaData.frequencia_lunara || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    JUSTIFICATIVA TERAPÊUTICA
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    {analiseSelecionadaData.justificativa || "—"}
+                  </div>
                 </div>
               </div>
-
-              {!analiseSelecionada ? (
-                <div style={{ opacity: 0.85 }}>Nenhuma análise selecionada.</div>
-              ) : !analiseSelecionadaData ? (
-                <div style={{ opacity: 0.85 }}>
-                  Não foi possível interpretar o resultado salvo desta análise.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                      INTERPRETAÇÃO
-                    </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {analiseSelecionadaData.interpretacao || "—"}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                      PONTOS CRÍTICOS
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                        analiseSelecionadaData.pontos_criticos.map((p, i) => (
-                          <li key={i}>{p}</li>
-                        ))
-                      ) : (
-                        <li>—</li>
-                      )}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                      PROTOCOLO TERAPÊUTICO
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
-                        gap: 10,
-                      }}
-                    >
-                      {(
-                        [
-                          ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
-                          ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
-                          ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
-                        ] as const
-                      ).map(([title, items]) => (
-                        <div
-                          key={title}
-                          style={{
-                            border: "1px solid var(--border)",
-                            borderRadius: 10,
-                            padding: 10,
-                          }}
-                        >
-                          <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                            {title}
-                          </div>
-                          <ul style={{ margin: 0, paddingLeft: 18 }}>
-                            {items.length ? (
-                              items.map((x, i) => <li key={i}>{x}</li>)
-                            ) : (
-                              <li>—</li>
-                            )}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="lunara">
-                    <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                      Frequência Lunara
-                    </div>
-                    <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
-                      {analiseSelecionadaData.frequencia_lunara || "—"}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                      JUSTIFICATIVA TERAPÊUTICA
-                    </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {analiseSelecionadaData.justificativa || "—"}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
-              ) : null}
-            </div>
-          </>
-        );
-      }
-      
-      export default App;
+        </div>
+      ) : null}
+    </>
+  );
+}
+export default App;
