@@ -355,7 +355,19 @@ function App() {
       setLoading(false);
     }
   };
-
+    const onSelecionarCliente = async (cliente: ClientRow) => {
+          setHistoryLoading(true);
+          setClienteSelecionado(cliente);
+          setClientId(cliente.id); // Sincroniza o ID para novas análises
+          try {
+            const lista = await listarAnalises(cliente.id);
+            setAnalises(lista);
+          } catch (err) {
+            setHistoryError("Erro ao carregar histórico");
+          } finally {
+            setHistoryLoading(false);
+          }
+        };
   return (
     <>
       <div
@@ -928,4 +940,4 @@ function App() {
   );
 }
 
-export default App;  // ← semicolon added
+export default App;
