@@ -178,32 +178,32 @@ function App() {
   });
 
   const relatorioData: RelatorioData | null = useMemo(() => {
-    if (!analysis) return null;
+  if (!analysis) return null;
 
-    return {
-      clientName: clientName.trim() || "Cliente",
-      createdAt: createdAt ?? new Date(),
+  return {
+    clientName: clientName.trim() || "Cliente",
+    createdAt: createdAt ?? new Date(),
 
-      interpretacao: analysis.interpretacao ?? "",
+    interpretacao: analysis.interpretacao ?? "",
 
-      pontos_criticos: Array.isArray(analysis.pontos_criticos)
-        ? analysis.pontos_criticos
-        : [],
+    pontos_criticos: Array.isArray(analysis.pontos_criticos)
+      ? analysis.pontos_criticos
+      : [],
 
-      protocolo: {
-        manha: analysis.protocolo?.manha ?? [],
-        tarde: analysis.protocolo?.tarde ?? [],
-        noite: analysis.protocolo?.noite ?? [],
-      },
+    protocolo: {
+      manha: analysis.protocolo?.manha ?? [],
+      tarde: analysis.protocolo?.tarde ?? [],
+      noite: analysis.protocolo?.noite ?? [],
+    },
 
-      frequencia_lunara: analysis.frequencia_lunara ?? "",
-      justificativa: analysis.justificativa ?? "",
+    frequencia_lunara: analysis.frequencia_lunara ?? "",
+    justificativa: analysis.justificativa ?? "",
 
-      // 🔥 NOVO
-      diagnostico: diagnostico ?? undefined,
-      comparacao: undefined,
-    };
-  }, [analysis, clientName, createdAt, diagnostico]);
+    // 🔥 NOVO
+    diagnostico: diagnostico ?? undefined,
+    comparacao: undefined,
+  };
+}, [analysis, clientName, createdAt, diagnostico]);
 
   const analiseSelecionadaData: AiStructuredData | null = useMemo(() => {
     const raw = analiseSelecionada?.result_text ?? "";
@@ -255,41 +255,41 @@ function App() {
   }, [analiseSelecionada]);
 
   const relatorioDataHistorico: RelatorioData | null = useMemo(() => {
-    if (!clienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
+  if (!clienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
 
-    // Prefer persisted comparacao; otherwise compute from neighboring analysis if possible.
-    const idx = analises.findIndex((x) => x.id === analiseSelecionada.id);
-    const next = idx >= 0 ? analises[idx + 1] : null; // next = older exam
-    const persistedComparacao = toComparacao((analiseSelecionada as any)?.comparacao);
-    const computedComparacao =
-      !persistedComparacao && next
-        ? compararExames(
+  // Prefer persisted comparacao; otherwise compute from neighboring analysis if possible.
+  const idx = analises.findIndex((x) => x.id === analiseSelecionada.id);
+  const next = idx >= 0 ? analises[idx + 1] : null; // next = older exam
+  const persistedComparacao = toComparacao((analiseSelecionada as any)?.comparacao);
+  const computedComparacao =
+    !persistedComparacao && next
+      ? compararExames(
           toItemProcessadoArray((analiseSelecionada as any)?.dados_processados),
           toItemProcessadoArray((next as any)?.dados_processados),
         )
-        : undefined;
+      : undefined;
 
-    return {
-      clientName: clienteSelecionado.name || "Cliente",
-      createdAt: analiseSelecionada.created_at || new Date(),
+  return {
+    clientName: clienteSelecionado.name || "Cliente",
+    createdAt: analiseSelecionada.created_at || new Date(),
 
-      interpretacao: analiseSelecionadaData.interpretacao ?? "",
-      pontos_criticos: analiseSelecionadaData.pontos_criticos ?? [],
+    interpretacao: analiseSelecionadaData.interpretacao ?? "",
+    pontos_criticos: analiseSelecionadaData.pontos_criticos ?? [],
 
-      protocolo: {
-        manha: analiseSelecionadaData.protocolo?.manha ?? [],
-        tarde: analiseSelecionadaData.protocolo?.tarde ?? [],
-        noite: analiseSelecionadaData.protocolo?.noite ?? [],
-      },
+    protocolo: {
+      manha: analiseSelecionadaData.protocolo?.manha ?? [],
+      tarde: analiseSelecionadaData.protocolo?.tarde ?? [],
+      noite: analiseSelecionadaData.protocolo?.noite ?? [],
+    },
 
-      frequencia_lunara: analiseSelecionadaData.frequencia_lunara ?? "",
-      justificativa: analiseSelecionadaData.justificativa ?? "",
+    frequencia_lunara: analiseSelecionadaData.frequencia_lunara ?? "",
+    justificativa: analiseSelecionadaData.justificativa ?? "",
 
-      // 🔥 ESSA LINHA É O OURO
-      diagnostico: toDiagnostico(analiseSelecionada?.diagnostico),
-      comparacao: persistedComparacao ?? computedComparacao,
-    };
-  }, [clienteSelecionado, analiseSelecionada, analiseSelecionadaData, analises]);
+    // 🔥 ESSA LINHA É O OURO
+    diagnostico: toDiagnostico(analiseSelecionada?.diagnostico),
+    comparacao: persistedComparacao ?? computedComparacao,
+  };
+}, [clienteSelecionado, analiseSelecionada, analiseSelecionadaData, analises]);
 
   const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
     if (analises.length < 2) return null;
@@ -309,268 +309,242 @@ function App() {
     }
   }, [modalOpen]);
 
-  const onProcessarPdf = async () => {
-    console.log("🔥 BOTÃO CLICADO");
-    console.log("FILES:", pdfFiles);
+  async function onProcessarPdf() {
+    setError(null);
+    setAnalysis(null);
+    setReusedNotice(null);
+    setExistingAnalysisId(null);
 
-    if (!pdfFiles || pdfFiles.length === 0) {
-      setError("Selecione pelo menos um arquivo.");
+    if (!pdfFiles) {
+      setError("Selecione um arquivo PDF.");
       return;
     }
-
-    if (!clientId) {
-      setError("Informe o clientId.");
+    if (!clientId.trim()) {
+      setError("Informe o clientId (Supabase).");
       return;
     }
 
     setLoading(true);
-    setError(null);
-
     try {
-      const result = await processarPdf(pdfFiles, clientId);
-
-      console.log("RESULTADO:", result);
-
+      const result = await processarPdf(pdfFiles, clientId); // quando múltiplos
+      console.log("RESULTADO COMPLETO:", result);
       setAnalysis(result.data ?? null);
       setDiagnostico(result.diagnostico ?? null);
       setCreatedAt(new Date());
-
       if (result.reused) {
         setReusedNotice("Este exame já foi analisado anteriormente");
       }
-
       if (result.analysisId) {
         setExistingAnalysisId(result.analysisId);
       }
+      if (clienteSelecionado?.id === clientId) {
+        const list = await listarAnalises(clientId);
+        setAnalises(list);
+      }
     } catch (e: unknown) {
-      console.error(e);
-      setError(e instanceof Error ? e.message : "Erro ao processar.");
+      setError(e instanceof Error ? e.message : "Erro ao processar PDF.");
     } finally {
       setLoading(false);
     }
-  };
-
-  setLoading(true);
-  try {
-    const result = await processarPdf(pdfFiles, clientId); // quando múltiplos
-    console.log("RESULTADO COMPLETO:", result);
-    setAnalysis(result.data ?? null);
-    setDiagnostico(result.diagnostico ?? null);
-    setCreatedAt(new Date());
-    if (result.reused) {
-      setReusedNotice("Este exame já foi analisado anteriormente");
-    }
-    if (result.analysisId) {
-      setExistingAnalysisId(result.analysisId);
-    }
-    if (clienteSelecionado?.id === clientId) {
-      const list = await listarAnalises(clientId);
-      setAnalises(list);
-    }
-  } catch (e: unknown) {
-    setError(e instanceof Error ? e.message : "Erro ao processar PDF.");
-  } finally {
-    setLoading(false);
   }
-}
 
-useEffect(() => {
-  (async () => {
-    setHistoryError(null);
-    try {
-      const list = await listarClientes();
-      setClientes(list);
-    } catch (e: unknown) {
-      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar clientes.");
-    }
-  })();
-}, []);
-
-useEffect(() => {
-  (async () => {
-    try {
-      const [totalClientes, totalAnalises, analisesMesAtual] = await Promise.all([
-        contarClientes(),
-        contarAnalises(),
-        contarAnalisesMesAtual(),
-      ]);
-      setDashboard({ totalClientes, totalAnalises, analisesMesAtual });
-    } catch {
-      // ignore
-    }
-  })();
-}, [clientes.length, analises.length, loading]);
-
-useEffect(() => {
-  (async () => {
-    const q = clienteBusca.trim();
-    if (!q) {
+  useEffect(() => {
+    (async () => {
+      setHistoryError(null);
       try {
         const list = await listarClientes();
+        setClientes(list);
+      } catch (e: unknown) {
+        setHistoryError(e instanceof Error ? e.message : "Erro ao carregar clientes.");
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [totalClientes, totalAnalises, analisesMesAtual] = await Promise.all([
+          contarClientes(),
+          contarAnalises(),
+          contarAnalisesMesAtual(),
+        ]);
+        setDashboard({ totalClientes, totalAnalises, analisesMesAtual });
+      } catch {
+        // ignore
+      }
+    })();
+  }, [clientes.length, analises.length, loading]);
+
+  useEffect(() => {
+    (async () => {
+      const q = clienteBusca.trim();
+      if (!q) {
+        try {
+          const list = await listarClientes();
+          setClientes(list);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+
+      try {
+        const list = await buscarClientesPorNome(q);
         setClientes(list);
       } catch {
         // ignore
       }
-      return;
+    })();
+  }, [clienteBusca]);
+
+  useEffect(() => {
+    if (!existingAnalysisId) return;
+
+    const node = analysisRefs.current[existingAnalysisId];
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
-    try {
-      const list = await buscarClientesPorNome(q);
-      setClientes(list);
-    } catch {
-      // ignore
-    }
-  })();
-}, [clienteBusca]);
+    const timeout = window.setTimeout(() => {
+      setExistingAnalysisId(null);
+    }, 3000);
 
-useEffect(() => {
-  if (!existingAnalysisId) return;
+    return () => window.clearTimeout(timeout);
+  }, [existingAnalysisId, analises]);
 
-  const node = analysisRefs.current[existingAnalysisId];
-  if (node) {
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
+	async function onSelecionarCliente(c: ClientRow) {
+ 	 setClienteSelecionado(c);
 
-  const timeout = window.setTimeout(() => {
-    setExistingAnalysisId(null);
-  }, 3000);
+ 	 // 🔥 NOVO: sincroniza com formulário
+ 	 setClientId(c.id);
+ 	 setClientName(c.name ?? "");
 
-  return () => window.clearTimeout(timeout);
-}, [existingAnalysisId, analises]);
+  	setAnaliseSelecionada(null);
+ 	 setAnalises([]);
+ 	 setHistoryError(null);
+ 	 setHistoryLoading(true);
 
-async function onSelecionarCliente(c: ClientRow) {
-  setClienteSelecionado(c);
-
-  // 🔥 NOVO: sincroniza com formulário
-  setClientId(c.id);
-  setClientName(c.name ?? "");
-
-  setAnaliseSelecionada(null);
-  setAnalises([]);
-  setHistoryError(null);
-  setHistoryLoading(true);
-
-  try {
-    const list = await listarAnalises(c.id);
-    setAnalises(list);
-  } catch (e: unknown) {
-    setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");
-  } finally {
-    setHistoryLoading(false);
-  }
+ 	 try {
+ 	  const list = await listarAnalises(c.id);
+  	  setAnalises(list);
+ 	 } catch (e: unknown) {
+ 	   setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");
+ 	 } finally {
+ 	   setHistoryLoading(false);
+  	}
 }
 
-return (
-  <>
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        width: "100%",
-      }}
-    >
-      <aside
+  return (
+    <>
+      <div
         style={{
-          width: 300,
-          borderRight: "1px solid var(--border)",
-          padding: 16,
+          display: "flex",
+          minHeight: "100vh",
+          width: "100%",
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
-          Clientes
-        </div>
-        <input
-          value={clienteBusca}
-          onChange={(e) => setClienteBusca(e.target.value)}
-          placeholder="Buscar por nome..."
+        <aside
           style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            background: "transparent",
-            color: "inherit",
-            marginBottom: 10,
-            boxSizing: "border-box",
-          }}
-        />
-        {historyError ? (
-          <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>
-            {historyError}
-          </div>
-        ) : null}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {clientes.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => onSelecionarCliente(c)}
-              style={{
-                textAlign: "left",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background:
-                  clienteSelecionado?.id === c.id
-                    ? "var(--accent-bg)"
-                    : "transparent",
-                color: "inherit",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>{c.name}</div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>{c.id}</div>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <main style={{ flex: 1, padding: 18 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 12,
-            marginBottom: 20,
+            width: 300,
+            borderRight: "1px solid var(--border)",
+            padding: 16,
           }}
         >
-          {(
-            [
-              ["Total de clientes", dashboard.totalClientes],
-              ["Total de análises", dashboard.totalAnalises],
-              ["Análises no mês", dashboard.analisesMesAtual],
-            ] as const
-          ).map(([label, value]) => (
-            <div
-              key={label}
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-                padding: 14,
-                background: "rgba(255,255,255,0.02)",
-              }}
-            >
-              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
-                {label}
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>
-          Histórico de análises
-        </div>
-
-        {!clienteSelecionado ? (
-          <div style={{ opacity: 0.8 }}>
-            Selecione um cliente à esquerda para ver as análises.
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
+            Clientes
           </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <ComparativoExames comparacao={comparativoExamesData} />
-            <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
+          <input
+            value={clienteBusca}
+            onChange={(e) => setClienteBusca(e.target.value)}
+            placeholder="Buscar por nome..."
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "transparent",
+              color: "inherit",
+              marginBottom: 10,
+              boxSizing: "border-box",
+            }}
+          />
+          {historyError ? (
+            <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>
+              {historyError}
+            </div>
+          ) : null}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {clientes.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onSelecionarCliente(c)}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background:
+                    clienteSelecionado?.id === c.id
+                      ? "var(--accent-bg)"
+                      : "transparent",
+                  color: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>{c.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>{c.id}</div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <main style={{ flex: 1, padding: 18 }}>
+          <div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 12,
+    marginBottom: 20,
+  }}
+>
+  {(
+    [
+      ["Total de clientes", dashboard.totalClientes],
+      ["Total de análises", dashboard.totalAnalises],
+      ["Análises no mês", dashboard.analisesMesAtual],
+    ] as const
+  ).map(([label, value]) => (
+    <div
+      key={label}
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        padding: 14,
+        background: "rgba(255,255,255,0.02)",
+      }}
+    >
+      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
+        {value}
+      </div>
+    </div>
+  ))}
+</div>
+
+          <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>
+            Histórico de análises
+          </div>
+
+          {!clienteSelecionado ? (
+            <div style={{ opacity: 0.8 }}>
+              Selecione um cliente à esquerda para ver as análises.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <ComparativoExames comparacao={comparativoExamesData} />
+              <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
               <section
                 style={{
                   border: "1px solid var(--border)",
@@ -663,21 +637,21 @@ return (
                                 const protocolo = parsed?.protocolo ?? {};
                                 const data: AiStructuredData = parsed
                                   ? {
-                                    interpretacao:
-                                      typeof parsed.interpretacao === "string" ? parsed.interpretacao : "",
-                                    pontos_criticos: toStringArray(parsed.pontos_criticos),
-                                    protocolo: {
-                                      manha: toStringArray(protocolo.manha),
-                                      tarde: toStringArray(protocolo.tarde),
-                                      noite: toStringArray(protocolo.noite),
-                                    },
-                                    frequencia_lunara:
-                                      typeof parsed.frequencia_lunara === "string"
-                                        ? parsed.frequencia_lunara
-                                        : "",
-                                    justificativa:
-                                      typeof parsed.justificativa === "string" ? parsed.justificativa : "",
-                                  }
+                                      interpretacao:
+                                        typeof parsed.interpretacao === "string" ? parsed.interpretacao : "",
+                                      pontos_criticos: toStringArray(parsed.pontos_criticos),
+                                      protocolo: {
+                                        manha: toStringArray(protocolo.manha),
+                                        tarde: toStringArray(protocolo.tarde),
+                                        noite: toStringArray(protocolo.noite),
+                                      },
+                                      frequencia_lunara:
+                                        typeof parsed.frequencia_lunara === "string"
+                                          ? parsed.frequencia_lunara
+                                          : "",
+                                      justificativa:
+                                        typeof parsed.justificativa === "string" ? parsed.justificativa : "",
+                                    }
                                   : fallback;
 
                                 gerarRelatorioPDF({
@@ -803,232 +777,233 @@ return (
                   </div>
                 )}
               </section>
-            </div>
-          </div>
-        )}
-
-        <div style={{ height: 20 }} />
-
-        <section
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            padding: 14,
-            maxWidth: 760,
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>Nova análise (PDF)</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Nome do cliente (para o PDF)"
-              style={{
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "inherit",
-              }}
-            />
-            <input
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              placeholder="clientId (Supabase)"
-              style={{
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "inherit",
-              }}
-            />
-            <input
-              type="file"
-              accept=".pdf,.html,.htm,.txt"
-              multiple
-              onChange={(e) =>
-                setPdfFiles(e.target.files ? Array.from(e.target.files) : [])
-              }
-            />
-            <button className="counter" onClick={onProcessarPdf} disabled={loading}>
-              {loading ? "Processando..." : "Processar PDF"}
-            </button>
-            {error ? <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div> : null}
-            {reusedNotice ? (
-              <div style={{ color: "#f59e0b", fontSize: 14, fontWeight: 700 }}>
-                {reusedNotice}
-              </div>
-            ) : null}
-
-            {relatorioData ? (
-              <button className="counter" onClick={() => gerarRelatorioPDF(relatorioData)}>
-                Gerar Relatório PDF
-              </button>
-            ) : null}
-          </div>
-        </section>
-      </main>
-    </div>
-
-    {modalOpen ? (
-      <div
-        role="dialog"
-        aria-modal="true"
-        onClick={() => setModalOpen(false)}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.55)",
-          display: "grid",
-          placeItems: "center",
-          padding: 16,
-          zIndex: 50,
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "min(920px, 96vw)",
-            maxHeight: "92vh",
-            overflow: "auto",
-            background: "rgba(17, 24, 39, 0.98)",
-            border: "1px solid var(--border)",
-            borderRadius: 14,
-            padding: 16,
-            boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 12,
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>
-              {clienteSelecionado?.name ?? "Cliente"} —{" "}
-              {analiseSelecionada?.created_at ?? ""}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                className="counter"
-                onClick={() => {
-                  if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
-                }}
-                disabled={!relatorioDataHistorico}
-                style={{ marginBottom: 0 }}
-              >
-                Gerar PDF
-              </button>
-              <button
-                className="counter"
-                onClick={() => setModalOpen(false)}
-                style={{ marginBottom: 0 }}
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-
-          {!analiseSelecionada ? (
-            <div style={{ opacity: 0.85 }}>Nenhuma análise selecionada.</div>
-          ) : !analiseSelecionadaData ? (
-            <div style={{ opacity: 0.85 }}>
-              Não foi possível interpretar o resultado salvo desta análise.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                  INTERPRETAÇÃO
-                </div>
-                <div style={{ whiteSpace: "pre-wrap" }}>
-                  {analiseSelecionadaData.interpretacao || "—"}
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                  PONTOS CRÍTICOS
-                </div>
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                    analiseSelecionadaData.pontos_criticos.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))
-                  ) : (
-                    <li>—</li>
-                  )}
-                </ul>
-              </div>
-
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                  PROTOCOLO TERAPÊUTICO
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: 10,
-                  }}
-                >
-                  {(
-                    [
-                      ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
-                      ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
-                      ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
-                    ] as const
-                  ).map(([title, items]) => (
-                    <div
-                      key={title}
-                      style={{
-                        border: "1px solid var(--border)",
-                        borderRadius: 10,
-                        padding: 10,
-                      }}
-                    >
-                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                        {title}
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {items.length ? (
-                          items.map((x, i) => <li key={i}>{x}</li>)
-                        ) : (
-                          <li>—</li>
-                        )}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="lunara">
-                <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                  Frequência Lunara
-                </div>
-                <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
-                  {analiseSelecionadaData.frequencia_lunara || "—"}
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                  JUSTIFICATIVA TERAPÊUTICA
-                </div>
-                <div style={{ whiteSpace: "pre-wrap" }}>
-                  {analiseSelecionadaData.justificativa || "—"}
-                </div>
               </div>
             </div>
           )}
-        </div>
+
+          <div style={{ height: 20 }} />
+
+          <section
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 14,
+              maxWidth: 760,
+            }}
+          >
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Nova análise (PDF)</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Nome do cliente (para o PDF)"
+                style={{
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "inherit",
+                }}
+              />
+              <input
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="clientId (Supabase)"
+                style={{
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "inherit",
+                }}
+              />
+              <input
+                type="file"
+                accept=".pdf,.html,.txt"
+                multiple
+                onChange={(e) =>
+                  setPdfFiles(e.target.files ? Array.from(e.target.files) : [])
+                }
+              />
+              <button className="counter" onClick={onProcessarPdf} disabled={loading}>
+                {loading ? "Processando..." : "Processar PDF"}
+              </button>
+              {error ? <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div> : null}
+              {reusedNotice ? (
+                <div style={{ color: "#f59e0b", fontSize: 14, fontWeight: 700 }}>
+                  {reusedNotice}
+                </div>
+              ) : null}
+
+              {relatorioData ? (
+                <button className="counter" onClick={() => gerarRelatorioPDF(relatorioData)}>
+                  Gerar Relatório PDF
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </main>
       </div>
-    ) : null}
-  </>
-);
+
+      {modalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setModalOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(920px, 96vw)",
+              maxHeight: "92vh",
+              overflow: "auto",
+              background: "rgba(17, 24, 39, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>
+                {clienteSelecionado?.name ?? "Cliente"} —{" "}
+                {analiseSelecionada?.created_at ?? ""}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="counter"
+                  onClick={() => {
+                    if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
+                  }}
+                  disabled={!relatorioDataHistorico}
+                  style={{ marginBottom: 0 }}
+                >
+                  Gerar PDF
+                </button>
+                <button
+                  className="counter"
+                  onClick={() => setModalOpen(false)}
+                  style={{ marginBottom: 0 }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            {!analiseSelecionada ? (
+              <div style={{ opacity: 0.85 }}>Nenhuma análise selecionada.</div>
+            ) : !analiseSelecionadaData ? (
+              <div style={{ opacity: 0.85 }}>
+                Não foi possível interpretar o resultado salvo desta análise.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    INTERPRETAÇÃO
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    {analiseSelecionadaData.interpretacao || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    PONTOS CRÍTICOS
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
+                      analiseSelecionadaData.pontos_criticos.map((p, i) => (
+                        <li key={i}>{p}</li>
+                      ))
+                    ) : (
+                      <li>—</li>
+                    )}
+                  </ul>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    PROTOCOLO TERAPÊUTICO
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr 1fr",
+                      gap: 10,
+                    }}
+                  >
+                    {(
+                      [
+                        ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
+                        ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
+                        ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
+                      ] as const
+                    ).map(([title, items]) => (
+                      <div
+                        key={title}
+                        style={{
+                          border: "1px solid var(--border)",
+                          borderRadius: 10,
+                          padding: 10,
+                        }}
+                      >
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                          {title}
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {items.length ? (
+                            items.map((x, i) => <li key={i}>{x}</li>)
+                          ) : (
+                            <li>—</li>
+                          )}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="lunara">
+                  <div className="sectionTitle" style={{ marginBottom: 8 }}>
+                    Frequência Lunara
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
+                    {analiseSelecionadaData.frequencia_lunara || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    JUSTIFICATIVA TERAPÊUTICA
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    {analiseSelecionadaData.justificativa || "—"}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </>
+  )
+}
 
 export default App;
