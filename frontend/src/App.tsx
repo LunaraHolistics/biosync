@@ -819,7 +819,7 @@ function App() {
               />
               <input
                 type="file"
-                accept=".pdf,.html,.txt"
+                accept=".pdf,.html,.htm,.txt"
                 multiple
                 onChange={(e) =>
                   setPdfFiles(e.target.files ? Array.from(e.target.files) : [])
