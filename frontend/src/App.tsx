@@ -309,55 +309,53 @@ function App() {
     }
   }, [modalOpen]);
 
-  const onProcessarPdf = async () => {
+    const onProcessarPdf = async () => {
+    console.log("🔥 BOTÃO CLICADO");
+    console.log("FILES:", pdfFiles);
+  
     if (!pdfFiles || pdfFiles.length === 0) {
       setError("Selecione pelo menos um arquivo.");
       return;
     }
+  
     if (!clientId) {
       setError("Informe o clientId.");
       return;
     }
-
+  
     setLoading(true);
     setError(null);
-    setReusedNotice(null);
-
+  
     try {
       const result = await processarPdf(pdfFiles, clientId);
+  
+      console.log("RESULTADO:", result);
+  
       setAnalysis(result.data ?? null);
       setDiagnostico(result.diagnostico ?? null);
       setCreatedAt(new Date());
-
-      if (result.reused) setReusedNotice("Este exame já foi analisado anteriormente");
-      if (result.analysisId) setExistingAnalysisId(result.analysisId);
-
+  
+      if (result.reused) {
+        setReusedNotice("Este exame já foi analisado anteriormente");
+      }
+  
+      if (result.analysisId) {
+        setExistingAnalysisId(result.analysisId);
+      }
+  
       if (clienteSelecionado?.id === clientId) {
         const list = await listarAnalises(clientId);
         setAnalises(list);
       }
+  
     } catch (e: unknown) {
+      console.error(e);
       setError(e instanceof Error ? e.message : "Erro ao processar.");
     } finally {
       setLoading(false);
     }
   };
 
-  const onSelecionarCliente = async (cliente: ClientRow) => {
-    setHistoryLoading(true);
-    setClienteSelecionado(cliente);
-    setClientId(cliente.id);
-    setClientName(cliente.name);
-    try {
-      const lista = await listarAnalises(cliente.id);
-      setAnalises(lista);
-      setAnaliseSelecionada(null); // Limpa seleção anterior
-    } catch (err) {
-      setHistoryError("Erro ao carregar histórico");
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
   return (
     <>
       <div
@@ -767,7 +765,6 @@ function App() {
             </div>
           </section>
         </main>
-      </div>
 
       {modalOpen ? (
         <div
@@ -930,4 +927,4 @@ function App() {
   );
 }
 
-export default App;
+export default App;  // ← semicolon added
