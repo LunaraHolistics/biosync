@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
+const parserHtml_1 = require("../utils/parserHtml");
 const router = (0, express_1.Router)();
 const upload = (0, multer_1.default)();
 /**
@@ -25,6 +26,7 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
             return res.status(400).json({ error: "Nenhum arquivo enviado" });
         }
         const textos = [];
+        const dadosEstruturados = [];
         for (const file of files) {
             try {
                 const mimetype = file.mimetype;
@@ -32,6 +34,16 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
                 // 🔥 HTML
                 if (mimetype.includes("html")) {
                     const raw = file.buffer.toString("utf-8");
+                    // ✅ NOVO: parser estruturado
+                    const dados = (0, parserHtml_1.parseHtmlBioressonancia)(raw);
+                    if (dados.length > 0) {
+                        dadosEstruturados.push(...dados);
+                        console.log("✅ Dados estruturados extraídos:", dados.length);
+                    }
+                    else {
+                        console.log("⚠️ Nenhum dado estruturado encontrado");
+                    }
+                    // mantém compatibilidade com fluxo antigo
                     texto = limparHtml(raw);
                     console.log("HTML processado");
                 }
@@ -40,13 +52,11 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
                     texto = file.buffer.toString("utf-8");
                     console.log("TXT processado");
                 }
-                // ⚠️ PDF (tentativa simples — pode falhar)
+                // ⚠️ PDF (fallback simples)
                 else if (mimetype.includes("pdf")) {
                     const raw = file.buffer.toString("utf-8");
                     console.log("PDF detectado (provavelmente imagem)");
-                    // fallback: tentar extrair algo bruto
                     texto = raw;
-                    // 👉 opcional: ignorar PDF vazio depois
                 }
                 else {
                     console.log("Tipo não suportado:", mimetype);
@@ -66,12 +76,16 @@ router.post("/api/upload", upload.array("files"), async (req, res) => {
                 console.error("Erro ao processar arquivo:", err);
             }
         }
-        if (textos.length === 0) {
+        if (textos.length === 0 && dadosEstruturados.length === 0) {
             return res.status(400).json({
                 error: "Nenhum conteúdo útil encontrado nos arquivos",
             });
         }
-        return res.json({ textos });
+        return res.json({
+            sucesso: true,
+            textos,
+            dadosEstruturados, // 🚀 NOVO
+        });
     }
     catch (error) {
         console.error("Erro upload:", error);

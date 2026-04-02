@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import type { AnyNode } from "domhandler";
 
 export interface BioItem {
   nome: string;
@@ -11,10 +12,10 @@ export function parseHtmlBioressonancia(html: string): BioItem[] {
   let resultados: BioItem[] = [];
 
   // 1️⃣ EXTRAÇÃO DE TABELAS
-  $("table").each((_: number, table: any) => {
+  $("table").each((_: number, table: AnyNode) => {
     $(table)
       .find("tr")
-      .each((_: number, row: any) => {
+      .each((_: number, row: AnyNode) => {
         const cells = $(row).find("td");
 
         if (cells.length >= 2) {
@@ -30,7 +31,7 @@ export function parseHtmlBioressonancia(html: string): BioItem[] {
 
   // 2️⃣ FALLBACK: DIVS / LINHAS SOLTAS
   if (resultados.length === 0) {
-    $("body *").each((_: number, el: any) => {
+    $("body *").each((_: number, el: AnyNode) => {
       const text = normalizeText($(el).text());
 
       const match = tryParseLine(text);

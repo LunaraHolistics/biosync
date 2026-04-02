@@ -70,7 +70,13 @@ function gerarHash(buffer) {
     return (0, crypto_1.createHash)("sha256").update(buffer).digest("hex");
 }
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({
+    origin: [
+        "http://localhost:5173",
+        "https://biosync-nu.vercel.app"
+    ],
+    methods: ["GET", "POST"],
+}));
 app.use(express_1.default.json({ limit: "50mb" }));
 app.use(express_1.default.urlencoded({ limit: "50mb", extended: true }));
 app.use(upload_1.default);

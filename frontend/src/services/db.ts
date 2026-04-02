@@ -20,11 +20,13 @@ export type ClientRow = {
 export type AnalysisRow = {
   id: string;
   client_id: string;
+  raw_text?: string | null;
   result_text: string | null;
-  diagnostico: any;
-  dados_processados: any;
-  comparacao: any;
-  hash: string | null;
+  diagnostico?: unknown | null;
+  dados_processados?: unknown | null;
+  comparacao?: unknown | null;
+  protocolo?: unknown | null;
+  pdf_hash?: string | null;
   created_at: string;
 };
 
@@ -98,13 +100,13 @@ export async function contarAnalisesMesAtual(): Promise<number> {
 }
 
 export async function buscarAnalisePorHashECliente(
-  hash: string,
-  clientId: string
+  clientId: string,
+  hash: string
 ): Promise<AnalysisRow | null> {
   const { data, error } = await supabase
     .from("analyses")
     .select("*")
-    .eq("hash", hash)
+    .eq("pdf_hash", hash)
     .eq("client_id", clientId)
     .maybeSingle();
 
@@ -129,11 +131,13 @@ export async function buscarUltimaAnalisePorCliente(
 
 export async function salvarNovaAnalise(payload: {
   client_id: string;
+  raw_text: string;
   result_text: string;
-  diagnostico: any;
-  dados_processados: any;
-  comparacao: any;
-  hash: string;
+  diagnostico?: unknown;
+  dados_processados?: unknown;
+  comparacao?: unknown;
+  protocolo?: unknown;
+  pdf_hash: string;
 }): Promise<AnalysisRow> {
   const { data, error } = await supabase
     .from("analyses")
