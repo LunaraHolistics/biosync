@@ -309,106 +309,52 @@ function App() {
     }
   }, [modalOpen]);
 
-  const onProcessarPdf = async () => {
+    const onProcessarPdf = async () => {
     console.log("🔥 BOTÃO CLICADO");
     console.log("FILES:", pdfFiles);
-
+  
     if (!pdfFiles || pdfFiles.length === 0) {
       setError("Selecione pelo menos um arquivo.");
       return;
     }
-
+  
     if (!clientId) {
       setError("Informe o clientId.");
       return;
     }
-  };
-
-  useEffect(() => {
-    (async () => {
-      setHistoryError(null);
-      try {
-        const list = await listarClientes();
-        setClientes(list);
-      } catch (e: unknown) {
-        setHistoryError(e instanceof Error ? e.message : "Erro ao carregar clientes.");
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [totalClientes, totalAnalises, analisesMesAtual] = await Promise.all([
-          contarClientes(),
-          contarAnalises(),
-          contarAnalisesMesAtual(),
-        ]);
-        setDashboard({ totalClientes, totalAnalises, analisesMesAtual });
-      } catch {
-        // ignore
-      }
-    })();
-  }, [clientes.length, analises.length, loading]);
-
-  useEffect(() => {
-    (async () => {
-      const q = clienteBusca.trim();
-      if (!q) {
-        try {
-          const list = await listarClientes();
-          setClientes(list);
-        } catch {
-          // ignore
-        }
-        return;
-      }
-
-      try {
-        const list = await buscarClientesPorNome(q);
-        setClientes(list);
-      } catch {
-        // ignore
-      }
-    })();
-  }, [clienteBusca]);
-
-  useEffect(() => {
-    if (!existingAnalysisId) return;
-
-    const node = analysisRefs.current[existingAnalysisId];
-    if (node) {
-      node.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-
-    const timeout = window.setTimeout(() => {
-      setExistingAnalysisId(null);
-    }, 3000);
-
-    return () => window.clearTimeout(timeout);
-  }, [existingAnalysisId, analises]);
-
-  async function onSelecionarCliente(c: ClientRow) {
-    setClienteSelecionado(c);
-
-    // 🔥 NOVO: sincroniza com formulário
-    setClientId(c.id);
-    setClientName(c.name ?? "");
-
-    setAnaliseSelecionada(null);
-    setAnalises([]);
-    setHistoryError(null);
-    setHistoryLoading(true);
-
+  
+    setLoading(true);
+    setError(null);
+  
     try {
-      const list = await listarAnalises(c.id);
-      setAnalises(list);
+      const result = await processarPdf(pdfFiles, clientId);
+  
+      console.log("RESULTADO:", result);
+  
+      setAnalysis(result.data ?? null);
+      setDiagnostico(result.diagnostico ?? null);
+      setCreatedAt(new Date());
+  
+      if (result.reused) {
+        setReusedNotice("Este exame já foi analisado anteriormente");
+      }
+  
+      if (result.analysisId) {
+        setExistingAnalysisId(result.analysisId);
+      }
+  
+      if (clienteSelecionado?.id === clientId) {
+        const list = await listarAnalises(clientId);
+        setAnalises(list);
+      }
+  
     } catch (e: unknown) {
-      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Erro ao processar.");
     } finally {
-      setHistoryLoading(false);
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <>
