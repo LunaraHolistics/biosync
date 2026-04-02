@@ -6,12 +6,12 @@ export interface BioItem {
 }
 
 export function parseHtmlBioressonancia(html: string): BioItem[] {
-  const $ = load(html);
+  const $ = cheerio.load(html);
 
   let resultados: BioItem[] = [];
 
   // 1️⃣ EXTRAÇÃO DE TABELAS
-  $("table").each(_: number, table: any) => {
+  $("table").each((_: number, table: any) => {
     $(table)
       .find("tr")
       .each((_: number, row: any) => {
