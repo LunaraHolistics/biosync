@@ -6,7 +6,7 @@ function parseBioressonancia(texto) {
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.length > 0);
-    const resultados = [];
+        const resultados: { item: string; intervalo: string; valor: string; resultado: string }[] = [];
     let sistemaAtual = "Geral";
     for (let i = 0; i < linhas.length; i++) {
         const linha = linhas[i];
