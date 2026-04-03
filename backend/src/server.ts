@@ -7,17 +7,23 @@ import cors from "cors";
 import { createHash } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import multer from "multer";
+import { createClient } from "@supabase/supabase-js";
 
-// Importando os parsers e serviços
+// Parsers e serviços
 import { parseHtmReport } from "./utils/parserHtml"; 
 import { parseBioressonancia } from "./utils/parserBio";
 import { gerarDiagnostico } from "./services/diagnostico.service";
 import { gerarProtocolo } from "./services/motorTerapias.service";
 import { compararExames } from "./services/comparador.service";
 
-// Importando as rotas externas se houver
 import uploadRouter from "./routes/upload";
 import analyzeRoute from "./routes/analyze";
+
+// 🔥 SUPABASE
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 // --- Tipagens ---
 type AiStructuredData = {
@@ -28,7 +34,7 @@ type AiStructuredData = {
   justificativa: string;
 };
 
-// --- Funções Auxiliares ---
+// --- Funções auxiliares (mantidas) ---
 function fallbackData(): AiStructuredData {
   return {
     interpretacao: "Não foi possível gerar análise completa.",
@@ -39,44 +45,23 @@ function fallbackData(): AiStructuredData {
   };
 }
 
-function toStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((x) => typeof x === "string");
-  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
-  return [];
-}
-
-function toStringValue(value: unknown, defaultValue = ""): string {
-  return typeof value === "string" ? value : defaultValue;
-}
-
 function normalizeAiData(input: unknown): AiStructuredData {
   const base = fallbackData();
   if (!input || typeof input !== "object") return base;
 
-  const obj = input as Record<string, unknown>;
-  const protocoloRaw = obj.protocolo;
-  const protocoloObj = protocoloRaw && typeof protocoloRaw === "object"
-      ? (protocoloRaw as Record<string, unknown>)
-      : {};
+  const obj = input as any;
 
   return {
-    interpretacao: toStringValue(obj.interpretacao, base.interpretacao),
-    pontos_criticos: toStringArray(obj.pontos_criticos),
-    protocolo: {
-      manha: toStringArray(protocoloObj.manha),
-      tarde: toStringArray(protocoloObj.tarde),
-      noite: toStringArray(protocoloObj.noite),
-    },
-    frequencia_lunara: toStringValue(obj.frequencia_lunara, base.frequencia_lunara),
-    justificativa: toStringValue(obj.justificativa, base.justificativa),
+    interpretacao: obj.interpretacao || base.interpretacao,
+    pontos_criticos: obj.pontos_criticos || [],
+    protocolo: obj.protocolo || base.protocolo,
+    frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
+    justificativa: obj.justificativa || base.justificativa,
   };
 }
 
 function extractJsonCandidate(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
-  const match = trimmed.match(/\{[\s\S]*\}/);
+  const match = text.match(/\{[\s\S]*\}/);
   return match?.[0] ?? null;
 }
 
@@ -84,36 +69,65 @@ function gerarHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-// --- Configuração do App ---
+// --- APP ---
 const app = express();
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Permite requisições de origens variadas (importante para plugins de browser)
-    if (!origin || origin === 'null') {
-      return callback(null, true);
-    }
-    callback(null, true);
-  }
-}));
-
+app.use(cors());
 app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// Configuração do Multer (Memória)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-// --- Rotas ---
-
-// Health check
-app.get("/health", (_, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
 });
 
-// Rota de Upload Processado (Usada pelo Plugin)
+// 🔥 FUNÇÃO CENTRAL DE IA
+async function analisarComIA(dados: any) {
+  const diagnostico = gerarDiagnostico(dados);
+  const protocolo = gerarProtocolo(diagnostico);
+
+  const prompt = `
+Analise os dados abaixo como terapeuta integrativo.
+
+Considere:
+- desempenho físico
+- sono
+- metabolismo
+- emocional
+- energia vital
+
+Responda em JSON:
+{
+  "interpretacao": string,
+  "pontos_criticos": string[],
+  "protocolo": { "manha": [], "tarde": [], "noite": [] },
+  "frequencia_lunara": string,
+  "justificativa": string
+}
+
+DADOS:
+${JSON.stringify(dados)}
+`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+  });
+
+  const raw = response.text ?? "";
+  const json = extractJsonCandidate(raw);
+  const parsed = json ? JSON.parse(json) : null;
+
+  const data = normalizeAiData(parsed);
+  data.protocolo = protocolo;
+
+  return data;
+}
+
+// 🔥 ROTA PRINCIPAL ATUALIZADA
 app.post("/api/upload", upload.array("files"), async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
@@ -122,114 +136,79 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
       return res.status(400).json({ error: "Nenhum arquivo enviado" });
     }
 
-    const resultadosProcessados = [];
+    const resultados = [];
 
     for (const file of files) {
-      // Usamos o parseHtmReport que corrigimos para lidar com o buffer e encoding correto
-      const dadosExtraidos = parseHtmReport(file.buffer);
-      resultadosProcessados.push(dadosExtraidos);
+      const dados = parseHtmReport(file.buffer);
+      resultados.push(dados);
     }
 
-    // Gera um hash único para este lote de arquivos (ajuda a evitar duplicatas)
-    const hash = gerarHash(Buffer.concat(files.map((f) => f.buffer)));
+    const primeiro = resultados[0];
+    const nome = primeiro?.nome || "Desconhecido";
 
-    console.log(`Relatório processado: ${resultadosProcessados[0]?.nome || 'Desconhecido'}`);
+    const hash = gerarHash(Buffer.concat(files.map(f => f.buffer)));
 
-    return res.json({ 
-      success: true,
-      dados: resultadosProcessados, 
-      hash 
-    });
+    // 💾 SALVAR NO BANCO
+    const { data: exame, error } = await supabase
+      .from("exames")
+      .insert({
+        nome_paciente: nome,
+        data_exame: new Date(),
+        resultado_json: resultados,
+        status: "processando"
+      })
+      .select()
+      .single();
 
-  } catch (err: any) {
-    console.error("Erro no processamento do upload:", err);
-    return res.status(500).json({
-      error: err?.message ?? "Erro interno ao processar arquivo",
-    });
-  }
-});
+    if (error) throw error;
 
-// Rota de Inteligência Artificial (Gemini)
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
-});
+    // 🤖 IA
+    const analise = await analisarComIA(resultados);
 
-app.post("/api/ai", async (req, res) => {
-  try {
-    const { prompt, comparacao, anterior_dados_processados } = req.body as {
-      prompt?: string;
-      comparacao?: unknown;
-      anterior_dados_processados?: unknown;
-    };
+    // 💾 ATUALIZAR
+    await supabase
+      .from("exames")
+      .update({
+        analise_ia: analise,
+        pontos_criticos: analise.pontos_criticos,
+        protocolo: JSON.stringify(analise.protocolo),
+        status: "concluido"
+      })
+      .eq("id", exame.id);
 
-    if (!prompt) {
-      return res.status(400).json({ error: "Missing 'prompt' in request body" });
-    }
-
-    const dadosProcessados = parseBioressonancia(prompt);
-    const diagnostico = gerarDiagnostico(dadosProcessados);
-    const protocoloGerado = gerarProtocolo(diagnostico);
-
-    let comparacaoFinal: unknown = comparacao ?? null;
-
-    if (Array.isArray(anterior_dados_processados)) {
-      try {
-        comparacaoFinal = compararExames(
-          dadosProcessados as any,
-          anterior_dados_processados as any,
-        );
-      } catch {
-        comparacaoFinal = comparacao ?? null;
-      }
-    }
-
-    const structuredPrompt = [
-      "Você é um terapeuta holístico especializado em terapias integrativas.",
-      "",
-      "TAREFA:",
-      "- Interpretar os problemas identificados",
-      "- Explicar os impactos no corpo e emocional",
-      "- Justificar o protocolo terapêutico fornecido",
-      "",
-      "SAÍDA (JSON OBRIGATÓRIO):",
-      "{",
-      '  "interpretacao": string,',
-      '  "pontos_criticos": string[],',
-      '  "protocolo": { "manha": string[], "tarde": string[], "noite": string[] },',
-      '  "frequencia_lunara": string,',
-      '  "justificativa": string',
-      "}",
-    ].join("\n");
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: structuredPrompt,
-    });
-
-    const raw = response.text ?? "";
-    const candidate = extractJsonCandidate(raw);
-    let parsed = candidate ? JSON.parse(candidate) : null;
-
-    const data = normalizeAiData(parsed);
-    data.protocolo = protocoloGerado;
+    console.log(`Processado e salvo: ${nome}`);
 
     res.json({
-      data,
-      dadosProcessados,
-      diagnostico,
-      protocolo: protocoloGerado,
-      comparacao: comparacaoFinal,
+      success: true,
+      exame_id: exame.id,
+      dados: resultados,
+      analise,
+      hash
     });
+
   } catch (err: any) {
-    res.status(500).json({ data: fallbackData(), error: err.message });
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Outras rotas importadas
+// 🔎 LISTAGEM
+app.get("/api/exames", async (_, res) => {
+  const { data, error } = await supabase
+    .from("exames")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return res.status(500).json(error);
+
+  res.json(data);
+});
+
+// Rotas existentes (mantidas)
 app.use(uploadRouter);
 app.use(analyzeRoute);
 
-const PORT = process.env.PORT || 10000; // Render usa porta 10000 por padrão
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`Backend BioSync rodando na porta ${PORT}`);
