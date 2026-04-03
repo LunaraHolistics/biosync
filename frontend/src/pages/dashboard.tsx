@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseclient";
+import { supabase } from "../lib/supabase";
 
 type Exame = {
     id: string;
