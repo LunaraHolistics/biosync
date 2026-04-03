@@ -10,7 +10,7 @@ import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 
 // Parsers e serviços
-import { parseHtmReport } from "./utils/parserHtml"; 
+import { parseHtmReport } from "./utils/parserHtml";
 import { parseBioressonancia } from "./utils/parserBio";
 import { gerarDiagnostico } from "./services/diagnostico.service";
 import { gerarProtocolo } from "./services/motorTerapias.service";
@@ -163,7 +163,17 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
     if (error) throw error;
 
     // 🤖 IA
-    const analise = await analisarComIA(resultados);
+    const analise = await analisarComIA(resultados).catch(err => {
+      console.error("Erro na IA:", err);
+
+      return {
+        interpretacao: "IA temporariamente indisponível.",
+        pontos_criticos: [],
+        protocolo: { manha: [], tarde: [], noite: [] },
+        frequencia_lunara: "N/A",
+        justificativa: "Falha na análise automática."
+      };
+    });
 
     // 💾 ATUALIZAR
     await supabase
