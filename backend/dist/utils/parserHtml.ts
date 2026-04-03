@@ -47,6 +47,7 @@ export function parseHtmReport(buffer: Buffer): ParsedHtmData {
       const parentFont = $(el).parent().prevAll().find('font[size="6"]').first();
       if (parentFont.length) categoriaNome = parentFont.text().trim();
     }
+
     const resultados: { item: string; intervalo: string; valor: string; resultado: string }[] = [];
 
     $(el).find('tr').each((_j: number, row: AnyNode) => {
