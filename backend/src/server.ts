@@ -83,11 +83,13 @@ function gerarHash(buffer: Buffer): string {
 const app = express();
 
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://biosync-nu.vercel.app"
-  ],
-  methods: ["GET", "POST"],
+  origin: (origin, callback) => {
+    // Permite requisições do Vercel, do Render e de arquivos locais (null)
+    if (!origin || origin === 'null') {
+      return callback(null, true);
+    }
+    callback(null, true);
+  }
 }));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
