@@ -10,140 +10,103 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl!, supabaseKey!);
 
-// --- TIPOS ---
-export type ClientRow = {
+// ==============================
+// TIPOS
+// ==============================
+
+export type ExameRow = {
   id: string;
-  name: string;
+  nome_paciente: string;
+  data_exame: string;
+  resultado_json: any;
+  analise_ia?: any;
+  protocolo?: any;
+  pontos_criticos?: string[];
   created_at: string;
 };
 
-export type AnalysisRow = {
-  id: string;
-  client_id: string;
-  raw_text?: string | null;
-  result_text: string | null;
-  diagnostico?: unknown | null;
-  dados_processados?: unknown | null;
-  comparacao?: unknown | null;
-  protocolo?: unknown | null;
-  pdf_hash?: string | null;
-  created_at: string;
-};
+// ==============================
+// EXAMES (CORE DO SISTEMA)
+// ==============================
 
-// --- FUNÇÕES DE CLIENTE ---
-
-export async function listarClientes(): Promise<ClientRow[]> {
+// Listar todos os exames
+export async function listarExames(): Promise<ExameRow[]> {
   const { data, error } = await supabase
-    .from("clientes")
+    .from("exames")
     .select("*")
-    .order("name", { ascending: true });
+    .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
   return data ?? [];
 }
 
-export async function buscarClientesPorNome(termo: string): Promise<ClientRow[]> {
-  if (!termo.trim()) return await listarClientes();
-  
+// Buscar por nome do paciente
+export async function buscarExamesPorNome(
+  termo: string
+): Promise<ExameRow[]> {
+  if (!termo.trim()) return await listarExames();
+
   const { data, error } = await supabase
-    .from("clientes")
+    .from("exames")
     .select("*")
-    .ilike("name", `%${termo}%`)
-    .order("name", { ascending: true });
+    .ilike("nome_paciente", `%${termo}%`)
+    .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
   return data ?? [];
 }
 
-export async function contarClientes(): Promise<number> {
+// Contar total de exames
+export async function contarExames(): Promise<number> {
   const { count, error } = await supabase
-    .from("clientes")
+    .from("exames")
     .select("*", { count: "exact", head: true });
 
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
 
-// --- FUNÇÕES DE ANÁLISE ---
-
-export async function listarAnalises(clientId: string): Promise<AnalysisRow[]> {
-  const { data, error } = await supabase
-    .from("analyses")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
-}
-
-export async function contarAnalises(): Promise<number> {
-  const { count, error } = await supabase
-    .from("analyses")
-    .select("*", { count: "exact", head: true });
-
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
-
-export async function contarAnalisesMesAtual(): Promise<number> {
+// Contar exames do mês atual
+export async function contarExamesMesAtual(): Promise<number> {
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const inicioMes = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1
+  ).toISOString();
 
   const { count, error } = await supabase
-    .from("analyses")
+    .from("exames")
     .select("*", { count: "exact", head: true })
-    .gte("created_at", startOfMonth);
+    .gte("created_at", inicioMes);
 
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
 
-export async function buscarAnalisePorHashECliente(
-  clientId: string,
-  hash: string
-): Promise<AnalysisRow | null> {
+// Listar exames de um paciente específico
+export async function listarExamesPorPaciente(
+  nome: string
+): Promise<ExameRow[]> {
   const { data, error } = await supabase
-    .from("analyses")
+    .from("exames")
     .select("*")
-    .eq("pdf_hash", hash)
-    .eq("client_id", clientId)
-    .maybeSingle();
+    .eq("nome_paciente", nome)
+    .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data;
+  return data ?? [];
 }
 
-export async function buscarUltimaAnalisePorCliente(
-  clientId: string
-): Promise<AnalysisRow | null> {
+// Buscar exame por ID
+export async function buscarExamePorId(
+  id: string
+): Promise<ExameRow | null> {
   const { data, error } = await supabase
-    .from("analyses")
+    .from("exames")
     .select("*")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .eq("id", id)
     .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-export async function salvarNovaAnalise(payload: {
-  client_id: string;
-  raw_text: string;
-  result_text: string;
-  diagnostico?: unknown;
-  dados_processados?: unknown;
-  comparacao?: unknown;
-  protocolo?: unknown;
-  pdf_hash: string;
-}): Promise<AnalysisRow> {
-  const { data, error } = await supabase
-    .from("analyses")
-    .insert(payload)
-    .select()
-    .single();
 
   if (error) throw new Error(error.message);
   return data;
