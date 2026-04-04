@@ -34,7 +34,7 @@ export type AnalysisRow = {
 
 export async function listarClientes(): Promise<ClientRow[]> {
   const { data, error } = await supabase
-    .from("clients")
+    .from("clientes")
     .select("*")
     .order("name", { ascending: true });
 
@@ -46,7 +46,7 @@ export async function buscarClientesPorNome(termo: string): Promise<ClientRow[]>
   if (!termo.trim()) return await listarClientes();
   
   const { data, error } = await supabase
-    .from("clients")
+    .from("clientes")
     .select("*")
     .ilike("name", `%${termo}%`)
     .order("name", { ascending: true });
@@ -57,7 +57,7 @@ export async function buscarClientesPorNome(termo: string): Promise<ClientRow[]>
 
 export async function contarClientes(): Promise<number> {
   const { count, error } = await supabase
-    .from("clients")
+    .from("clientes")
     .select("*", { count: "exact", head: true });
 
   if (error) throw new Error(error.message);
