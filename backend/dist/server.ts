@@ -10,7 +10,7 @@ import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 
 // Importando os parsers e serviços
-import { parseHtmReport } from "./utils/parserHtml"; 
+import { parseHtmReport } from "./utils/parserHtml";
 import { parseBioressonancia } from "./utils/parserBio";
 import { gerarDiagnostico } from "./services/diagnostico.service";
 import { gerarProtocolo } from "./services/motorTerapias.service";
@@ -63,8 +63,8 @@ function normalizeAiData(input: unknown): AiStructuredData {
   const obj = input as Record<string, unknown>;
   const protocoloRaw = obj.protocolo;
   const protocoloObj = protocoloRaw && typeof protocoloRaw === "object"
-      ? (protocoloRaw as Record<string, unknown>)
-      : {};
+    ? (protocoloRaw as Record<string, unknown>)
+    : {};
 
   return {
     interpretacao: toStringValue(obj.interpretacao, base.interpretacao),
@@ -123,25 +123,63 @@ async function analisarComGemini(dadosProcessados: any) {
   const protocoloGerado = gerarProtocolo(diagnostico);
 
   const structuredPrompt = `
-Você é um terapeuta holístico integrativo.
+Você é um terapeuta holístico integrativo, com linguagem acessível, acolhedora e profunda.
 
-Analise profundamente os dados abaixo considerando:
-- desempenho físico
-- qualidade do sono
-- metabolismo
-- estado emocional
-- equilíbrio energético
+Seu objetivo é traduzir dados técnicos em uma leitura clara, humana e útil para o paciente, sem excesso de termos difíceis.
 
-Identifique padrões e correlações entre sistemas.
+Analise os dados abaixo considerando o ser humano de forma integral:
 
-Responda em JSON:
+- Corpo físico (energia, metabolismo, funcionamento orgânico)
+- Estado emocional (estresse, ansiedade, humor)
+- Campo espiritual/energético (sensibilidade, bloqueios, vitalidade)
+- Desempenho físico (disposição, força, resistência)
+- Interferência social (impacto emocional nas relações, isolamento, irritabilidade)
+
+Identifique padrões, conexões entre sistemas e possíveis causas raízes.
+
+---
+
+Responda em JSON no seguinte formato:
+
 {
   "interpretacao": string,
+  "analise_setores": {
+    "fisico": string,
+    "emocional": string,
+    "espiritual": string,
+    "desempenho": string,
+    "social": string
+  },
   "pontos_criticos": string[],
-  "protocolo": { "manha": string[], "tarde": string[], "noite": string[] },
+  "plano_terapeutico": {
+    "tipo": "semanal" | "quinzenal" | "mensal",
+    "terapias": [
+      {
+        "nome": string,
+        "descricao": string,
+        "como_ajuda": string,
+        "frequencia": string
+      }
+    ]
+  },
   "frequencia_lunara": string,
   "justificativa": string
 }
+
+---
+
+REGRAS IMPORTANTES:
+
+- Evite linguagem técnica excessiva. Explique como se estivesse falando diretamente com o paciente.
+- Seja profundo, mas claro.
+- Conecte sintomas físicos com emocionais e energéticos.
+- A análise deve trazer sensação de entendimento e direção.
+- No plano terapêutico:
+  - explique o que cada terapia faz
+  - explique por que ela foi escolhida
+  - explique como ela pode ajudar na prática
+
+---
 
 DADOS:
 ${JSON.stringify(dadosProcessados)}
