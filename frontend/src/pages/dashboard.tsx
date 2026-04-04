@@ -22,7 +22,7 @@ export default function Dashboard() {
         const { data, error } = await supabase
             .from("exames")
             .select("*")
-            .order("created_at", { ascending: false });
+            .order("data_exame", { ascending: false });
 
         if (error) {
             console.error("Erro ao buscar exames:", error);
