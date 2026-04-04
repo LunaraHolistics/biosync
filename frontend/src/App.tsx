@@ -4,14 +4,12 @@ import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import { processarPdf, type AiStructuredData } from "./services/api";
 import { ComparativoExames, type ComparacaoExames } from "./ComparativoExames";
 import {
-  buscarClientesPorNome,
-  contarAnalises,
-  contarAnalisesMesAtual,
-  contarClientes,
-  listarAnalises,
-  listarClientes,
-  type AnalysisRow,
-  type ClientRow,
+  listarExames,
+  buscarExamesPorNome,
+  contarExames,
+  contarExamesMesAtual,
+  listarExamesPorPaciente,
+  ExameRow
 } from "./services/db";
 
 type ItemProcessado = {
@@ -163,18 +161,18 @@ function App() {
   const analysisRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Histórico
-  const [clientes, setClientes] = useState<ClientRow[]>([]);
-  const [clienteBusca, setClienteBusca] = useState("");
-  const [clienteSelecionado, setClienteSelecionado] = useState<ClientRow | null>(null);
-  const [analises, setAnalises] = useState<AnalysisRow[]>([]);
-  const [analiseSelecionada, setAnaliseSelecionada] = useState<AnalysisRow | null>(null);
+  // Histórico baseado em EXAMES
+  const [exames, setExames] = useState<ExameRow[]>([]);
+  const [busca, setBusca] = useState("");
+  const [pacienteSelecionado, setPacienteSelecionado] = useState<string | null>(null);
+  const [analiseSelecionada, setAnaliseSelecionada] = useState<ExameRow | null>(null);
+
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+
   const [dashboard, setDashboard] = useState({
-    totalClientes: 0,
-    totalAnalises: 0,
-    analisesMesAtual: 0,
+    totalExames: 0,
+    examesMesAtual: 0,
   });
 
   const relatorioData: RelatorioData | null = useMemo(() => {
@@ -338,7 +336,7 @@ function App() {
         setExistingAnalysisId(result.analysisId);
       }
       if (clienteSelecionado?.id === clientId) {
-        const list = await listarAnalises(clientId);
+        const list = await listarExamesPorPaciente(clientId);
         setAnalises(list);
       }
     } catch (e: unknown) {
@@ -363,17 +361,17 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
-        const [totalClientes, totalAnalises, analisesMesAtual] = await Promise.all([
-          contarClientes(),
-          contarAnalises(),
-          contarAnalisesMesAtual(),
+        const [totalExames, examesMesAtual] = await Promise.all([
+          contarExames(),
+          contarExamesMesAtual(),
         ]);
-        setDashboard({ totalClientes, totalAnalises, analisesMesAtual });
+
+        setDashboard({ totalExames, examesMesAtual });
       } catch {
         // ignore
       }
     })();
-  }, [clientes.length, analises.length, loading]);
+  }, [exames.length, loading]);
 
   useEffect(() => {
     (async () => {
@@ -417,7 +415,7 @@ function App() {
 
     // 🔥 NOVO: sincroniza com formulário
     setClientId(c.id);
-    setClientName(c.name ?? "");
+    setClientName((c as any).nome ?? "");
 
     setAnaliseSelecionada(null);
     setAnalises([]);
@@ -425,7 +423,7 @@ function App() {
     setHistoryLoading(true);
 
     try {
-      const list = await listarAnalises(c.id);
+      const list = await listarExamesPorPaciente(c.id);
       setAnalises(list);
     } catch (e: unknown) {
       setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");

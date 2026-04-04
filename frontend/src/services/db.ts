@@ -78,7 +78,7 @@ export async function contarExamesMesAtual(): Promise<number> {
   const { count, error } = await supabase
     .from("exames")
     .select("*", { count: "exact", head: true })
-    .gte("created_at", inicioMes);
+    .gte("data_exame", inicioMes); // 🔥 ajuste aqui
 
   if (error) throw new Error(error.message);
   return count ?? 0;
