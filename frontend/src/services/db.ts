@@ -18,12 +18,31 @@ export type ExameRow = {
   id: string;
   nome_paciente: string;
   data_exame: string;
-  resultado_json: any;
-  analise_ia?: any;
-  protocolo?: any;
+  resultado_json: unknown;
+  analise_ia?: unknown;
+  protocolo?: unknown;
   pontos_criticos?: string[];
   created_at: string;
 };
+
+export type TerapiaRow = {
+  id: string;
+  nome_terapia: string;
+  categoria: string | null;
+  descricao: string | null;
+  indicacoes: unknown;
+  frequencia_base?: string | null;
+};
+
+export async function listarTerapias(): Promise<TerapiaRow[]> {
+  const { data, error } = await supabase
+    .from("terapias")
+    .select("*")
+    .order("nome_terapia", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TerapiaRow[];
+}
 
 // ==============================
 // EXAMES (CORE DO SISTEMA)
@@ -110,4 +129,57 @@ export async function buscarExamePorId(
 
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function buscarUltimoExamePorPaciente(
+  nomePaciente: string,
+): Promise<ExameRow | null> {
+  const { data, error } = await supabase
+    .from("exames")
+    .select("*")
+    .eq("nome_paciente", nomePaciente)
+    .order("data_exame", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function buscarExamePorHashEPaciente(
+  nomePaciente: string,
+  pdfHash: string,
+): Promise<ExameRow | null> {
+  const { data, error } = await supabase
+    .from("exames")
+    .select("*")
+    .eq("nome_paciente", nomePaciente)
+    .contains("resultado_json", { pdf_hash: pdfHash })
+    .order("data_exame", { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+  return data?.[0] ?? null;
+}
+
+export type NovoExamePayload = {
+  nome_paciente: string;
+  data_exame: string;
+  resultado_json: Record<string, unknown>;
+  analise_ia?: unknown;
+  protocolo?: unknown;
+  pontos_criticos?: string[];
+};
+
+export async function salvarNovoExame(
+  payload: NovoExamePayload,
+): Promise<ExameRow> {
+  const { data, error } = await supabase
+    .from("exames")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as ExameRow;
 }

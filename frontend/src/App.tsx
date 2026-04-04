@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
-import { processarPdf, type AiStructuredData } from "./services/api";
+import {
+  processarPdf,
+  normalizeAiData,
+  parsePlanoTerapeutico,
+  type AiStructuredData,
+} from "./services/api";
 import { ComparativoExames, type ComparacaoExames } from "./ComparativoExames";
 import {
   listarExames,
@@ -9,7 +14,7 @@ import {
   contarExames,
   contarExamesMesAtual,
   listarExamesPorPaciente,
-  ExameRow
+  type ExameRow,
 } from "./services/db";
 
 type ItemProcessado = {
@@ -30,6 +35,11 @@ type DiagnosticoPdf = {
     score?: number;
   }[];
 };
+
+function resultadoMeta(row: ExameRow): Record<string, unknown> {
+  const r = row.resultado_json;
+  return r && typeof r === "object" ? (r as Record<string, unknown>) : {};
+}
 
 function toDiagnostico(value: unknown): DiagnosticoPdf | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -147,25 +157,103 @@ function compararExames(
   return { melhoraram, pioraram, novos_problemas, normalizados };
 }
 
+function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): string {
+  if (t === "semanal") return "Semanal";
+  if (t === "quinzenal") return "Quinzenal";
+  return "Mensal";
+}
+
+function SecaoPlanoTerapeutico({ data }: { data: AiStructuredData }) {
+  const p = data.plano_terapeutico;
+  if (!p?.terapias?.length) {
+    return (
+      <div>
+        <div style={{ fontWeight: 900, marginBottom: 6 }}>PLANO TERAPÊUTICO</div>
+        <div style={{ opacity: 0.8 }}>Nenhuma terapia sugerida neste exame.</div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{ fontWeight: 900, marginBottom: 6 }}>PLANO TERAPÊUTICO</div>
+      <div style={{ marginBottom: 10, fontSize: 14 }}>
+        <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {p.terapias.map((item, i) => (
+          <div
+            key={i}
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              padding: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
+            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
+              <b>Frequência:</b> {item.frequencia || "—"}
+            </div>
+            <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
+              {item.descricao || "—"}
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              <b>Justificativa:</b> {item.justificativa || "—"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function exameRowToAiData(row: ExameRow): AiStructuredData {
+  const meta = resultadoMeta(row);
+  const ia = row.analise_ia;
+  const merged =
+    ia && typeof ia === "object"
+      ? {
+          ...ia,
+          plano_terapeutico:
+            (ia as Record<string, unknown>).plano_terapeutico ??
+            meta.plano_terapeutico ??
+            row.protocolo,
+          pontos_criticos: (ia as Record<string, unknown>).pontos_criticos ?? row.pontos_criticos,
+        }
+      : {
+          plano_terapeutico: meta.plano_terapeutico ?? row.protocolo,
+          pontos_criticos: row.pontos_criticos,
+        };
+  return normalizeAiData(merged);
+}
+
+function exameTemConteudoParaPdf(row: ExameRow): boolean {
+  if (row.pontos_criticos && row.pontos_criticos.length > 0) return true;
+  const pl = parsePlanoTerapeutico(row.protocolo);
+  if (pl && pl.terapias.length > 0) return true;
+  if (row.analise_ia == null) return false;
+  if (typeof row.analise_ia === "object") return true;
+  return typeof row.analise_ia === "string" && row.analise_ia.trim().length > 0;
+}
+
 function App() {
   const [clientName, setClientName] = useState("");
-  const [clientId, setClientId] = useState("");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [analysis, setAnalysis] = useState<AiStructuredData | null>(null);
   const [createdAt, setCreatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [diagnostico, setDiagnostico] = useState<any | null>(null);
+  const [diagnostico, setDiagnostico] = useState<unknown>(null);
   const [reusedNotice, setReusedNotice] = useState<string | null>(null);
   const [existingAnalysisId, setExistingAnalysisId] = useState<string | null>(null);
   const analysisRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Histórico
-  // Histórico baseado em EXAMES
-  const [exames, setExames] = useState<ExameRow[]>([]);
-  const [busca, setBusca] = useState("");
+  const [todosExames, setTodosExames] = useState<ExameRow[]>([]);
+  const [buscaPacientes, setBuscaPacientes] = useState("");
   const [pacienteSelecionado, setPacienteSelecionado] = useState<string | null>(null);
   const [analiseSelecionada, setAnaliseSelecionada] = useState<ExameRow | null>(null);
+  const [examesPaciente, setExamesPaciente] = useState<ExameRow[]>([]);
+
+  const [modalOpen, setModalOpen] = useState(false);
 
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -174,6 +262,15 @@ function App() {
     totalExames: 0,
     examesMesAtual: 0,
   });
+
+  const nomesPacientes = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of todosExames) {
+      const n = e.nome_paciente?.trim();
+      if (n) map.set(n, n);
+    }
+    return Array.from(map.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [todosExames]);
 
   const relatorioData: RelatorioData | null = useMemo(() => {
     if (!analysis) return null;
@@ -188,114 +285,63 @@ function App() {
         ? analysis.pontos_criticos
         : [],
 
-      protocolo: {
-        manha: analysis.protocolo?.manha ?? [],
-        tarde: analysis.protocolo?.tarde ?? [],
-        noite: analysis.protocolo?.noite ?? [],
-      },
+      plano_terapeutico: analysis.plano_terapeutico,
 
       frequencia_lunara: analysis.frequencia_lunara ?? "",
       justificativa: analysis.justificativa ?? "",
 
-      // 🔥 NOVO
-      diagnostico: diagnostico ?? undefined,
+      diagnostico: toDiagnostico(diagnostico),
       comparacao: undefined,
     };
   }, [analysis, clientName, createdAt, diagnostico]);
 
   const analiseSelecionadaData: AiStructuredData | null = useMemo(() => {
-    const raw = analiseSelecionada?.result_text ?? "";
-    if (!raw.trim()) return null;
-
-    const fallback: AiStructuredData = {
-      interpretacao: "",
-      pontos_criticos: [],
-      protocolo: { manha: [], tarde: [], noite: [] },
-      frequencia_lunara: "",
-      justificativa: "",
-    };
-
-    const toStringArray = (v: unknown): string[] => {
-      if (Array.isArray(v)) return v.filter((x) => typeof x === "string");
-      if (typeof v === "string") return v.trim() ? [v.trim()] : [];
-      return [];
-    };
-
-    const extractJson = (text: string): string | null => {
-      const t = text.trim();
-      if (!t) return null;
-      if (t.startsWith("{") && t.endsWith("}")) return t;
-      const m = t.match(/\{[\s\S]*\}/);
-      return m?.[0] ?? null;
-    };
-
-    try {
-      const candidate = extractJson(raw);
-      if (!candidate) return fallback;
-      const parsed = JSON.parse(candidate) as any;
-      const protocolo = parsed?.protocolo ?? {};
-      return {
-        interpretacao: typeof parsed?.interpretacao === "string" ? parsed.interpretacao : fallback.interpretacao,
-        pontos_criticos: toStringArray(parsed?.pontos_criticos),
-        protocolo: {
-          manha: toStringArray(protocolo?.manha),
-          tarde: toStringArray(protocolo?.tarde),
-          noite: toStringArray(protocolo?.noite),
-        },
-        frequencia_lunara:
-          typeof parsed?.frequencia_lunara === "string" ? parsed.frequencia_lunara : fallback.frequencia_lunara,
-        justificativa:
-          typeof parsed?.justificativa === "string" ? parsed.justificativa : fallback.justificativa,
-      };
-    } catch {
-      return fallback;
-    }
+    if (!analiseSelecionada || !exameTemConteudoParaPdf(analiseSelecionada)) return null;
+    return exameRowToAiData(analiseSelecionada);
   }, [analiseSelecionada]);
 
   const relatorioDataHistorico: RelatorioData | null = useMemo(() => {
-    if (!clienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
+    if (!pacienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
 
-    // Prefer persisted comparacao; otherwise compute from neighboring analysis if possible.
-    const idx = analises.findIndex((x) => x.id === analiseSelecionada.id);
-    const next = idx >= 0 ? analises[idx + 1] : null; // next = older exam
-    const persistedComparacao = toComparacao((analiseSelecionada as any)?.comparacao);
+    const idx = examesPaciente.findIndex((x) => x.id === analiseSelecionada.id);
+    const next = idx >= 0 ? examesPaciente[idx + 1] : null;
+    const meta = resultadoMeta(analiseSelecionada);
+    const persistedComparacao = toComparacao(meta.comparacao);
     const computedComparacao =
       !persistedComparacao && next
         ? compararExames(
-          toItemProcessadoArray((analiseSelecionada as any)?.dados_processados),
-          toItemProcessadoArray((next as any)?.dados_processados),
-        )
+            toItemProcessadoArray(meta.dados_processados),
+            toItemProcessadoArray(resultadoMeta(next).dados_processados),
+          )
         : undefined;
 
     return {
-      clientName: clienteSelecionado.name || "Cliente",
-      createdAt: analiseSelecionada.created_at || new Date(),
+      clientName: pacienteSelecionado || "Cliente",
+      createdAt: new Date(analiseSelecionada.data_exame || analiseSelecionada.created_at),
 
       interpretacao: analiseSelecionadaData.interpretacao ?? "",
       pontos_criticos: analiseSelecionadaData.pontos_criticos ?? [],
 
-      protocolo: {
-        manha: analiseSelecionadaData.protocolo?.manha ?? [],
-        tarde: analiseSelecionadaData.protocolo?.tarde ?? [],
-        noite: analiseSelecionadaData.protocolo?.noite ?? [],
-      },
+      plano_terapeutico:
+        parsePlanoTerapeutico(meta.plano_terapeutico) ??
+        parsePlanoTerapeutico(analiseSelecionada.protocolo) ??
+        analiseSelecionadaData.plano_terapeutico,
 
       frequencia_lunara: analiseSelecionadaData.frequencia_lunara ?? "",
       justificativa: analiseSelecionadaData.justificativa ?? "",
 
-      // 🔥 ESSA LINHA É O OURO
-      diagnostico: toDiagnostico(analiseSelecionada?.diagnostico),
+      diagnostico: toDiagnostico(meta.diagnostico),
       comparacao: persistedComparacao ?? computedComparacao,
     };
-  }, [clienteSelecionado, analiseSelecionada, analiseSelecionadaData, analises]);
+  }, [pacienteSelecionado, analiseSelecionada, analiseSelecionadaData, examesPaciente]);
 
   const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
-    if (analises.length < 2) return null;
-    const atual = toItemProcessadoArray(analises[0]?.dados_processados);
-    const anterior = toItemProcessadoArray(analises[1]?.dados_processados);
+    if (examesPaciente.length < 2) return null;
+    const atual = toItemProcessadoArray(resultadoMeta(examesPaciente[0]).dados_processados);
+    const anterior = toItemProcessadoArray(resultadoMeta(examesPaciente[1]).dados_processados);
     if (!atual.length && !anterior.length) return null;
     return compararExames(atual, anterior);
-  }, [analises]);
+  }, [examesPaciente]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -307,24 +353,30 @@ function App() {
     }
   }, [modalOpen]);
 
+  async function recarregarTodosExames() {
+    const list = await listarExames();
+    setTodosExames(list);
+  }
+
   async function onProcessarPdf() {
     setError(null);
     setAnalysis(null);
     setReusedNotice(null);
     setExistingAnalysisId(null);
 
-    if (!pdfFiles) {
+    if (!pdfFiles?.length) {
       setError("Selecione um arquivo PDF.");
       return;
     }
-    if (!clientId.trim()) {
-      setError("Informe o clientId (Supabase).");
+    const nome = clientName.trim();
+    if (!nome) {
+      setError("Informe o nome do paciente.");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await processarPdf(pdfFiles, clientId); // quando múltiplos
+      const result = await processarPdf(pdfFiles, nome);
       console.log("RESULTADO COMPLETO:", result);
       setAnalysis(result.data ?? null);
       setDiagnostico(result.diagnostico ?? null);
@@ -335,9 +387,21 @@ function App() {
       if (result.analysisId) {
         setExistingAnalysisId(result.analysisId);
       }
-      if (clienteSelecionado?.id === clientId) {
-        const list = await listarExamesPorPaciente(clientId);
-        setAnalises(list);
+
+      await recarregarTodosExames();
+      try {
+        const [totalExames, examesMesAtual] = await Promise.all([
+          contarExames(),
+          contarExamesMesAtual(),
+        ]);
+        setDashboard({ totalExames, examesMesAtual });
+      } catch {
+        // ignore
+      }
+
+      if (pacienteSelecionado === nome) {
+        const list = await listarExamesPorPaciente(nome);
+        setExamesPaciente(list);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao processar PDF.");
@@ -350,10 +414,9 @@ function App() {
     (async () => {
       setHistoryError(null);
       try {
-        const list = await listarClientes();
-        setClientes(list);
+        await recarregarTodosExames();
       } catch (e: unknown) {
-        setHistoryError(e instanceof Error ? e.message : "Erro ao carregar clientes.");
+        setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
       }
     })();
   }, []);
@@ -371,15 +434,14 @@ function App() {
         // ignore
       }
     })();
-  }, [exames.length, loading]);
+  }, [todosExames.length, loading]);
 
   useEffect(() => {
     (async () => {
-      const q = clienteBusca.trim();
+      const q = buscaPacientes.trim();
       if (!q) {
         try {
-          const list = await listarClientes();
-          setClientes(list);
+          await recarregarTodosExames();
         } catch {
           // ignore
         }
@@ -387,13 +449,13 @@ function App() {
       }
 
       try {
-        const list = await buscarClientesPorNome(q);
-        setClientes(list);
+        const list = await buscarExamesPorNome(q);
+        setTodosExames(list);
       } catch {
         // ignore
       }
     })();
-  }, [clienteBusca]);
+  }, [buscaPacientes]);
 
   useEffect(() => {
     if (!existingAnalysisId) return;
@@ -408,25 +470,22 @@ function App() {
     }, 3000);
 
     return () => window.clearTimeout(timeout);
-  }, [existingAnalysisId, analises]);
+  }, [existingAnalysisId, examesPaciente]);
 
-  async function onSelecionarCliente(c: ClientRow) {
-    setClienteSelecionado(c);
-
-    // 🔥 NOVO: sincroniza com formulário
-    setClientId(c.id);
-    setClientName((c as any).nome ?? "");
+  async function onSelecionarPaciente(nome: string) {
+    setPacienteSelecionado(nome);
+    setClientName(nome);
 
     setAnaliseSelecionada(null);
-    setAnalises([]);
+    setExamesPaciente([]);
     setHistoryError(null);
     setHistoryLoading(true);
 
     try {
-      const list = await listarExamesPorPaciente(c.id);
-      setAnalises(list);
+      const list = await listarExamesPorPaciente(nome);
+      setExamesPaciente(list);
     } catch (e: unknown) {
-      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar análises.");
+      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
     } finally {
       setHistoryLoading(false);
     }
@@ -452,8 +511,8 @@ function App() {
             Clientes
           </div>
           <input
-            value={clienteBusca}
-            onChange={(e) => setClienteBusca(e.target.value)}
+            value={buscaPacientes}
+            onChange={(e) => setBuscaPacientes(e.target.value)}
             placeholder="Buscar por nome..."
             style={{
               width: "100%",
@@ -472,25 +531,22 @@ function App() {
             </div>
           ) : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {clientes.map((c) => (
+            {nomesPacientes.map((nome) => (
               <button
-                key={c.id}
-                onClick={() => onSelecionarCliente(c)}
+                key={nome}
+                onClick={() => onSelecionarPaciente(nome)}
                 style={{
                   textAlign: "left",
                   padding: "10px 12px",
                   borderRadius: 10,
                   border: "1px solid var(--border)",
                   background:
-                    clienteSelecionado?.id === c.id
-                      ? "var(--accent-bg)"
-                      : "transparent",
+                    pacienteSelecionado === nome ? "var(--accent-bg)" : "transparent",
                   color: "inherit",
                   cursor: "pointer",
                 }}
               >
-                <div style={{ fontWeight: 700 }}>{c.name}</div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>{c.id}</div>
+                <div style={{ fontWeight: 700 }}>{nome}</div>
               </button>
             ))}
           </div>
@@ -507,9 +563,9 @@ function App() {
           >
             {(
               [
-                ["Total de clientes", dashboard.totalClientes],
-                ["Total de análises", dashboard.totalAnalises],
-                ["Análises no mês", dashboard.analisesMesAtual],
+                ["Total de exames", dashboard.totalExames],
+                ["Exames no mês", dashboard.examesMesAtual],
+                ["Pacientes (lista atual)", nomesPacientes.length],
               ] as const
             ).map(([label, value]) => (
               <div
@@ -535,9 +591,9 @@ function App() {
             Histórico de análises
           </div>
 
-          {!clienteSelecionado ? (
+          {!pacienteSelecionado ? (
             <div style={{ opacity: 0.8 }}>
-              Selecione um cliente à esquerda para ver as análises.
+              Selecione um cliente à esquerda para ver os exames.
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -551,18 +607,18 @@ function App() {
                   }}
                 >
                   <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                    Análises — {clienteSelecionado.name}
+                    Exames — {pacienteSelecionado}
                   </div>
                   {historyLoading ? (
                     <div style={{ opacity: 0.8 }}>Carregando...</div>
-                  ) : analises.length === 0 ? (
-                    <div style={{ opacity: 0.8 }}>Nenhuma análise encontrada.</div>
+                  ) : examesPaciente.length === 0 ? (
+                    <div style={{ opacity: 0.8 }}>Nenhum exame encontrado.</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {analises.map((a) => {
-                        const date = new Date(a.created_at);
+                      {examesPaciente.map((a) => {
+                        const date = new Date(a.data_exame || a.created_at);
                         const label = Number.isNaN(date.getTime())
-                          ? a.created_at
+                          ? a.data_exame || a.created_at
                           : date.toLocaleString();
                         return (
                           <div
@@ -602,72 +658,24 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setAnaliseSelecionada(a);
-                                  const extractJson = (text: string): string | null => {
-                                    const t = text.trim();
-                                    if (!t) return null;
-                                    if (t.startsWith("{") && t.endsWith("}")) return t;
-                                    const m = t.match(/\{[\s\S]*\}/);
-                                    return m?.[0] ?? null;
-                                  };
-
-                                  const toStringArray = (v: unknown): string[] => {
-                                    if (Array.isArray(v)) return v.filter((x) => typeof x === "string");
-                                    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
-                                    return [];
-                                  };
-
-                                  const fallback: AiStructuredData = {
-                                    interpretacao: "",
-                                    pontos_criticos: [],
-                                    protocolo: { manha: [], tarde: [], noite: [] },
-                                    frequencia_lunara: "",
-                                    justificativa: "",
-                                  };
-
-                                  let parsed: any = null;
-                                  try {
-                                    const candidate = extractJson(a.result_text ?? "");
-                                    if (candidate) parsed = JSON.parse(candidate);
-                                  } catch {
-                                    parsed = null;
-                                  }
-
-                                  const protocolo = parsed?.protocolo ?? {};
-                                  const data: AiStructuredData = parsed
-                                    ? {
-                                      interpretacao:
-                                        typeof parsed.interpretacao === "string" ? parsed.interpretacao : "",
-                                      pontos_criticos: toStringArray(parsed.pontos_criticos),
-                                      protocolo: {
-                                        manha: toStringArray(protocolo.manha),
-                                        tarde: toStringArray(protocolo.tarde),
-                                        noite: toStringArray(protocolo.noite),
-                                      },
-                                      frequencia_lunara:
-                                        typeof parsed.frequencia_lunara === "string"
-                                          ? parsed.frequencia_lunara
-                                          : "",
-                                      justificativa:
-                                        typeof parsed.justificativa === "string" ? parsed.justificativa : "",
-                                    }
-                                    : fallback;
-
+                                  const data = exameRowToAiData(a);
+                                  const meta = resultadoMeta(a);
                                   gerarRelatorioPDF({
-                                    clientName: clienteSelecionado?.name || "Cliente",
-                                    createdAt: a.created_at || new Date(),
+                                    clientName: pacienteSelecionado || "Cliente",
+                                    createdAt: new Date(a.data_exame || a.created_at),
                                     interpretacao: data.interpretacao || "",
-                                    pontos_criticos: data.pontos_criticos || [],
-                                    protocolo: {
-                                      manha: data.protocolo?.manha ?? [],
-                                      tarde: data.protocolo?.tarde ?? [],
-                                      noite: data.protocolo?.noite ?? [],
-                                    },
+                                    pontos_criticos: data.pontos_criticos?.length
+                                      ? data.pontos_criticos
+                                      : a.pontos_criticos || [],
+                                    plano_terapeutico: data.plano_terapeutico,
                                     frequencia_lunara: data.frequencia_lunara || "",
                                     justificativa: data.justificativa || "",
+                                    diagnostico: toDiagnostico(meta.diagnostico),
+                                    comparacao: toComparacao(meta.comparacao),
                                   });
                                 }}
                                 style={{ marginBottom: 0 }}
-                                disabled={!a.result_text?.trim()}
+                                disabled={!exameTemConteudoParaPdf(a)}
                               >
                                 Baixar PDF
                               </button>
@@ -692,11 +700,11 @@ function App() {
                   </div>
                   {!analiseSelecionada ? (
                     <div style={{ opacity: 0.8 }}>
-                      Selecione uma análise e clique em “Ver”.
+                      Selecione um exame e clique em “Ver”.
                     </div>
                   ) : !analiseSelecionadaData ? (
                     <div style={{ opacity: 0.8 }}>
-                      Não foi possível interpretar o resultado salvo desta análise.
+                      Não foi possível interpretar o resultado salvo deste exame.
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -724,30 +732,7 @@ function App() {
                         </ul>
                       </div>
 
-                      <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          PROTOCOLO TERAPÊUTICO
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                          {(
-                            [
-                              ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
-                              ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
-                              ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
-                            ] as const
-                          ).map(([title, items]) => (
-                            <div
-                              key={title}
-                              style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}
-                            >
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
-                              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                                {items.length ? items.map((x, i) => <li key={i}>{x}</li>) : <li>—</li>}
-                              </ul>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
 
                       <div className="lunara">
                         <div className="sectionTitle" style={{ marginBottom: 8 }}>
@@ -794,19 +779,7 @@ function App() {
               <input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                placeholder="Nome do cliente (para o PDF)"
-                style={{
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  background: "transparent",
-                  color: "inherit",
-                }}
-              />
-              <input
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                placeholder="clientId (Supabase)"
+                placeholder="Nome do paciente (nome_paciente / PDF)"
                 style={{
                   padding: 10,
                   borderRadius: 8,
@@ -830,6 +803,12 @@ function App() {
               {reusedNotice ? (
                 <div style={{ color: "#f59e0b", fontSize: 14, fontWeight: 700 }}>
                   {reusedNotice}
+                </div>
+              ) : null}
+
+              {analysis ? (
+                <div style={{ marginTop: 8 }}>
+                  <SecaoPlanoTerapeutico data={analysis} />
                 </div>
               ) : null}
 
@@ -881,8 +860,8 @@ function App() {
               }}
             >
               <div style={{ fontWeight: 900 }}>
-                {clienteSelecionado?.name ?? "Cliente"} —{" "}
-                {analiseSelecionada?.created_at ?? ""}
+                {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
+                {analiseSelecionada?.data_exame ?? analiseSelecionada?.created_at ?? ""}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -906,10 +885,10 @@ function App() {
             </div>
 
             {!analiseSelecionada ? (
-              <div style={{ opacity: 0.85 }}>Nenhuma análise selecionada.</div>
+              <div style={{ opacity: 0.85 }}>Nenhum exame selecionado.</div>
             ) : !analiseSelecionadaData ? (
               <div style={{ opacity: 0.85 }}>
-                Não foi possível interpretar o resultado salvo desta análise.
+                Não foi possível interpretar o resultado salvo deste exame.
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -937,46 +916,7 @@ function App() {
                   </ul>
                 </div>
 
-                <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    PROTOCOLO TERAPÊUTICO
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr",
-                      gap: 10,
-                    }}
-                  >
-                    {(
-                      [
-                        ["MANHÃ", analiseSelecionadaData.protocolo?.manha ?? []],
-                        ["TARDE", analiseSelecionadaData.protocolo?.tarde ?? []],
-                        ["NOITE", analiseSelecionadaData.protocolo?.noite ?? []],
-                      ] as const
-                    ).map(([title, items]) => (
-                      <div
-                        key={title}
-                        style={{
-                          border: "1px solid var(--border)",
-                          borderRadius: 10,
-                          padding: 10,
-                        }}
-                      >
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          {title}
-                        </div>
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          {items.length ? (
-                            items.map((x, i) => <li key={i}>{x}</li>)
-                          ) : (
-                            <li>—</li>
-                          )}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
 
                 <div className="lunara">
                   <div className="sectionTitle" style={{ marginBottom: 8 }}>
@@ -1001,7 +941,7 @@ function App() {
         </div>
       ) : null}
     </>
-  )
+  );
 }
 
 export default App;

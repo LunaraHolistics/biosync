@@ -1,5 +1,6 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 const PDF_CANVAS_SCALE_DEFAULT = 2.5;
 
@@ -50,11 +51,7 @@ export type RelatorioData = {
 
   itens_analisados?: { nome: string; valor: string }[];
 
-  protocolo: {
-    manha: string[];
-    tarde: string[];
-    noite: string[];
-  };
+  plano_terapeutico?: PlanoTerapeutico;
 
   frequencia_lunara: string;
   justificativa: string;
@@ -116,18 +113,6 @@ function badgeSeveridade(score?: number): string {
   const color = sev === "leve" ? "#374151" : sev === "moderado" ? "#92400e" : "#991b1b";
   const scoreText = typeof score === "number" ? `${Math.round(score)}%` : "";
   return `<span style="display:inline-block;margin-left:10px;padding:2px 9px;border-radius:999px;border:1px solid ${border};background:${bg};color:${color};font-weight:900;font-size:11px;white-space:nowrap">Severidade: ${label}${scoreText ? ` (${scoreText})` : ""}</span>`;
-}
-
-function liIcon(items: string[], icon = "•"): string {
-  if (!items?.length) return `<li style="margin:0;color:#9ca3af">—</li>`;
-  return items
-    .map(
-      (x) =>
-        `<li style="margin:0 0 7px 0;line-height:1.8"><span style="display:inline-block;width:18px;color:#6b7280">${escapeHtml(
-          icon,
-        )}</span>${escapeHtml(x)}</li>`,
-    )
-    .join("");
 }
 
 function ordenarProblemasPorScore<T extends { score?: number }>(items: T[]): T[] {
@@ -247,7 +232,7 @@ export async function gerarRelatorioPDF(data: RelatorioData): Promise<void> {
   const createdAt = formatDate(data.createdAt);
   const fileSafeName = (data.clientName || "cliente")
     .trim()
-    .replaceAll(/[\\/:*?\"<>|]+/g, "-")
+    .replaceAll(/[/\\:*?"<>|]+/g, "-")
     .slice(0, 80);
 
   const resumoCaso = (() => {
@@ -474,7 +459,7 @@ export async function gerarRelatorioPDF(data: RelatorioData): Promise<void> {
           </div>
           <div style="margin-top:10px;font-size:13px;line-height:1.8;color:#374151">
             Este exame identificou <b>${resumoCaso.total}</b> pontos de atenção, sendo <b>${resumoCaso.severos}</b> de maior prioridade terapêutica.
-            O protocolo foi estruturado para restaurar o equilíbrio progressivamente.
+            O plano terapêutico foi estruturado para orientar o acompanhamento de forma progressiva.
           </div>
           <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:#374151">
             <span style="padding:4px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#ffffff"><b>Leves:</b> ${resumoCaso.leves}</span>
@@ -486,42 +471,53 @@ export async function gerarRelatorioPDF(data: RelatorioData): Promise<void> {
     );
   }
 
-  // 9. Protocolo (3 blocos)
+  // 9. Plano terapêutico
+  const plano = data.plano_terapeutico;
+  const tipoLabel =
+    plano?.tipo === "semanal"
+      ? "Semanal"
+      : plano?.tipo === "quinzenal"
+        ? "Quinzenal"
+        : plano?.tipo === "mensal"
+          ? "Mensal"
+          : "";
   blocks.push(
     criarBlocoHTML(`
-      <div style="font-size:12px;font-weight:900;color:#6b7280;letter-spacing:0.06em;text-transform:uppercase">Protocolo terapêutico</div>
+      <div style="font-size:12px;font-weight:900;color:#6b7280;letter-spacing:0.06em;text-transform:uppercase">Plano terapêutico</div>
     `),
   );
-  blocks.push(
-    criarBlocoHTML(`
-      <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:14px;padding:14px;box-shadow:none">
-        <div style="font-weight:900;margin-bottom:8px;color:#14532d;font-size:13px">Manhã — Ativação e energia</div>
-        <ul style="padding-left:18px;margin:0;font-size:13px;color:#14532d">
-          ${liIcon((data.protocolo?.manha ?? []) as string[], "🌿")}
-        </ul>
-      </div>
-    `),
-  );
-  blocks.push(
-    criarBlocoHTML(`
-      <div style="border:1px solid #fde68a;background:#fffbeb;border-radius:14px;padding:14px;box-shadow:none">
-        <div style="font-weight:900;margin-bottom:8px;color:#78350f;font-size:13px">Tarde — Estabilização metabólica</div>
-        <ul style="padding-left:18px;margin:0;font-size:13px;color:#78350f">
-          ${liIcon((data.protocolo?.tarde ?? []) as string[], "•")}
-        </ul>
-      </div>
-    `),
-  );
-  blocks.push(
-    criarBlocoHTML(`
-      <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;padding:14px;box-shadow:none">
-        <div style="font-weight:900;margin-bottom:8px;color:#1e3a8a;font-size:13px">Noite — Regeneração e equilíbrio</div>
-        <ul style="padding-left:18px;margin:0;font-size:13px;color:#1e3a8a">
-          ${liIcon((data.protocolo?.noite ?? []) as string[], "•")}
-        </ul>
-      </div>
-    `),
-  );
+  if (plano?.terapias?.length) {
+    blocks.push(
+      criarBlocoHTML(`
+        <div style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:14px;padding:14px;box-shadow:none;margin-bottom:10px">
+          <div style="font-weight:900;margin-bottom:6px;color:#3730a3;font-size:13px">Periodicidade sugerida: ${escapeHtml(tipoLabel || "—")}</div>
+          <div style="font-size:12px;color:#4b5563;line-height:1.6">Baseada na severidade estimada a partir do diagnóstico e dos pontos críticos.</div>
+        </div>
+      `),
+    );
+    for (const item of plano.terapias) {
+      blocks.push(
+        criarBlocoHTML(`
+          <div style="border:1px solid #e5e7eb;background:#ffffff;border-radius:14px;padding:14px;box-shadow:none;margin-bottom:10px">
+            <div style="font-weight:900;color:#111827;font-size:14px;margin-bottom:6px">${escapeHtml(item.nome)}</div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px"><b>Frequência:</b> ${escapeHtml(item.frequencia || "—")}</div>
+            <div style="font-size:13px;color:#374151;line-height:1.7;margin-bottom:8px">${escapeHtml(item.descricao || "—")}</div>
+            <div style="font-size:12px;color:#111827;line-height:1.6;padding:10px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb">
+              <b>Justificativa:</b> ${escapeHtml(item.justificativa || "—")}
+            </div>
+          </div>
+        `),
+      );
+    }
+  } else {
+    blocks.push(
+      criarBlocoHTML(`
+        <div style="border:1px solid #e5e7eb;border-radius:14px;padding:14px;font-size:13px;color:#6b7280">
+          Nenhum plano terapêutico estruturado disponível para este relatório.
+        </div>
+      `),
+    );
+  }
 
   // 10. Frequência
   blocks.push(
