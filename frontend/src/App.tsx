@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
-import {
-  gerarAnaliseAtual,
-  buildFromAnaliseExistente,
-  type AiStructuredData
-} from "./services/api";
 import { ComparativoExames, type ComparacaoExames } from "./ComparativoExames";
+import { parsePlanoTerapeutico } from "./services/api";
 import {
   listarExames,
   buscarExamesPorNome,
@@ -225,7 +221,7 @@ function exameRowToAiData(row: ExameRow): AiStructuredData {
         pontos_criticos: row.pontos_criticos,
       };
 
-  return normalizeAiData(merged);
+  return exameRowToAiData(merged);
 }
 
 function exameTemConteudoParaPdf(row: ExameRow): boolean {
@@ -371,58 +367,6 @@ useEffect(() => {
 async function recarregarTodosExames() {
   const list = await listarExames();
   setTodosExames(list);
-}
-
-async function onProcessarPdf() {
-  setError(null);
-  setAnalysis(null);
-  setReusedNotice(null);
-  setExistingAnalysisId(null);
-
-  if (!pdfFiles?.length) {
-    setError("Selecione um arquivo PDF.");
-    return;
-  }
-  const nome = clientName.trim();
-  if (!nome) {
-    setError("Informe o nome do paciente.");
-    return;
-  }
-
-  setLoading(true);
-  try {
-    const result = await processarPdf(pdfFiles, nome);
-    console.log("RESULTADO COMPLETO:", result);
-    setAnalysis(result.data ?? null);
-    setDiagnostico(result.diagnostico ?? null);
-    setCreatedAt(new Date());
-    if (result.reused) {
-      setReusedNotice("Este exame já foi analisado anteriormente");
-    }
-    if (result.analysisId) {
-      setExistingAnalysisId(result.analysisId);
-    }
-
-    await recarregarTodosExames();
-    try {
-      const [totalExames, examesMesAtual] = await Promise.all([
-        contarExames(),
-        contarExamesMesAtual(),
-      ]);
-      setDashboard({ totalExames, examesMesAtual });
-    } catch {
-      // ignore
-    }
-
-    if (pacienteSelecionado === nome) {
-      const list = await listarExamesPorPaciente(nome);
-      setExamesPaciente(list);
-    }
-  } catch (e: unknown) {
-    setError(e instanceof Error ? e.message : "Erro ao processar PDF.");
-  } finally {
-    setLoading(false);
-  }
 }
 
 async function buscarUltimaAnalise() {

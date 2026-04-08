@@ -209,9 +209,9 @@ export function montarPlanoTerapeutico(
   pontos_criticos: string[],
 ): PlanoTerapeutico {
   const itens: ItemPlanoTerapeutico[] = terapias.map((t) => ({
-    nome: t.nome_terapia,
+    nome: t.nome,
     descricao: t.descricao ?? "",
-    frequencia: frequenciaPadraoItem(tipo, t.frequencia),
+    frequencia: frequenciaPadraoItem(tipo, t.frequencia_recomendada),
     justificativa: montarJustificativa(t, pontos_criticos),
   }));
 
