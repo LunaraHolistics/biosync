@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 const PDF_CANVAS_SCALE_DEFAULT = 2.5;
+const LIMITE_ITENS_RELATORIO = 40;
 
 export type RelatorioData = {
   clientName: string;
@@ -32,7 +33,6 @@ export type RelatorioData = {
   frequencia_lunara: string;
   justificativa: string;
 
-  // 🔥 NOVO
   relatorio_original_html?: string;
 };
 
@@ -47,6 +47,12 @@ function escapeHtml(text: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+}
+
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/on\w+="[^"]*"/g, "");
 }
 
 function criarBlocoHTML(html: string): HTMLDivElement {
@@ -92,43 +98,41 @@ function adicionarBlocoAoPDF(
   return currentY + imgHeight + 12;
 }
 
-//
-// 🔥 PARSER DO HTML ORIGINAL
-//
-function extrairRelatorioOriginal(html: string) {
+type ItemExtraido = {
+  sistema: string;
+  item: string;
+  normal: string;
+  valor: string;
+  conselho: string;
+};
+
+function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
   const linhas = Array.from(doc.querySelectorAll("tr"));
-  const resultado: any[] = [];
+  const resultado: ItemExtraido[] = [];
 
   let sistemaAtual = "";
 
   for (const tr of linhas) {
     const tds = tr.querySelectorAll("td");
-
     if (tds.length < 4) continue;
 
     if (tds.length >= 5) {
       const sistemaTexto = tds[0]?.textContent?.trim();
-      if (sistemaTexto) {
-        sistemaAtual = sistemaTexto;
-      }
+      if (sistemaTexto) sistemaAtual = sistemaTexto;
     }
 
-    const item = tds[1]?.textContent?.trim();
-    const normal = tds[2]?.textContent?.trim();
-    const valor = tds[3]?.textContent?.trim();
-    const conselho = tds[4]?.textContent?.trim();
-
+    const item = tds[1]?.textContent?.trim() || "";
     if (!item) continue;
 
     resultado.push({
       sistema: sistemaAtual,
       item,
-      normal,
-      valor,
-      conselho,
+      normal: tds[2]?.textContent?.trim() || "",
+      valor: tds[3]?.textContent?.trim() || "",
+      conselho: tds[4]?.textContent?.trim() || "",
     });
   }
 
@@ -162,58 +166,34 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   blocks.push(
     criarBlocoHTML(`
       <div style="font-weight:900;margin-bottom:8px">Interpretação</div>
-      <div>${escapeHtml(data.interpretacao)}</div>
+      <div style="white-space:pre-wrap">${escapeHtml(data.interpretacao)}</div>
     `)
   );
 
-  // 🔥 MAPA TÉCNICO ESTRUTURADO
+  // MAPA TÉCNICO AGRUPADO
   if (data.relatorio_original_html) {
     const itens = extrairRelatorioOriginal(data.relatorio_original_html);
+
+    const linhas = itens.slice(0, LIMITE_ITENS_RELATORIO).map(
+      (i) => `
+      <div style="margin-bottom:8px">
+        <b>${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}</b><br/>
+        <span style="font-size:12px">
+          Normal: ${escapeHtml(i.normal || "—")} |
+          Medido: ${escapeHtml(i.valor || "—")}
+        </span>
+      </div>
+    `
+    );
 
     blocks.push(
       criarBlocoHTML(`
         <div style="font-weight:900;margin-bottom:10px">
           Mapa técnico estruturado
         </div>
+        ${linhas.join("")}
       `)
     );
-
-    for (const i of itens.slice(0, LIMITE_ITENS_RELATORIO)) {
-      blocks.push(
-        criarBlocoHTML(`
-          <div style="border:1px solid #ddd;padding:12px;border-radius:10px">
-            <div style="font-weight:900;font-size:13px">
-              ${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}
-            </div>
-
-            <div style="font-size:12px;margin-top:4px">
-              <b>Normal:</b> ${escapeHtml(i.normal || "—")} |
-              <b>Medido:</b> ${escapeHtml(i.valor || "—")}
-            </div>
-
-            <div style="font-size:12px;margin-top:6px;color:#555">
-              ${escapeHtml(i.conselho || "—")}
-            </div>
-          </div>
-        `)
-      );
-    }
-  }
-
-  // IMPACTO FITNESS
-  if (data.diagnostico?.problemas?.length) {
-    for (const p of data.diagnostico.problemas) {
-      if (!p.impacto_fitness) continue;
-
-      blocks.push(
-        criarBlocoHTML(`
-          <div style="border:1px solid #ddd;padding:14px;border-radius:12px">
-            <div style="font-weight:900">${escapeHtml(p.item)}</div>
-            <div style="font-size:13px">${escapeHtml(p.impacto)}</div>
-          </div>
-        `)
-      );
-    }
   }
 
   // PONTOS CRÍTICOS
@@ -230,41 +210,35 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
 
   // PLANO TERAPÊUTICO
   if (data.plano_terapeutico?.terapias?.length) {
-    blocks.push(criarBlocoHTML(`<div style="font-weight:900">Plano terapêutico</div>`));
+    const terapias = data.plano_terapeutico.terapias.map(
+      (t) => `
+      <div style="margin-bottom:10px">
+        <b>${escapeHtml(t.nome)}</b><br/>
+        <span style="font-size:12px">${escapeHtml(t.frequencia)}</span><br/>
+        ${escapeHtml(t.descricao)}
+      </div>
+    `
+    );
 
-    for (const t of data.plano_terapeutico.terapias) {
-      blocks.push(
-        criarBlocoHTML(`
-          <div style="border:1px solid #ddd;padding:14px;border-radius:12px">
-            <div style="font-weight:900">${escapeHtml(t.nome)}</div>
-            <div style="font-size:12px">${escapeHtml(t.frequencia)}</div>
-            <div>${escapeHtml(t.descricao)}</div>
-          </div>
-        `)
-      );
-    }
+    blocks.push(
+      criarBlocoHTML(`
+        <div style="font-weight:900">Plano terapêutico</div>
+        ${terapias.join("")}
+      `)
+    );
   }
 
-// 🔥 RELATÓRIO ORIGINAL COMPLETO (RAW)
-if (data.relatorio_original_html) {
-  blocks.push(
-    criarBlocoHTML(`
-      <div style="font-weight:900;margin-top:20px;margin-bottom:10px">
-        Relatório original (referência técnica)
-      </div>
-    `)
-  );
+  // HTML ORIGINAL (SANITIZADO)
+  if (data.relatorio_original_html) {
+    const raw = document.createElement("div");
+    raw.style.width = "694px";
+    raw.style.padding = "10px";
+    raw.style.background = "#fff";
+    raw.innerHTML = sanitizeHtml(data.relatorio_original_html);
 
-  const raw = document.createElement("div");
-  raw.style.width = "694px";
-  raw.style.padding = "10px";
-  raw.style.background = "#fff";
-  raw.innerHTML = data.relatorio_original_html;
+    blocks.push(raw);
+  }
 
-  blocks.push(raw);
-}
-
-  // FINAL
   blocks.forEach((b) => container.appendChild(b));
   document.body.appendChild(container);
 

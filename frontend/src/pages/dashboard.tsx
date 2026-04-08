@@ -8,6 +8,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
+
     void (async () => {
       try {
         const data = await listarExames();
@@ -16,6 +17,7 @@ export default function Dashboard() {
         console.error("Erro ao buscar exames:", e);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -24,18 +26,71 @@ export default function Dashboard() {
   function gerarPDF(exame: ExameRow) {
     const doc = new jsPDF();
 
+    const analise =
+      exame.analise_ia && typeof exame.analise_ia === "object"
+        ? (exame.analise_ia as any)
+        : {};
+
+    const plano = analise.plano_terapeutico || { terapias: [] };
+
+    let y = 10;
+
     doc.setFontSize(14);
-    doc.text(`Paciente: ${exame.nome_paciente}`, 10, 10);
-    doc.text(`Data: ${exame.data_exame}`, 10, 20);
+    doc.text(`Paciente: ${exame.nome_paciente}`, 10, y);
+    y += 10;
+
+    doc.text(`Data: ${exame.data_exame}`, 10, y);
+    y += 10;
 
     doc.setFontSize(12);
-    doc.text("Interpretação:", 10, 30);
+    doc.text("Interpretação:", 10, y);
+    y += 8;
 
-    const texto =
-      (exame.analise_ia && typeof exame.analise_ia === "object"
-        ? (exame.analise_ia as { interpretacao?: string }).interpretacao
-        : undefined) || "Sem dados";
-    doc.text(texto, 10, 40, { maxWidth: 180 });
+    const interpretacao = analise.interpretacao || "Sem dados";
+    doc.text(interpretacao, 10, y, { maxWidth: 180 });
+    y += 20;
+
+    // 🔥 PONTOS CRÍTICOS
+    doc.text("Pontos críticos:", 10, y);
+    y += 8;
+
+    const pontos =
+      analise.pontos_criticos || exame.pontos_criticos || [];
+
+    pontos.forEach((p: string) => {
+      doc.text(`- ${p}`, 10, y);
+      y += 6;
+    });
+
+    y += 10;
+
+    // 🔥 PLANO TERAPÊUTICO NOVO (SEM MANHÃ/TARDE/NOITE)
+    if (Array.isArray(plano.terapias) && plano.terapias.length) {
+      doc.text("Plano terapêutico:", 10, y);
+      y += 8;
+
+      plano.terapias.forEach((t: any) => {
+        doc.text(`• ${t.nome}`, 10, y);
+        y += 6;
+
+        if (t.descricao) {
+          doc.text(`  ${t.descricao}`, 12, y, { maxWidth: 170 });
+          y += 6;
+        }
+
+        if (t.frequencia) {
+          doc.text(`  Frequência: ${t.frequencia}`, 12, y);
+          y += 6;
+        }
+
+        if (t.justificativa) {
+          doc.text(`  ${t.justificativa}`, 12, y, { maxWidth: 170 });
+          y += 6;
+        }
+
+        y += 4;
+      });
+    }
 
     doc.save(`relatorio-${exame.nome_paciente}.pdf`);
   }
@@ -84,8 +139,9 @@ export default function Dashboard() {
             <b>Interpretação:</b>
           </p>
           <p>
-            {selecionado.analise_ia && typeof selecionado.analise_ia === "object"
-              ? (selecionado.analise_ia as { interpretacao?: string }).interpretacao
+            {selecionado.analise_ia &&
+            typeof selecionado.analise_ia === "object"
+              ? (selecionado.analise_ia as any).interpretacao
               : null}
           </p>
 
@@ -94,16 +150,35 @@ export default function Dashboard() {
           </p>
           <ul>
             {Array.isArray(
-              (selecionado.analise_ia as { pontos_criticos?: string[] } | undefined)
-                ?.pontos_criticos,
+              (selecionado.analise_ia as any)?.pontos_criticos,
             )
-              ? (selecionado.analise_ia as { pontos_criticos: string[] }).pontos_criticos.map(
+              ? (selecionado.analise_ia as any).pontos_criticos.map(
                   (p: string, i: number) => <li key={i}>{p}</li>,
                 )
-              : (selecionado.pontos_criticos ?? []).map((p: string, i: number) => (
-                  <li key={i}>{p}</li>
-                ))}
+              : (selecionado.pontos_criticos ?? []).map(
+                  (p: string, i: number) => <li key={i}>{p}</li>,
+                )}
           </ul>
+
+          {/* 🔥 NOVO PLANO */}
+          {Array.isArray(
+            (selecionado.analise_ia as any)?.plano_terapeutico?.terapias,
+          ) && (
+            <>
+              <p>
+                <b>Plano Terapêutico:</b>
+              </p>
+              <ul>
+                {(selecionado.analise_ia as any).plano_terapeutico.terapias.map(
+                  (t: any, i: number) => (
+                    <li key={i}>
+                      <b>{t.nome}</b> — {t.descricao}
+                    </li>
+                  ),
+                )}
+              </ul>
+            </>
+          )}
         </div>
       ) : null}
     </div>
