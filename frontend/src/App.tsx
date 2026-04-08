@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import {
-  processarPdf,
-  normalizeAiData,
-  parsePlanoTerapeutico,
-  type AiStructuredData,
+  gerarAnaliseAtual,
+  buildFromAnaliseExistente,
+  type AiStructuredData
 } from "./services/api";
 import { ComparativoExames, type ComparacaoExames } from "./ComparativoExames";
 import {
@@ -290,13 +289,11 @@ function buildRelatorioData(
 
 function App() {
   const [clientName, setClientName] = useState("");
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [analysis, setAnalysis] = useState<AiStructuredData | null>(null);
   const [createdAt, setCreatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diagnostico, setDiagnostico] = useState<unknown>(null);
-  const [reusedNotice, setReusedNotice] = useState<string | null>(null);
   const [existingAnalysisId, setExistingAnalysisId] = useState<string | null>(null);
   const analysisRefs = useRef<Record<string, HTMLDivElement | null>>({});
 

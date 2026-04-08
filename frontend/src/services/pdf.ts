@@ -32,7 +32,7 @@ export type RelatorioData = {
 
   frequencia_lunara: string;
   justificativa: string;
-
+  comparacao?: unknown;
   relatorio_original_html?: string;
 };
 

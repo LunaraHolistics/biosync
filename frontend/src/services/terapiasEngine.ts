@@ -73,7 +73,7 @@ function pontuacaoTerapia(
 ): number {
   const ind = normalizeText(indicacoesParaTexto(t.indicacoes));
   const desc = normalizeText(t.descricao ?? "");
-  const nome = normalizeText(t.nome_terapia ?? "");
+  const nome = normalizeText(t.nome ?? "");
   const cat = normalizeText(t.categoria ?? "");
 
   const haystack = `${ind} ${desc} ${nome} ${cat}`;
@@ -211,7 +211,7 @@ export function montarPlanoTerapeutico(
   const itens: ItemPlanoTerapeutico[] = terapias.map((t) => ({
     nome: t.nome_terapia,
     descricao: t.descricao ?? "",
-    frequencia: frequenciaPadraoItem(tipo, t.frequencia_base),
+    frequencia: frequenciaPadraoItem(tipo, t.frequencia),
     justificativa: montarJustificativa(t, pontos_criticos),
   }));
 

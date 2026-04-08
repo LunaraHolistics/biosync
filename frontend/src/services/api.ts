@@ -41,11 +41,6 @@ export type AiResponse = {
 // HELPERS
 // ==============================
 
-function toStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((x) => typeof x === "string");
-  return [];
-}
-
 function toStringValue(value: unknown, def = ""): string {
   return typeof value === "string" ? value : def;
 }
