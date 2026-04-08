@@ -1,79 +1,101 @@
 import type { Diagnostico, Problema } from "./diagnostico.service";
+import type { PlanoTerapeutico, ItemPlanoTerapeutico } from "../types/plano_terapeutico";
 
-export type Protocolo = {
-  manha: string[];
-  tarde: string[];
-  noite: string[];
-};
-
-function adicionarUnico(lista: string[], item: string) {
-  if (!lista.includes(item)) lista.push(item);
+function adicionarUnico(lista: ItemPlanoTerapeutico[], item: ItemPlanoTerapeutico) {
+  if (!lista.some((t) => t.nome === item.nome)) {
+    lista.push(item);
+  }
 }
 
-function aplicarRegra(problema: Problema, protocolo: Protocolo) {
-  const { categoria, prioridade } = problema;
+function criarTerapiaBase(problema: Problema): ItemPlanoTerapeutico[] {
+  const { categoria, prioridade, item } = problema;
+
+  const terapias: ItemPlanoTerapeutico[] = [];
 
   // 🔥 HORMONAL
   if (categoria === "hormonal") {
-    adicionarUnico(protocolo.manha, "Exposição ao sol 10–15 min");
-    adicionarUnico(protocolo.manha, "Estímulo energético com respiração ativa");
-    adicionarUnico(protocolo.tarde, "Ajuste alimentar focado em suporte hormonal");
-    adicionarUnico(protocolo.noite, "Relaxamento profundo para equilíbrio endócrino");
+    terapias.push({
+      nome: "Regulação Hormonal Energética",
+      descricao: "Técnicas para equilibrar eixo hormonal e vitalidade geral",
+      frequencia: "3x por semana",
+      justificativa: `Desequilíbrio identificado em ${item}`,
+    });
   }
 
   // 🔥 DIGESTIVO
   if (categoria === "digestivo") {
-    adicionarUnico(protocolo.manha, "Água morna com limão em jejum");
-    adicionarUnico(protocolo.tarde, "Uso de probióticos naturais");
-    adicionarUnico(protocolo.tarde, "Alimentação leve e de fácil digestão");
-    adicionarUnico(protocolo.noite, "Evitar alimentos inflamatórios");
+    terapias.push({
+      nome: "Reequilíbrio Digestivo",
+      descricao: "Suporte para absorção de nutrientes e função intestinal",
+      frequencia: "Diário",
+      justificativa: `Impacto digestivo detectado em ${item}`,
+    });
   }
 
   // 🔥 CIRCULATÓRIO
   if (categoria === "circulatorio") {
-    adicionarUnico(protocolo.manha, "Ativação corporal leve (caminhada)");
-    adicionarUnico(protocolo.tarde, "Hidratação reforçada");
-    adicionarUnico(protocolo.noite, "Massagem ou estímulo circulatório");
+    terapias.push({
+      nome: "Ativação Circulatória",
+      descricao: "Estímulo energético e físico da circulação",
+      frequencia: "3x por semana",
+      justificativa: `Comprometimento circulatório em ${item}`,
+    });
   }
 
   // 🔥 IMUNOLÓGICO
   if (categoria === "imunologico") {
-    adicionarUnico(protocolo.manha, "Suplementação natural de suporte imunológico");
-    adicionarUnico(protocolo.tarde, "Contato com natureza / grounding");
-    adicionarUnico(protocolo.noite, "Sono reparador (prioridade)");
+    terapias.push({
+      nome: "Fortalecimento Imunológico",
+      descricao: "Técnicas para aumentar resistência do organismo",
+      frequencia: "Contínuo",
+      justificativa: `Sistema imune impactado em ${item}`,
+    });
   }
 
   // 🔥 EMOCIONAL
   if (categoria === "emocional") {
-    adicionarUnico(protocolo.manha, "Respiração consciente 5 minutos");
-    adicionarUnico(protocolo.tarde, "Pausas de regulação emocional");
-    adicionarUnico(protocolo.noite, "Meditação ou relaxamento guiado");
+    terapias.push({
+      nome: "Regulação Emocional",
+      descricao: "Equilíbrio mental e emocional",
+      frequencia: "Diário",
+      justificativa: `Sobrecarga emocional detectada em ${item}`,
+    });
   }
 
   // 🔥 TÓXICO
   if (categoria === "toxico") {
-    adicionarUnico(protocolo.manha, "Hidratação intensa");
-    adicionarUnico(protocolo.tarde, "Suporte hepático natural");
-    adicionarUnico(protocolo.noite, "Evitar exposição a toxinas");
+    terapias.push({
+      nome: "Desintoxicação Energética",
+      descricao: "Limpeza de cargas tóxicas e interferências",
+      frequencia: "Semanal",
+      justificativa: `Presença de toxinas associada a ${item}`,
+    });
   }
 
-  // 🔥 PRIORIDADE ALTA → reforço
+  // 🔥 PRIORIDADE ALTA → terapia intensiva
   if (prioridade === "alta") {
-    adicionarUnico(protocolo.manha, "Foco terapêutico principal do dia");
-    adicionarUnico(protocolo.noite, "Técnica de integração energética profunda");
+    terapias.push({
+      nome: "Intervenção Terapêutica Intensiva",
+      descricao: "Ação focada no principal desequilíbrio identificado",
+      frequencia: "2 a 3x por semana",
+      justificativa: `Alta prioridade no item ${item}`,
+    });
   }
+
+  return terapias;
 }
 
-export function gerarProtocolo(diagnostico: Diagnostico): Protocolo {
-  const protocolo: Protocolo = {
-    manha: [],
-    tarde: [],
-    noite: [],
-  };
+export function gerarPlanoTerapeutico(diagnostico: Diagnostico): PlanoTerapeutico {
+  const terapias: ItemPlanoTerapeutico[] = [];
 
-  diagnostico.problemas.forEach((p) => {
-    aplicarRegra(p, protocolo);
+  diagnostico.problemas.forEach((problema) => {
+    const novas = criarTerapiaBase(problema);
+
+    novas.forEach((t) => adicionarUnico(terapias, t));
   });
 
-  return protocolo;
+  return {
+    tipo: "personalizado",
+    terapias,
+  };
 }

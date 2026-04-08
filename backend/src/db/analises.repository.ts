@@ -7,7 +7,14 @@ export async function salvarNovaAnalise(data: {
   dados_processados?: unknown;
   diagnostico?: unknown;
   comparacao?: unknown;
+
+  // 🔥 LEGADO (mantido por segurança)
   protocolo?: unknown;
+
+  // 🔥 NOVO MODELO
+  plano_terapeutico?: unknown;
+  relatorio_original_html?: string;
+
   pdf_hash: string;
 }) {
   const res = await pool.query(
@@ -20,9 +27,11 @@ export async function salvarNovaAnalise(data: {
       diagnostico,
       comparacao,
       protocolo,
+      plano_terapeutico,
+      relatorio_original_html,
       pdf_hash
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     RETURNING *
     `,
     [
@@ -32,7 +41,14 @@ export async function salvarNovaAnalise(data: {
       data.dados_processados ?? null,
       data.diagnostico ?? null,
       data.comparacao ?? null,
+
+      // legado
       data.protocolo ?? null,
+
+      // novo
+      data.plano_terapeutico ?? null,
+      data.relatorio_original_html ?? null,
+
       data.pdf_hash,
     ]
   );
@@ -45,7 +61,13 @@ export async function buscarAnalisePorHashECliente(
   hash: string
 ) {
   const res = await pool.query(
-    `SELECT * FROM analises WHERE client_id = $1 AND pdf_hash = $2 LIMIT 1`,
+    `
+    SELECT *
+    FROM analises
+    WHERE client_id = $1
+      AND pdf_hash = $2
+    LIMIT 1
+    `,
     [clientId, hash]
   );
 
@@ -54,7 +76,13 @@ export async function buscarAnalisePorHashECliente(
 
 export async function buscarUltimaAnalisePorCliente(clientId: string) {
   const res = await pool.query(
-    `SELECT * FROM analises WHERE client_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    `
+    SELECT *
+    FROM analises
+    WHERE client_id = $1
+    ORDER BY created_at DESC
+    LIMIT 1
+    `,
     [clientId]
   );
 

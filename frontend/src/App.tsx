@@ -212,17 +212,17 @@ function exameRowToAiData(row: ExameRow): AiStructuredData {
   const merged =
     ia && typeof ia === "object"
       ? {
-          ...ia,
-          plano_terapeutico:
-            (ia as Record<string, unknown>).plano_terapeutico ??
-            meta.plano_terapeutico ??
-            row.protocolo,
-          pontos_criticos: (ia as Record<string, unknown>).pontos_criticos ?? row.pontos_criticos,
-        }
+        ...ia,
+        plano_terapeutico:
+          (ia as Record<string, unknown>).plano_terapeutico ??
+          meta.plano_terapeutico ??
+          row.protocolo,
+        pontos_criticos: (ia as Record<string, unknown>).pontos_criticos ?? row.pontos_criticos,
+      }
       : {
-          plano_terapeutico: meta.plano_terapeutico ?? row.protocolo,
-          pontos_criticos: row.pontos_criticos,
-        };
+        plano_terapeutico: meta.plano_terapeutico ?? row.protocolo,
+        pontos_criticos: row.pontos_criticos,
+      };
   return normalizeAiData(merged);
 }
 
@@ -272,33 +272,38 @@ function App() {
     return Array.from(map.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [todosExames]);
 
-  const relatorioData: RelatorioData | null = useMemo(() => {
-    if (!analysis) return null;
+  // 🔥 RELATÓRIO ORIGINAL COMPLETO (RAW)
+  if (data.relatorio_original_html) {
+    blocks.push(
+      criarBlocoHTML(`
+      <div style="font-weight:900;margin-top:20px;margin-bottom:10px">
+        Relatório original (referência técnica)
+      </div>
+    `)
+    );
 
-    return {
-      clientName: clientName.trim() || "Cliente",
-      createdAt: createdAt ?? new Date(),
+    // Sanitização leve (remove scripts problemáticos)
+    const htmlLimpo = data.relatorio_original_html
+      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+      .replace(/on\w+="[^"]*"/g, "");
 
-      interpretacao: analysis.interpretacao ?? "",
+    const rawWrapper = document.createElement("div");
+    rawWrapper.style.width = "694px";
+    rawWrapper.style.background = "#fff";
+    rawWrapper.style.border = "1px solid #e5e7eb";
+    rawWrapper.style.borderRadius = "12px";
+    rawWrapper.style.padding = "12px";
+    rawWrapper.style.overflow = "hidden";
 
-      pontos_criticos: Array.isArray(analysis.pontos_criticos)
-        ? analysis.pontos_criticos
-        : [],
+    const rawContent = document.createElement("div");
+    rawContent.style.transform = "scale(0.85)";
+    rawContent.style.transformOrigin = "top left";
+    rawContent.style.width = "820px"; // compensa o scale
+    rawContent.innerHTML = htmlLimpo;
 
-      plano_terapeutico: analysis.plano_terapeutico,
-
-      frequencia_lunara: analysis.frequencia_lunara ?? "",
-      justificativa: analysis.justificativa ?? "",
-
-      diagnostico: toDiagnostico(diagnostico),
-      comparacao: undefined,
-    };
-  }, [analysis, clientName, createdAt, diagnostico]);
-
-  const analiseSelecionadaData: AiStructuredData | null = useMemo(() => {
-    if (!analiseSelecionada || !exameTemConteudoParaPdf(analiseSelecionada)) return null;
-    return exameRowToAiData(analiseSelecionada);
-  }, [analiseSelecionada]);
+    rawWrapper.appendChild(rawContent);
+    blocks.push(rawWrapper);
+  }
 
   const relatorioDataHistorico: RelatorioData | null = useMemo(() => {
     if (!pacienteSelecionado || !analiseSelecionada || !analiseSelecionadaData) return null;
@@ -307,33 +312,48 @@ function App() {
     const next = idx >= 0 ? examesPaciente[idx + 1] : null;
     const meta = resultadoMeta(analiseSelecionada);
     const persistedComparacao = toComparacao(meta.comparacao);
+
     const computedComparacao =
       !persistedComparacao && next
         ? compararExames(
-            toItemProcessadoArray(meta.dados_processados),
-            toItemProcessadoArray(resultadoMeta(next).dados_processados),
-          )
+          toItemProcessadoArray(meta.dados_processados),
+          toItemProcessadoArray(resultadoMeta(next).dados_processados),
+        )
         : undefined;
 
     return {
       clientName: pacienteSelecionado || "Cliente",
-      createdAt: new Date(analiseSelecionada.data_exame || analiseSelecionada.created_at),
+
+      createdAt: new Date(
+        analiseSelecionada.data_exame || analiseSelecionada.created_at
+      ),
 
       interpretacao: analiseSelecionadaData.interpretacao ?? "",
       pontos_criticos: analiseSelecionadaData.pontos_criticos ?? [],
 
       plano_terapeutico:
         parsePlanoTerapeutico(meta.plano_terapeutico) ??
-        parsePlanoTerapeutico(analiseSelecionada.protocolo) ??
-        analiseSelecionadaData.plano_terapeutico,
+        analiseSelecionadaData.plano_terapeutico ??
+        undefined,
 
       frequencia_lunara: analiseSelecionadaData.frequencia_lunara ?? "",
       justificativa: analiseSelecionadaData.justificativa ?? "",
 
       diagnostico: toDiagnostico(meta.diagnostico),
       comparacao: persistedComparacao ?? computedComparacao,
+
+      // 🔥 NOVO CAMPO (ESSENCIAL PARA O PDF)
+      relatorio_original_html:
+        (meta as any)?.relatorio_original_html ??
+        (analiseSelecionada as any)?.relatorio_original_html ??
+        "",
     };
-  }, [pacienteSelecionado, analiseSelecionada, analiseSelecionadaData, examesPaciente]);
+  }, [
+    pacienteSelecionado,
+    analiseSelecionada,
+    analiseSelecionadaData,
+    examesPaciente,
+  ]);
 
   const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
     if (examesPaciente.length < 2) return null;
@@ -658,9 +678,9 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setAnaliseSelecionada(a);
-                                  const data = exameRowToAiData(a);
                                   const meta = resultadoMeta(a);
-                                  gerarRelatorioPDF({
+                                  const data = exameRowToAiData(a);
+                                  const relatorio: RelatorioData = {
                                     clientName: pacienteSelecionado || "Cliente",
                                     createdAt: new Date(a.data_exame || a.created_at),
                                     interpretacao: data.interpretacao || "",
@@ -672,7 +692,15 @@ function App() {
                                     justificativa: data.justificativa || "",
                                     diagnostico: toDiagnostico(meta.diagnostico),
                                     comparacao: toComparacao(meta.comparacao),
-                                  });
+
+                                    // 🔥 ESSENCIAL
+                                    relatorio_original_html:
+                                      (meta as any)?.relatorio_original_html ??
+                                      (a as any)?.relatorio_original_html ??
+                                      "",
+                                  };
+
+                                  gerarRelatorioPDF(relatorio);
                                 }}
                                 style={{ marginBottom: 0 }}
                                 disabled={!exameTemConteudoParaPdf(a)}
@@ -788,22 +816,16 @@ function App() {
                   color: "inherit",
                 }}
               />
-              <input
-                type="file"
-                accept=".pdf,.html,.htm,.txt"
-                multiple
-                onChange={(e) =>
-                  setPdfFiles(e.target.files ? Array.from(e.target.files) : [])
-                }
-              />
-              <button className="counter" onClick={onProcessarPdf} disabled={loading}>
-                {loading ? "Processando..." : "Processar PDF"}
+              <button
+                className="counter"
+                onClick={buscarUltimaAnalise}
+                disabled={loading}
+              >
+                {loading ? "Carregando..." : "Gerar Última Análise"}
               </button>
-              {error ? <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div> : null}
-              {reusedNotice ? (
-                <div style={{ color: "#f59e0b", fontSize: 14, fontWeight: 700 }}>
-                  {reusedNotice}
-                </div>
+
+              {error ? (
+                <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div>
               ) : null}
 
               {analysis ? (
@@ -813,7 +835,10 @@ function App() {
               ) : null}
 
               {relatorioData ? (
-                <button className="counter" onClick={() => gerarRelatorioPDF(relatorioData)}>
+                <button
+                  className="counter"
+                  onClick={() => gerarRelatorioPDF(relatorioData)}
+                >
                   Gerar Relatório PDF
                 </button>
               ) : null}
@@ -861,13 +886,16 @@ function App() {
             >
               <div style={{ fontWeight: 900 }}>
                 {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
-                {analiseSelecionada?.data_exame ?? analiseSelecionada?.created_at ?? ""}
+                {analiseSelecionada?.data_exame ??
+                  analiseSelecionada?.created_at ??
+                  ""}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   className="counter"
                   onClick={() => {
-                    if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
+                    if (relatorioDataHistorico)
+                      gerarRelatorioPDF(relatorioDataHistorico);
                   }}
                   disabled={!relatorioDataHistorico}
                   style={{ marginBottom: 0 }}
@@ -885,7 +913,9 @@ function App() {
             </div>
 
             {!analiseSelecionada ? (
-              <div style={{ opacity: 0.85 }}>Nenhum exame selecionado.</div>
+              <div style={{ opacity: 0.85 }}>
+                Nenhum exame selecionado.
+              </div>
             ) : !analiseSelecionadaData ? (
               <div style={{ opacity: 0.85 }}>
                 Não foi possível interpretar o resultado salvo deste exame.
@@ -922,7 +952,12 @@ function App() {
                   <div className="sectionTitle" style={{ marginBottom: 8 }}>
                     Frequência Lunara
                   </div>
-                  <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
+                  <div
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      color: "var(--text-h)",
+                    }}
+                  >
                     {analiseSelecionadaData.frequencia_lunara || "—"}
                   </div>
                 </div>

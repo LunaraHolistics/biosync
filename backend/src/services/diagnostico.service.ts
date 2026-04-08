@@ -7,6 +7,14 @@ export type ItemProcessado = {
   status: "baixo" | "normal" | "alto";
 };
 
+export type ImpactoFitness = {
+  performance?: string;
+  hipertrofia?: string;
+  emagrecimento?: string;
+  recuperacao?: string;
+  humor?: string;
+};
+
 export type Problema = {
   sistema: string;
   item: string;
@@ -15,6 +23,9 @@ export type Problema = {
   categoria: string;
   score: number;
   prioridade: "baixa" | "media" | "alta";
+
+  // 🔥 NOVO
+  impacto_fitness?: ImpactoFitness;
 };
 
 export type Diagnostico = {
@@ -34,25 +45,32 @@ function normalize(input: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function analisarItem(
-  item: ItemProcessado,
-): Omit<Problema, "sistema" | "item" | "status" | "score"> {
+function analisarItem(item: ItemProcessado) {
   const texto = normalize(`${item.sistema} ${item.item}`);
 
   // 🔥 HORMONAL
   if (texto.includes("testosterona")) {
     return {
       impacto: "queda de energia, libido e vitalidade geral",
-      prioridade: "alta",
+      prioridadeBase: "alta",
       categoria: "hormonal",
+      impacto_fitness: {
+        performance: "redução de força e disposição",
+        hipertrofia: "dificuldade de ganho muscular",
+        humor: "queda de motivação",
+      },
     };
   }
 
   if (texto.includes("tireoide") || texto.includes("paratireoide")) {
     return {
       impacto: "desregulação metabólica e energética",
-      prioridade: "alta",
+      prioridadeBase: "alta",
       categoria: "hormonal",
+      impacto_fitness: {
+        emagrecimento: "dificuldade ou aceleração desregulada",
+        performance: "baixa energia",
+      },
     };
   }
 
@@ -60,8 +78,12 @@ function analisarItem(
   if (texto.includes("intestino") || texto.includes("digest")) {
     return {
       impacto: "baixa absorção de nutrientes e impacto na imunidade",
-      prioridade: "alta",
+      prioridadeBase: "alta",
       categoria: "digestivo",
+      impacto_fitness: {
+        hipertrofia: "baixa absorção proteica",
+        recuperacao: "recuperação prejudicada",
+      },
     };
   }
 
@@ -69,8 +91,12 @@ function analisarItem(
   if (texto.includes("circulacao") || texto.includes("vascular")) {
     return {
       impacto: "fadiga, baixa oxigenação e circulação deficiente",
-      prioridade: "media",
+      prioridadeBase: "media",
       categoria: "circulatorio",
+      impacto_fitness: {
+        performance: "queda de resistência",
+        recuperacao: "lentidão na recuperação",
+      },
     };
   }
 
@@ -78,25 +104,32 @@ function analisarItem(
   if (texto.includes("imun") || texto.includes("linfa")) {
     return {
       impacto: "queda da resposta imunológica",
-      prioridade: "media",
+      prioridadeBase: "media",
       categoria: "imunologico",
+      impacto_fitness: {
+        recuperacao: "maior tempo de recuperação",
+      },
     };
   }
 
-  // 🔥 EMOCIONAL / NEUROLÓGICO
+  // 🔥 EMOCIONAL
   if (
     texto.includes("cerebral") ||
     texto.includes("emocional") ||
     texto.includes("neuro")
   ) {
     return {
-      impacto: "sobrecarga mental, estresse e desequilíbrio emocional",
-      prioridade: "media",
+      impacto: "sobrecarga mental e desequilíbrio emocional",
+      prioridadeBase: "media",
       categoria: "emocional",
+      impacto_fitness: {
+        performance: "queda de foco",
+        humor: "instabilidade emocional",
+      },
     };
   }
 
-  // 🔥 METAIS / TOXINAS
+  // 🔥 TÓXICO
   if (
     texto.includes("metal") ||
     texto.includes("toxic") ||
@@ -104,16 +137,20 @@ function analisarItem(
   ) {
     return {
       impacto: "sobrecarga tóxica e interferência energética",
-      prioridade: "alta",
+      prioridadeBase: "alta",
       categoria: "toxico",
+      impacto_fitness: {
+        performance: "fadiga constante",
+        recuperacao: "baixa regeneração",
+      },
     };
   }
 
-  // 🔥 GENÉRICO
   return {
     impacto: "desequilíbrio funcional leve",
-    prioridade: "baixa",
+    prioridadeBase: "baixa",
     categoria: "geral",
+    impacto_fitness: {},
   };
 }
 
@@ -123,20 +160,19 @@ function calcularScore(item: ItemProcessado): number {
 
   const media = (item.min + item.max) / 2;
   const scoreBruto = (Math.abs(item.valor - media) / range) * 100;
+
   return Math.max(0, Math.min(100, Number(scoreBruto.toFixed(2))));
 }
 
-function classificarScore(score: number): "leve" | "moderado" | "severo" {
-  if (score <= 20) return "leve";
-  if (score <= 50) return "moderado";
-  return "severo";
-}
+function prioridadeFinal(
+  score: number,
+  prioridadeBase: "baixa" | "media" | "alta",
+): "baixa" | "media" | "alta" {
+  if (score > 60) return "alta";
+  if (score > 30) return "media";
 
-function prioridadePorScore(score: number): "baixa" | "media" | "alta" {
-  const classificacao = classificarScore(score);
-  if (classificacao === "leve") return "baixa";
-  if (classificacao === "moderado") return "media";
-  return "alta";
+  // fallback inteligente
+  return prioridadeBase;
 }
 
 export function gerarDiagnostico(dados: ItemProcessado[]): Diagnostico {
@@ -153,7 +189,10 @@ export function gerarDiagnostico(dados: ItemProcessado[]): Diagnostico {
         impacto: analise.impacto,
         categoria: analise.categoria,
         score,
-        prioridade: prioridadePorScore(score),
+        prioridade: prioridadeFinal(score, analise.prioridadeBase),
+
+        // 🔥 NOVO
+        impacto_fitness: analise.impacto_fitness,
       };
     });
 

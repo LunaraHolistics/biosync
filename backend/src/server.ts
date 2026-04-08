@@ -11,10 +11,11 @@ import { createClient } from "@supabase/supabase-js";
 
 // Parsers e serviços
 import { parseHtmReport } from "./utils/parserHtml";
-import { parseBioressonancia } from "./utils/parserBio";
 import { gerarDiagnostico } from "./services/diagnostico.service";
-import { gerarProtocolo } from "./services/motorTerapias.service";
 import { compararExames } from "./services/comparador.service";
+
+// 🔥 NOVO MOTOR
+import { gerarPlanoTerapeutico } from "./services/planoTerapeutico.service";
 
 import uploadRouter from "./routes/upload";
 import analyzeRoute from "./routes/analyze";
@@ -29,19 +30,22 @@ const supabase = createClient(
 type AiStructuredData = {
   interpretacao: string;
   pontos_criticos: string[];
-  protocolo: { manha: string[]; tarde: string[]; noite: string[] };
   frequencia_lunara: string;
   justificativa: string;
+  plano_terapeutico: any;
 };
 
-// --- Funções auxiliares (mantidas) ---
+// --- Fallback ---
 function fallbackData(): AiStructuredData {
   return {
     interpretacao: "Não foi possível gerar análise completa.",
     pontos_criticos: [],
-    protocolo: { manha: [], tarde: [], noite: [] },
     frequencia_lunara: "N/A",
     justificativa: "Erro na interpretação automática.",
+    plano_terapeutico: {
+      tipo: "semanal",
+      terapias: [],
+    },
   };
 }
 
@@ -54,9 +58,9 @@ function normalizeAiData(input: unknown): AiStructuredData {
   return {
     interpretacao: obj.interpretacao || base.interpretacao,
     pontos_criticos: obj.pontos_criticos || [],
-    protocolo: obj.protocolo || base.protocolo,
     frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
     justificativa: obj.justificativa || base.justificativa,
+    plano_terapeutico: base.plano_terapeutico, // sempre gerado internamente
   };
 }
 
@@ -84,10 +88,12 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "",
 });
 
-// 🔥 FUNÇÃO CENTRAL DE IA
+// 🔥 IA + MOTOR TERAPÊUTICO
 async function analisarComIA(dados: any) {
   const diagnostico = gerarDiagnostico(dados);
-  const protocolo = gerarProtocolo(diagnostico);
+
+  // 🔥 NOVO MOTOR
+  const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
   const prompt = `
 Analise os dados abaixo como terapeuta integrativo.
@@ -103,7 +109,6 @@ Responda em JSON:
 {
   "interpretacao": string,
   "pontos_criticos": string[],
-  "protocolo": { "manha": [], "tarde": [], "noite": [] },
   "frequencia_lunara": string,
   "justificativa": string
 }
@@ -122,12 +127,17 @@ ${JSON.stringify(dados)}
   const parsed = json ? JSON.parse(json) : null;
 
   const data = normalizeAiData(parsed);
-  data.protocolo = protocolo;
 
-  return data;
+  // 🔥 injeta plano terapêutico real
+  data.plano_terapeutico = plano_terapeutico;
+
+  return {
+    ...data,
+    diagnostico,
+  };
 }
 
-// 🔥 ROTA PRINCIPAL ATUALIZADA
+// 🔥 ROTA PRINCIPAL
 app.post("/api/upload", upload.array("files"), async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
@@ -148,7 +158,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
 
     const hash = gerarHash(Buffer.concat(files.map(f => f.buffer)));
 
-    // 💾 SALVAR NO BANCO
+    // 💾 SALVAR INICIAL
     const { data: exame, error } = await supabase
       .from("exames")
       .insert({
@@ -162,26 +172,20 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
 
     if (error) throw error;
 
-    // 🤖 IA
+    // 🤖 IA + PLANO
     const analise = await analisarComIA(resultados).catch(err => {
       console.error("Erro na IA:", err);
-
-      return {
-        interpretacao: "IA temporariamente indisponível.",
-        pontos_criticos: [],
-        protocolo: { manha: [], tarde: [], noite: [] },
-        frequencia_lunara: "N/A",
-        justificativa: "Falha na análise automática."
-      };
+      return fallbackData();
     });
 
-    // 💾 ATUALIZAR
+    // 💾 ATUALIZAR COM NOVO MODELO
     await supabase
       .from("exames")
       .update({
         analise_ia: analise,
         pontos_criticos: analise.pontos_criticos,
-        protocolo: JSON.stringify(analise.protocolo),
+        plano_terapeutico: analise.plano_terapeutico, // 🔥 NOVO
+        diagnostico: analise.diagnostico,
         status: "concluido"
       })
       .eq("id", exame.id);
@@ -214,7 +218,7 @@ app.get("/api/exames", async (_, res) => {
   res.json(data);
 });
 
-// Rotas existentes (mantidas)
+// Rotas existentes
 app.use(uploadRouter);
 app.use(analyzeRoute);
 

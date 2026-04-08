@@ -27,25 +27,48 @@ export type ExameRow = {
 
 export type TerapiaRow = {
   id: string;
-  nome_terapia: string;
+  nome: string;
   categoria: string | null;
   descricao: string | null;
-  indicacoes: unknown;
-  frequencia_base?: string | null;
+  indicacoes: string | null;
+  contraindicacoes?: string | null;
+  frequencia_recomendada?: string | null;
+  prioridade?: number;
+  tags?: string[];
+  setores_alvo?: string[];
+  ativo?: boolean;
+  created_at?: string;
 };
+
+export type AnaliseRow = {
+  id: string;
+  paciente_id?: string | null;
+  itens_alterados: string[];
+  interpretacoes?: any;
+  terapias_recomendadas?: any;
+  impacto_fitness?: any;
+  score_geral?: number;
+  html_relatorio?: string;
+  created_at: string;
+};
+
+// ==============================
+// TERAPIAS
+// ==============================
 
 export async function listarTerapias(): Promise<TerapiaRow[]> {
   const { data, error } = await supabase
     .from("terapias")
     .select("*")
-    .order("nome_terapia", { ascending: true });
+    .eq("ativo", true)
+    .order("prioridade", { ascending: true });
 
   if (error) throw new Error(error.message);
   return (data ?? []) as TerapiaRow[];
 }
 
 // ==============================
-// EXAMES (CORE DO SISTEMA)
+// EXAMES (LEGADO)
 // ==============================
 
 // Listar todos os exames
@@ -97,7 +120,7 @@ export async function contarExamesMesAtual(): Promise<number> {
   const { count, error } = await supabase
     .from("exames")
     .select("*", { count: "exact", head: true })
-    .gte("data_exame", inicioMes); // 🔥 ajuste aqui
+    .gte("data_exame", inicioMes);
 
   if (error) throw new Error(error.message);
   return count ?? 0;
@@ -132,7 +155,7 @@ export async function buscarExamePorId(
 }
 
 export async function buscarUltimoExamePorPaciente(
-  nomePaciente: string,
+  nomePaciente: string
 ): Promise<ExameRow | null> {
   const { data, error } = await supabase
     .from("exames")
@@ -148,7 +171,7 @@ export async function buscarUltimoExamePorPaciente(
 
 export async function buscarExamePorHashEPaciente(
   nomePaciente: string,
-  pdfHash: string,
+  pdfHash: string
 ): Promise<ExameRow | null> {
   const { data, error } = await supabase
     .from("exames")
@@ -172,7 +195,7 @@ export type NovoExamePayload = {
 };
 
 export async function salvarNovoExame(
-  payload: NovoExamePayload,
+  payload: NovoExamePayload
 ): Promise<ExameRow> {
   const { data, error } = await supabase
     .from("exames")
@@ -182,4 +205,59 @@ export async function salvarNovoExame(
 
   if (error) throw new Error(error.message);
   return data as ExameRow;
+}
+
+// ==============================
+// ANALISES (NOVO CORE)
+// ==============================
+
+// Buscar última análise
+export async function buscarUltimaAnalise(): Promise<AnaliseRow | null> {
+  const { data, error } = await supabase
+    .from("analises")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// Listar análises por paciente
+export async function listarAnalisesPorPaciente(
+  pacienteId: string
+): Promise<AnaliseRow[]> {
+  const { data, error } = await supabase
+    .from("analises")
+    .select("*")
+    .eq("paciente_id", pacienteId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// Processar análise completa (RPC)
+export async function processarAnaliseCompleta() {
+  const { data, error } = await supabase.rpc("processar_analise_completa");
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// Atualizar análise manualmente
+export async function atualizarAnalise(
+  id: string,
+  payload: Partial<AnaliseRow>
+) {
+  const { data, error } = await supabase
+    .from("analises")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
 }

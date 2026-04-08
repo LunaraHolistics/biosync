@@ -8,34 +8,54 @@ const pool = new Pool({
   },
 });
 
-type Terapia = {
+type TerapiaDB = {
   nome: string;
+  descricao: string;
   categoria: string;
   prioridade: number;
 };
 
-type Protocolo = {
-  manha: string[];
-  tarde: string[];
-  noite: string[];
+export type ItemPlanoTerapeutico = {
+  nome: string;
+  descricao: string;
+  frequencia: string;
+  justificativa: string;
 };
 
-export async function gerarProtocoloPorCategoria(
+export type PlanoTerapeutico = {
+  tipo: "semanal" | "quinzenal" | "mensal";
+  terapias: ItemPlanoTerapeutico[];
+};
+
+function gerarFrequencia(prioridade: string): string {
+  if (prioridade === "alta") return "2 a 3x por semana";
+  if (prioridade === "media") return "1 a 2x por semana";
+  return "1x por semana";
+}
+
+function gerarJustificativa(problema: Problema): string {
+  return `Indicada para auxiliar no equilíbrio de ${problema.sistema.toLowerCase()}, atuando diretamente sobre ${problema.item.toLowerCase()}.`;
+}
+
+export async function gerarPlanoTerapeutico(
   problemas: Problema[],
-): Promise<Protocolo> {
+): Promise<PlanoTerapeutico> {
   if (!problemas.length) {
-    return { manha: [], tarde: [], noite: [] };
+    return {
+      tipo: "semanal",
+      terapias: [],
+    };
   }
 
-  // 🔥 Extrai categorias únicas
+  // 🔥 Categorias únicas
   const categorias = Array.from(
     new Set(problemas.map((p) => p.categoria)),
   );
 
-  // 🔥 Busca terapias no banco
-  const { rows } = await pool.query<Terapia>(
+  // 🔥 Busca terapias do banco
+  const { rows } = await pool.query<TerapiaDB>(
     `
-    SELECT nome, categoria, prioridade
+    SELECT nome, descricao, categoria, prioridade
     FROM terapias
     WHERE categoria = ANY($1)
       AND ativo = true
@@ -44,18 +64,26 @@ export async function gerarProtocoloPorCategoria(
     [categorias],
   );
 
-  // 🔥 Distribuição simples inteligente
-  const manha: string[] = [];
-  const tarde: string[] = [];
-  const noite: string[] = [];
+  // 🔥 Monta lista estruturada
+  const terapias: ItemPlanoTerapeutico[] = [];
 
-  rows.forEach((terapia, index) => {
-    const nome = terapia.nome;
+  for (const terapia of rows) {
+    const problemaRelacionado = problemas.find(
+      (p) => p.categoria === terapia.categoria,
+    );
 
-    if (index % 3 === 0) manha.push(nome);
-    else if (index % 3 === 1) tarde.push(nome);
-    else noite.push(nome);
-  });
+    terapias.push({
+      nome: terapia.nome,
+      descricao: terapia.descricao,
+      frequencia: gerarFrequencia(problemaRelacionado?.prioridade || "baixa"),
+      justificativa: problemaRelacionado
+        ? gerarJustificativa(problemaRelacionado)
+        : "Indicada para equilíbrio geral",
+    });
+  }
 
-  return { manha, tarde, noite };
+  return {
+    tipo: "semanal",
+    terapias,
+  };
 }

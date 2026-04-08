@@ -1,12 +1,7 @@
 import { Router } from "express";
 import { parseBioressonancia } from "../utils/parserBio";
-import { pool } from "../db/client";
 import { gerarDiagnostico } from "../services/diagnostico.service";
-import {
-  salvarNovaAnalise,
-  buscarAnalisePorHashECliente,
-  buscarUltimaAnalisePorCliente,
-} from "../db/analises.repository";
+
 const router = Router();
 
 /**
@@ -67,51 +62,22 @@ function compararExames(
 }
 
 /**
- * Banco → protocolo
+ * Geração simples de plano terapêutico (BASE - pode evoluir depois)
  */
-async function gerarProtocoloNoBanco(tags: string[]) {
-  const client = await pool.connect();
-
-  try {
-    const res = await client.query(
-      `SELECT * FROM gerar_protocolo($1)`,
-      [tags],
-    );
-
-    if (!res.rows || res.rows.length === 0) {
-      return {
-        manha: [],
-        tarde: [],
-        noite: [],
-      };
-    }
-
-    return res.rows[0];
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Extrai tags
- */
-function extrairTags(
+function gerarPlanoTerapeutico(
   diagnostico: ReturnType<typeof gerarDiagnostico>,
-): string[] {
-  const tags = new Set<string>();
+) {
+  const terapias = diagnostico.problemas.slice(0, 5).map((p) => ({
+    nome: `Harmonização de ${p.sistema}`,
+    descricao: `Atuação energética focada em ${p.item}, visando equilíbrio e regulação do sistema.`,
+    frequencia: "1x por semana",
+    justificativa: `Identificado desequilíbrio em ${p.item}, com impacto em ${p.sistema}.`,
+  }));
 
-  for (const p of diagnostico.problemas) {
-    const texto = `${p.sistema} ${p.item}`.toLowerCase();
-
-    if (texto.includes("inflama")) tags.add("inflamacao");
-    if (texto.includes("ansiedade")) tags.add("ansiedade");
-    if (texto.includes("energia")) tags.add("energia");
-    if (texto.includes("imun")) tags.add("imunidade");
-    if (texto.includes("stress") || texto.includes("estresse"))
-      tags.add("estresse");
-  }
-
-  return Array.from(tags);
+  return {
+    tipo: "semanal",
+    terapias,
+  };
 }
 
 /**
@@ -131,9 +97,6 @@ router.post("/api/analyze", async (req, res) => {
       return res.status(400).json({ error: "Prompt vazio" });
     }
 
-    /**
-     * 🔥 DEBUG INTELIGENTE
-     */
     console.log("Tipo do prompt:", typeof prompt);
     if (Array.isArray(prompt)) {
       console.log("Qtd arquivos recebidos:", prompt.length);
@@ -168,17 +131,12 @@ router.post("/api/analyze", async (req, res) => {
     );
 
     /**
-     * 4. Tags
+     * 4. Plano terapêutico (🔥 NOVO MODELO)
      */
-    const tags = extrairTags(diagnostico);
+    const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
     /**
-     * 5. Protocolo
-     */
-    const protocolo = await gerarProtocoloNoBanco(tags);
-
-    /**
-     * 6. Resposta
+     * 5. Resposta
      */
     const resposta = {
       interpretacao:
@@ -188,16 +146,12 @@ router.post("/api/analyze", async (req, res) => {
         .filter((p) => p.prioridade === "alta")
         .map((p) => `${p.sistema} - ${p.item}`),
 
-      protocolo: {
-        manha: protocolo.manha || [],
-        tarde: protocolo.tarde || [],
-        noite: protocolo.noite || [],
-      },
+      plano_terapeutico,
 
-      frequencia_lunara: "Conforme protocolo terapêutico individual",
+      frequencia_lunara: "Frequência personalizada baseada no campo energético do cliente",
 
       justificativa:
-        "Protocolo gerado automaticamente com base nos desequilíbrios detectados.",
+        "Plano terapêutico estruturado com base nos principais desequilíbrios identificados.",
     };
 
     return res.json({
@@ -206,7 +160,7 @@ router.post("/api/analyze", async (req, res) => {
       dadosProcessados,
       diagnostico,
       comparacao,
-      protocolo,
+      plano_terapeutico,
       reused: false,
     });
   } catch (error: any) {

@@ -14,8 +14,15 @@ export type Evolucao = "melhora" | "piora" | "novo" | "normalizado";
 export type EvolucaoItem = {
   sistema: string;
   item: string;
+
   antes: Status | null;
   depois: Status | null;
+
+  // 🔥 NOVO
+  valor_antes?: number;
+  valor_depois?: number;
+  variacao?: number;
+
   evolucao: Evolucao;
 };
 
@@ -28,6 +35,13 @@ export type ComparacaoExames = {
 
 function criarChave(sistema: string, item: string): string {
   return `${sistema}::${item}`;
+}
+
+function calcularVariacao(
+  atual: ItemProcessado,
+  anterior: ItemProcessado,
+): number {
+  return Number((atual.valor - anterior.valor).toFixed(2));
 }
 
 export function compararExames(
@@ -53,13 +67,13 @@ export function compararExames(
   for (const [chave, itemAtual] of atualPorChave.entries()) {
     const itemAnterior = anteriorPorChave.get(chave);
 
-    // Não existia antes: novo problema.
     if (!itemAnterior) {
       novos_problemas.push({
         sistema: itemAtual.sistema,
         item: itemAtual.item,
         antes: null,
         depois: itemAtual.status,
+        valor_depois: itemAtual.valor,
         evolucao: "novo",
       });
       continue;
@@ -68,25 +82,73 @@ export function compararExames(
     const antes = itemAnterior.status;
     const depois = itemAtual.status;
 
+    const variacao = calcularVariacao(itemAtual, itemAnterior);
+
+    // 🔥 MELHORA
     if ((antes === "baixo" || antes === "alto") && depois === "normal") {
       melhoraram.push({
         sistema: itemAtual.sistema,
         item: itemAtual.item,
         antes,
         depois,
+        valor_antes: itemAnterior.valor,
+        valor_depois: itemAtual.valor,
+        variacao,
         evolucao: "melhora",
       });
       continue;
     }
 
+    // 🔥 PIORA
     if (antes === "normal" && (depois === "baixo" || depois === "alto")) {
       pioraram.push({
         sistema: itemAtual.sistema,
         item: itemAtual.item,
         antes,
         depois,
+        valor_antes: itemAnterior.valor,
+        valor_depois: itemAtual.valor,
+        variacao,
         evolucao: "piora",
       });
+      continue;
+    }
+
+    // 🔥 MELHORA PARCIAL (novo)
+    if (
+      antes === "alto" &&
+      depois === "alto" &&
+      itemAtual.valor < itemAnterior.valor
+    ) {
+      melhoraram.push({
+        sistema: itemAtual.sistema,
+        item: itemAtual.item,
+        antes,
+        depois,
+        valor_antes: itemAnterior.valor,
+        valor_depois: itemAtual.valor,
+        variacao,
+        evolucao: "melhora",
+      });
+      continue;
+    }
+
+    if (
+      antes === "baixo" &&
+      depois === "baixo" &&
+      itemAtual.valor > itemAnterior.valor
+    ) {
+      melhoraram.push({
+        sistema: itemAtual.sistema,
+        item: itemAtual.item,
+        antes,
+        depois,
+        valor_antes: itemAnterior.valor,
+        valor_depois: itemAtual.valor,
+        variacao,
+        evolucao: "melhora",
+      });
+      continue;
     }
   }
 
@@ -97,6 +159,7 @@ export function compararExames(
         item: itemAnterior.item,
         antes: itemAnterior.status,
         depois: null,
+        valor_antes: itemAnterior.valor,
         evolucao: "normalizado",
       });
     }

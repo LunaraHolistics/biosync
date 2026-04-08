@@ -1,7 +1,6 @@
-import * as cheerio from 'cheerio';
-import { AnyNode } from 'domhandler';
+import * as cheerio from "cheerio";
+import { AnyNode } from "domhandler";
 
-// 1. Criação de interfaces explícitas para garantir a tipagem correta em todos os escopos
 export interface ResultadoItem {
   item: string;
   intervalo: string;
@@ -23,56 +22,76 @@ export interface ParsedHtmData {
   analises: CategoriaAnalise[];
 }
 
-export function parseHtmReport(buffer: Buffer): ParsedHtmData {
-  const decoder = new TextDecoder('iso-8859-1');
-  const htmlString = decoder.decode(buffer);
-  
-  const $ = cheerio.load(htmlString);
-  
-  const text = $('body').text();
-  const nome = (text.match(/Nome:\s*([^\n<]+)/i) || [])[1]?.trim() || '';
-  const sexo = (text.match(/Sexo:\s*([^\n<]+)/i) || [])[1]?.trim() || '';
-  const idade = (text.match(/Idade:\s*([^\n<]+)/i) || [])[1]?.trim() || '';
-  const dataStr = (text.match(/Período do teste:\s*([^\n<]+)/i) || [])[1]?.trim() || '';
-  
-  const protocolo = dataStr ? `HTM-${dataStr.replace(/[\s/:]/g, '')}` : 'N/A';
+function limpar(texto: string): string {
+  return texto.replace(/\s+/g, " ").trim();
+}
 
-  // 2. Tipagem explícita usando a interface
+function extrairCampo(texto: string, label: string): string {
+  const regex = new RegExp(`${label}\\s*[:\\-]?\\s*([^\\n]+)`, "i");
+  return (texto.match(regex) || [])[1]?.trim() || "";
+}
+
+export function parseHtmReport(buffer: Buffer): ParsedHtmData {
+  const decoder = new TextDecoder("iso-8859-1");
+  const htmlString = decoder.decode(buffer);
+
+  const $ = cheerio.load(htmlString);
+
+  const text = limpar($("body").text());
+
+  const nome = extrairCampo(text, "Nome");
+  const sexo = extrairCampo(text, "Sexo");
+  const idade = extrairCampo(text, "Idade");
+  const dataStr = extrairCampo(text, "Período do teste");
+
+  const protocolo = dataStr
+    ? `HTM-${dataStr.replace(/[\s/:]/g, "")}`
+    : "N/A";
+
   const analises: CategoriaAnalise[] = [];
 
-  $('table.table').each((_i: number, el: AnyNode) => {
+  $("table").each((_i: number, el: AnyNode) => {
     const tableText = $(el).text();
-    
-    if (!tableText.includes('Item de Teste')) return;
 
-    let categoriaNome = 'Análise Geral';
-    const prevFont = $(el).prevAll('font[size="6"]').first();
-    if (prevFont.length) {
-      categoriaNome = prevFont.text().trim();
-    } else {
-      const parentFont = $(el).parent().prevAll().find('font[size="6"]').first();
-      if (parentFont.length) categoriaNome = parentFont.text().trim();
+    if (!tableText.includes("Item de Teste")) return;
+
+    // 🔥 DETECÇÃO DE CATEGORIA MAIS INTELIGENTE
+    let categoriaNome = "Análise Geral";
+
+    const possivelTitulo = $(el)
+      .prevAll()
+      .filter((_, e) => {
+        const t = limpar($(e).text());
+        return t.length > 3 && t.length < 80;
+      })
+      .first();
+
+    if (possivelTitulo.length) {
+      categoriaNome = limpar(possivelTitulo.text());
     }
 
-    // 3. O array agora é instanciado com a interface ResultadoItem[], resolvendo os erros TS7034 e TS7005
     const resultados: ResultadoItem[] = [];
 
-    $(el).find('tr').each((_j: number, row: AnyNode) => {
-      const cells = $(row).find('td');
-      
-      if (cells.length === 4) {
-        const itemNome = $(cells[0]).text().trim();
-        
-        if (itemNome === 'Item de Teste') return;
+    $(el)
+      .find("tr")
+      .each((_j: number, row: AnyNode) => {
+        const cells = $(row).find("td");
 
-        resultados.push({
-          item: itemNome,
-          intervalo: $(cells[1]).text().trim(),
-          valor: $(cells[2]).text().trim(),
-          resultado: $(cells[3]).text().trim(),
-        });
-      }
-    });
+        // 🔥 FLEXÍVEL: aceita 4 ou mais colunas
+        if (cells.length >= 4) {
+          const itemNome = limpar($(cells[0]).text());
+
+          if (!itemNome || itemNome.toLowerCase().includes("item de teste"))
+            return;
+
+          resultados.push({
+            item: itemNome,
+            intervalo: limpar($(cells[1]).text()),
+            valor: limpar($(cells[2]).text()),
+            resultado: limpar($(cells[3]).text()),
+          });
+        }
+      });
 
     if (resultados.length > 0) {
       analises.push({
