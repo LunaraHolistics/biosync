@@ -96,7 +96,17 @@ const ai = new GoogleGenAI({
 
 // 🔥 IA + MOTOR TERAPÊUTICO
 async function analisarComIA(dados: any): Promise<AiStructuredData> {
-  const diagnostico = gerarDiagnostico(dados);
+  const diagnosticoRaw = gerarDiagnostico(dados);
+
+  const diagnostico = {
+    problemas: diagnosticoRaw?.problemas ?? [],
+    resumo: diagnosticoRaw?.resumo ?? {
+      total: 0,
+      alta: 0,
+      media: 0,
+      baixa: 0,
+    },
+  };
 
   const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
@@ -181,9 +191,21 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
     if (error) throw error;
 
     // 🤖 IA + PLANO
-    const analise = await analisarComIA(resultados).catch((err) => {
+    const analise = await analisarComIA(resultados).catch(err => {
       console.error("Erro na IA:", err);
-      return fallbackData();
+
+      return {
+        ...fallbackData(),
+        diagnostico: {
+          problemas: [],
+          resumo: {
+            total: 0,
+            alta: 0,
+            media: 0,
+            baixa: 0,
+          },
+        },
+      };
     });
 
     // 💾 ATUALIZAR
