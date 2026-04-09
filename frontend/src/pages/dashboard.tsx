@@ -235,69 +235,78 @@ export default function Dashboard() {
         );
       })}
 
-      {/* 🔥 MODAL FORA DO MAP (CORREÇÃO IMPORTANTE) */}
+      {/* 🔥 MODAL */}
       {selecionado ? (
-        <div
-          style={{
-            marginTop: 20,
-            padding: 15,
-            background: "#0f172a",
-            color: "white",
-            borderRadius: 8,
-          }}
-        >
-          <h3>Detalhes</h3>
+        (() => {
+          const comparativo =
+            (selecionado.analise_ia as any)?.comparativo ?? {
+              melhoraram: [],
+              pioraram: [],
+              novos_problemas: [],
+              normalizados: [],
+            };
 
-          <p>
-            <b>Interpretação:</b>
-          </p>
-          <p>
-            {selecionado.analise_ia &&
-            typeof selecionado.analise_ia === "object"
-              ? (selecionado.analise_ia as any).interpretacao
-              : null}
-          </p>
+          return (
+            <div
+              style={{
+                marginTop: 20,
+                padding: 15,
+                background: "#0f172a",
+                color: "white",
+                borderRadius: 8,
+              }}
+            >
+              <h3>Detalhes</h3>
 
-          <p>
-            <b>Pontos Críticos:</b>
-          </p>
-          <ul>
-            {Array.isArray(
-              (selecionado.analise_ia as any)?.pontos_criticos,
-            )
-              ? (selecionado.analise_ia as any).pontos_criticos.map(
-                  (p: string, i: number) => <li key={i}>{p}</li>,
-                )
-              : (selecionado.pontos_criticos ?? []).map(
-                  (p: string, i: number) => <li key={i}>{p}</li>,
-                )}
-          </ul>
-
-          {Array.isArray(
-            (selecionado.analise_ia as any)?.plano_terapeutico?.terapias,
-          ) && (
-            <>
               <p>
-                <b>Plano Terapêutico:</b>
+                <b>Interpretação:</b>
+              </p>
+              <p>
+                {selecionado.analise_ia &&
+                typeof selecionado.analise_ia === "object"
+                  ? (selecionado.analise_ia as any).interpretacao
+                  : null}
+              </p>
+
+              <p>
+                <b>Pontos Críticos:</b>
               </p>
               <ul>
-                {(selecionado.analise_ia as any).plano_terapeutico.terapias.map(
-                  (t: any, i: number) => (
-                    <li key={i}>
-                      <b>{t.nome}</b> — {t.descricao}
-                    </li>
-                  ),
-                )}
+                {Array.isArray(
+                  (selecionado.analise_ia as any)?.pontos_criticos
+                )
+                  ? (selecionado.analise_ia as any).pontos_criticos.map(
+                      (p: string, i: number) => <li key={i}>{p}</li>
+                    )
+                  : (selecionado.pontos_criticos ?? []).map(
+                      (p: string, i: number) => <li key={i}>{p}</li>
+                    )}
               </ul>
-            </>
-          )}
 
-          {(selecionado.analise_ia as any)?.comparativo && (
-            <ComparativoExamesView
-              data={(selecionado.analise_ia as any).comparativo}
-            />
-          )}
-        </div>
+              {Array.isArray(
+                (selecionado.analise_ia as any)?.plano_terapeutico?.terapias
+              ) && (
+                <>
+                  <p>
+                    <b>Plano Terapêutico:</b>
+                  </p>
+                  <ul>
+                    {(selecionado.analise_ia as any).plano_terapeutico.terapias.map(
+                      (t: any, i: number) => (
+                        <li key={i}>
+                          <b>{t.nome}</b> — {t.descricao}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </>
+              )}
+
+              {/* 🔥 COMPARATIVO SEMPRE RENDERIZA */}
+              <ComparativoExamesView data={comparativo} />
+            </div>
+          );
+        })()
       ) : null}
     </div>
   );
