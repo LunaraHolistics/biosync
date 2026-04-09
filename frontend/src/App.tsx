@@ -295,7 +295,6 @@ function buildRelatorioData(
 
     diagnostico: toDiagnostico(meta.diagnostico),
 
-    // 🔥 ADICIONE ISSO
     comparacao,
 
     relatorio_original_html: getRelatorioOriginal(meta, row),
@@ -313,9 +312,7 @@ function App() {
   const [pacienteSelecionado, setPacienteSelecionado] = useState<string | null>(null);
   const [analiseSelecionada, setAnaliseSelecionada] = useState<ExameRow | null>(null);
   const [examesPaciente, setExamesPaciente] = useState<ExameRow[]>([]);
-
   const [modalOpen, setModalOpen] = useState(false);
-
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
@@ -337,33 +334,10 @@ function App() {
     ? exameRowToAiData(analiseSelecionada)
     : null;
 
-  const relatorioDataHistorico = analiseSelecionada
-    ? buildRelatorioData(
-      analiseSelecionada,
-      pacienteSelecionado || clientName.trim() || "Cliente",
-      analiseSelecionadaData ?? {
-        interpretacao: "",
-        pontos_criticos: [],
-        plano_terapeutico: { tipo: "mensal", terapias: [] },
-        frequencia_lunara: "",
-        justificativa: "",
-      },
-      comparativoExamesData // 🔥 AQUI
-    )
-    : null;
-
-  const relatorioData = analiseSelecionada && analiseSelecionadaData
-    ? buildRelatorioData(
-      analiseSelecionada,
-      clientName || "Cliente",
-      analiseSelecionadaData
-    )
-    : null;
-
+  // 🔥 CORREÇÃO: vem antes do uso
   const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
     if (examesPaciente.length < 2) return null;
 
-    // 🔥 GARANTIR ORDEM CORRETA (mais recente primeiro)
     const ordenados = [...examesPaciente].sort(
       (a, b) =>
         new Date(b.data_exame || b.created_at).getTime() -
@@ -376,11 +350,34 @@ function App() {
     const atual = toItemProcessadoArray(atualMeta?.dados_processados);
     const anterior = toItemProcessadoArray(anteriorMeta?.dados_processados);
 
-    // 🔥 segurança contra vazio
     if (!atual.length || !anterior.length) return null;
 
     return compararExames(atual, anterior);
   }, [examesPaciente]);
+
+  const relatorioDataHistorico = analiseSelecionada
+    ? buildRelatorioData(
+        analiseSelecionada,
+        pacienteSelecionado || clientName.trim() || "Cliente",
+        analiseSelecionadaData ?? {
+          interpretacao: "",
+          pontos_criticos: [],
+          plano_terapeutico: { tipo: "mensal", terapias: [] },
+          frequencia_lunara: "",
+          justificativa: "",
+        },
+        comparativoExamesData ?? undefined
+      )
+    : null;
+
+  const relatorioData =
+    analiseSelecionada && analiseSelecionadaData
+      ? buildRelatorioData(
+          analiseSelecionada,
+          clientName || "Cliente",
+          analiseSelecionadaData
+        )
+      : null;
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -446,9 +443,7 @@ function App() {
         ]);
 
         setDashboard({ totalExames, examesMesAtual });
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
   }, [todosExames.length, loading]);
 
@@ -458,18 +453,14 @@ function App() {
       if (!q) {
         try {
           await recarregarTodosExames();
-        } catch {
-          // ignore
-        }
+        } catch {}
         return;
       }
 
       try {
         const list = await buscarExamesPorNome(q);
         setTodosExames(list);
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
   }, [buscaPacientes]);
 
@@ -488,31 +479,32 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [existingAnalysisId, examesPaciente]);
 
-async function onSelecionarPaciente(nome: string) {
-  setPacienteSelecionado(nome);
-  setClientName(nome);
+  async function onSelecionarPaciente(nome: string) {
+    setPacienteSelecionado(nome);
+    setClientName(nome);
 
-  setAnaliseSelecionada(null);
-  setExamesPaciente([]);
-  setHistoryError(null);
-  setHistoryLoading(true);
+    setAnaliseSelecionada(null);
+    setExamesPaciente([]);
+    setHistoryError(null);
+    setHistoryLoading(true);
 
-  try {
-    const list = await listarExamesPorPaciente(nome);
+    try {
+      const list = await listarExamesPorPaciente(nome);
 
-    const listOrdenada = [...list].sort(
-      (a, b) =>
-        new Date(b.data_exame || b.created_at).getTime() -
-        new Date(a.data_exame || a.created_at).getTime()
-    );
+      const listOrdenada = [...list].sort(
+        (a, b) =>
+          new Date(b.data_exame || b.created_at).getTime() -
+          new Date(a.data_exame || a.created_at).getTime()
+      );
 
-    setExamesPaciente(listOrdenada);
-  } catch (e: unknown) {
-    setHistoryError(
-      e instanceof Error ? e.message : "Erro ao carregar exames."
-    );
-  } finally {
-    setHistoryLoading(false);
+      setExamesPaciente(listOrdenada);
+    } catch (e: unknown) {
+      setHistoryError(
+        e instanceof Error ? e.message : "Erro ao carregar exames."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
   }
 }
 
