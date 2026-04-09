@@ -18,11 +18,19 @@ export type ExameRow = {
   id: string;
   nome_paciente: string;
   data_exame: string;
-  resultado_json: unknown;
-  analise_ia?: unknown;
-  protocolo?: unknown;
+  resultado_json: Record<string, any>;
+  analise_ia?: Record<string, any>;
+  protocolo?: string | null;
   pontos_criticos?: string[];
   created_at: string;
+  updated_at?: string;
+
+  // 🔥 NOVO MODELO
+  status?: string;
+  indice_biosync?: Record<string, any>;
+
+  total_pioraram?: number;
+  total_melhoraram?: number;
 };
 
 export type TerapiaRow = {
@@ -40,6 +48,18 @@ export type TerapiaRow = {
   created_at?: string;
 };
 
+export type BaseAnaliseSaudeRow = {
+  id: number;
+  categoria: string;
+  item: string;
+  descricao_tecnica: string;
+  descricao_paciente?: string | null;
+  impacto?: string | null;
+  setores?: string[];
+  palavras_chave?: string[];
+  sistemas_relacionados?: string[];
+};
+
 export type AnaliseRow = {
   id: string;
   paciente_id?: string | null;
@@ -51,6 +71,34 @@ export type AnaliseRow = {
   html_relatorio?: string;
   created_at: string;
 };
+
+// ==============================
+// BASE DE CONHECIMENTO (🔥 NOVO)
+// ==============================
+
+export async function listarBaseAnaliseSaude(): Promise<BaseAnaliseSaudeRow[]> {
+  const { data, error } = await supabase
+    .from("base_analise_saude")
+    .select("*");
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BaseAnaliseSaudeRow[];
+}
+
+// buscar itens específicos pelo nome (match com exame)
+export async function buscarItensBasePorNome(
+  nomes: string[]
+): Promise<BaseAnaliseSaudeRow[]> {
+  if (!nomes.length) return [];
+
+  const { data, error } = await supabase
+    .from("base_analise_saude")
+    .select("*")
+    .in("item", nomes);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BaseAnaliseSaudeRow[];
+}
 
 // ==============================
 // TERAPIAS
@@ -68,10 +116,9 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
 }
 
 // ==============================
-// EXAMES (LEGADO)
+// EXAMES
 // ==============================
 
-// Listar todos os exames
 export async function listarExames(): Promise<ExameRow[]> {
   const { data, error } = await supabase
     .from("exames")
@@ -79,14 +126,13 @@ export async function listarExames(): Promise<ExameRow[]> {
     .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []) as ExameRow[];
 }
 
-// Buscar por nome do paciente
 export async function buscarExamesPorNome(
   termo: string
 ): Promise<ExameRow[]> {
-  if (!termo.trim()) return await listarExames();
+  if (!termo.trim()) return listarExames();
 
   const { data, error } = await supabase
     .from("exames")
@@ -95,38 +141,9 @@ export async function buscarExamesPorNome(
     .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []) as ExameRow[];
 }
 
-// Contar total de exames
-export async function contarExames(): Promise<number> {
-  const { count, error } = await supabase
-    .from("exames")
-    .select("*", { count: "exact", head: true });
-
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
-
-// Contar exames do mês atual
-export async function contarExamesMesAtual(): Promise<number> {
-  const now = new Date();
-  const inicioMes = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1
-  ).toISOString();
-
-  const { count, error } = await supabase
-    .from("exames")
-    .select("*", { count: "exact", head: true })
-    .gte("data_exame", inicioMes);
-
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
-
-// Listar exames de um paciente específico
 export async function listarExamesPorPaciente(
   nome: string
 ): Promise<ExameRow[]> {
@@ -137,10 +154,9 @@ export async function listarExamesPorPaciente(
     .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []) as ExameRow[];
 }
 
-// Buscar exame por ID
 export async function buscarExamePorId(
   id: string
 ): Promise<ExameRow | null> {
@@ -151,7 +167,7 @@ export async function buscarExamePorId(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data;
+  return data as ExameRow | null;
 }
 
 export async function buscarUltimoExamePorPaciente(
@@ -166,32 +182,25 @@ export async function buscarUltimoExamePorPaciente(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data;
+  return data as ExameRow | null;
 }
 
-export async function buscarExamePorHashEPaciente(
-  nomePaciente: string,
-  pdfHash: string
-): Promise<ExameRow | null> {
-  const { data, error } = await supabase
-    .from("exames")
-    .select("*")
-    .eq("nome_paciente", nomePaciente)
-    .contains("resultado_json", { pdf_hash: pdfHash })
-    .order("data_exame", { ascending: false })
-    .limit(1);
-
-  if (error) throw new Error(error.message);
-  return data?.[0] ?? null;
-}
+// ==============================
+// INSERÇÃO
+// ==============================
 
 export type NovoExamePayload = {
   nome_paciente: string;
   data_exame: string;
-  resultado_json: Record<string, unknown>;
-  analise_ia?: unknown;
-  protocolo?: unknown;
+  resultado_json: Record<string, any>;
+  analise_ia?: Record<string, any>;
+  protocolo?: string;
   pontos_criticos?: string[];
+
+  indice_biosync?: Record<string, any>;
+  status?: string;
+  total_pioraram?: number;
+  total_melhoraram?: number;
 };
 
 export async function salvarNovoExame(
@@ -208,10 +217,9 @@ export async function salvarNovoExame(
 }
 
 // ==============================
-// ANALISES (NOVO CORE)
+// ANALISES (CORE FUTURO)
 // ==============================
 
-// Buscar última análise
 export async function buscarUltimaAnalise(): Promise<AnaliseRow | null> {
   const { data, error } = await supabase
     .from("analises")
@@ -224,7 +232,6 @@ export async function buscarUltimaAnalise(): Promise<AnaliseRow | null> {
   return data;
 }
 
-// Listar análises por paciente
 export async function listarAnalisesPorPaciente(
   pacienteId: string
 ): Promise<AnaliseRow[]> {
@@ -238,15 +245,15 @@ export async function listarAnalisesPorPaciente(
   return data ?? [];
 }
 
-// Processar análise completa (RPC)
 export async function processarAnaliseCompleta() {
-  const { data, error } = await supabase.rpc("processar_analise_completa");
+  const { data, error } = await supabase.rpc(
+    "processar_analise_completa"
+  );
 
   if (error) throw new Error(error.message);
   return data;
 }
 
-// Atualizar análise manualmente
 export async function atualizarAnalise(
   id: string,
   payload: Partial<AnaliseRow>
