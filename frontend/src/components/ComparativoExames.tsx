@@ -30,7 +30,7 @@ function Secao({
     cor,
 }: {
     titulo: string;
-    itens: ItemComparacao[];
+    itens: EvolucaoItem[]
     cor: string;
 }) {
     if (!itens.length) return null;

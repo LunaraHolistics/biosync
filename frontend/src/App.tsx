@@ -55,7 +55,7 @@ function toDiagnostico(value: unknown): DiagnosticoPdf | undefined {
   return { problemas };
 }
 
-function toComparacao(value: unknown): ComparacaoExames {
+function toComparacao(value: unknown): any {
   const base: ComparacaoExames = {
     melhoraram: [],
     pioraram: [],
