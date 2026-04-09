@@ -52,7 +52,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("testosterona")) {
     return {
       impacto: "queda de energia, libido e vitalidade geral",
-      prioridadeBase: "alta",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "hormonal",
       impacto_fitness: {
         performance: "redução de força e disposição",
@@ -65,7 +65,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("tireoide") || texto.includes("paratireoide")) {
     return {
       impacto: "desregulação metabólica e energética",
-      prioridadeBase: "alta",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "hormonal",
       impacto_fitness: {
         emagrecimento: "dificuldade ou aceleração desregulada",
@@ -78,7 +78,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("intestino") || texto.includes("digest")) {
     return {
       impacto: "baixa absorção de nutrientes e impacto na imunidade",
-      prioridadeBase: "alta",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "digestivo",
       impacto_fitness: {
         hipertrofia: "baixa absorção proteica",
@@ -91,7 +91,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("circulacao") || texto.includes("vascular")) {
     return {
       impacto: "fadiga, baixa oxigenação e circulação deficiente",
-      prioridadeBase: "media",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "circulatorio",
       impacto_fitness: {
         performance: "queda de resistência",
@@ -104,7 +104,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("imun") || texto.includes("linfa")) {
     return {
       impacto: "queda da resposta imunológica",
-      prioridadeBase: "media",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "imunologico",
       impacto_fitness: {
         recuperacao: "maior tempo de recuperação",
@@ -120,7 +120,7 @@ function analisarItem(item: ItemProcessado) {
   ) {
     return {
       impacto: "sobrecarga mental e desequilíbrio emocional",
-      prioridadeBase: "media",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "emocional",
       impacto_fitness: {
         performance: "queda de foco",
@@ -137,7 +137,7 @@ function analisarItem(item: ItemProcessado) {
   ) {
     return {
       impacto: "sobrecarga tóxica e interferência energética",
-      prioridadeBase: "alta",
+      prioridadeBase: "baixa" | "media" | "alta";
       categoria: "toxico",
       impacto_fitness: {
         performance: "fadiga constante",
@@ -148,7 +148,7 @@ function analisarItem(item: ItemProcessado) {
 
   return {
     impacto: "desequilíbrio funcional leve",
-    prioridadeBase: "baixa",
+    prioridadeBase: "baixa" | "media" | "alta";
     categoria: "geral",
     impacto_fitness: {},
   };
