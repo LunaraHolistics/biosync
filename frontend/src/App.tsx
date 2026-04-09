@@ -256,6 +256,23 @@ function exameTemConteudoParaPdf(row: ExameRow): boolean {
   return typeof row.analise_ia === "string" && row.analise_ia.trim().length > 0;
 }
 
+function getRelatorioOriginal(
+  meta: Record<string, unknown>,
+  row: ExameRow
+): string {
+  if (typeof meta.relatorio_original_html === "string") {
+    return meta.relatorio_original_html;
+  }
+
+  const raw = (row as any)?.relatorio_original_html;
+
+  if (typeof raw === "string") {
+    return raw;
+  }
+
+  return "";
+}
+
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
@@ -326,8 +343,7 @@ function App() {
         plano_terapeutico: { tipo: "mensal", terapias: [] },
         frequencia_lunara: "",
         justificativa: "",
-      },
-      undefined
+      }
     )
     : null;
 
@@ -647,10 +663,8 @@ function App() {
                                   const relatorio = buildRelatorioData(
                                     a,
                                     pacienteSelecionado || "Cliente",
-                                    data,
-                                    toComparacao(resultadoMeta(a).comparacao)
+                                    data
                                   );
-
                                   gerarRelatorioPDF(relatorio);
                                 }}
                                 style={{ marginBottom: 0 }}
