@@ -1,4 +1,3 @@
-
 import type { AiStructuredData } from "./services/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
@@ -40,76 +39,96 @@ function resultadoMeta(row: ExameRow): Record<string, unknown> {
 
 function toDiagnostico(value: unknown): DiagnosticoPdf | undefined {
   if (!value || typeof value !== "object") return undefined;
+
   const obj = value as { problemas?: unknown };
+
   if (!Array.isArray(obj.problemas)) return undefined;
-  const problemas = obj.problemas.filter((p): p is DiagnosticoPdf["problemas"][number] => {
-    if (!p || typeof p !== "object") return false;
-    const item = p as Record<string, unknown>;
-    return (
-      typeof item.sistema === "string" &&
-      typeof item.item === "string" &&
-      typeof item.status === "string" &&
-      typeof item.impacto === "string"
-    );
-  });
+
+  const problemas = obj.problemas.filter(
+    (p): p is DiagnosticoPdf["problemas"][number] => {
+      if (!p || typeof p !== "object") return false;
+
+      const item = p as Record<string, unknown>;
+
+      return (
+        typeof item.sistema === "string" &&
+        typeof item.item === "string" &&
+        typeof item.status === "string" &&
+        typeof item.impacto === "string"
+      );
+    }
+  );
+
   return { problemas };
 }
 
 function toComparacao(value: unknown): any {
-  const base: ComparacaoExames = {
-    melhoraram: [],
-    pioraram: [],
-    novos_problemas: [],
-    normalizados: [],
-  };
-
-  if (!value || typeof value !== "object") return base;
+  if (!value || typeof value !== "object") {
+    return {
+      melhoraram: [],
+      pioraram: [],
+      novos_problemas: [],
+      normalizados: [],
+    };
+  }
 
   const obj = value as Record<string, unknown>;
 
   return {
-    melhoraram: Array.isArray(obj.melhoraram) ? obj.melhoraram as any : [],
-    pioraram: Array.isArray(obj.pioraram) ? obj.pioraram as any : [],
-    novos_problemas: Array.isArray(obj.novos_problemas) ? obj.novos_problemas as any : [],
-    normalizados: Array.isArray(obj.normalizados) ? obj.normalizados as any : [],
+    melhoraram: Array.isArray(obj.melhoraram) ? obj.melhoraram : [],
+    pioraram: Array.isArray(obj.pioraram) ? obj.pioraram : [],
+    novos_problemas: Array.isArray(obj.novos_problemas) ? obj.novos_problemas : [],
+    normalizados: Array.isArray(obj.normalizados) ? obj.normalizados : [],
   };
 }
 
 function toItemProcessadoArray(value: unknown): ItemProcessado[] {
   if (!Array.isArray(value)) return [];
+
   return value.filter((x): x is ItemProcessado => {
     if (!x || typeof x !== "object") return false;
+
     const item = x as Record<string, unknown>;
+
     return (
       typeof item.sistema === "string" &&
       typeof item.item === "string" &&
       typeof item.valor === "number" &&
       typeof item.min === "number" &&
       typeof item.max === "number" &&
-      (item.status === "baixo" || item.status === "normal" || item.status === "alto")
+      (item.status === "baixo" ||
+        item.status === "normal" ||
+        item.status === "alto")
     );
   });
 }
 
 function compararExames(
   atual: ItemProcessado[],
-  anterior: ItemProcessado[],
-): ComparacaoExames {
-  const criarChave = (sistema: string, item: string) => `${sistema}::${item}`;
+  anterior: ItemProcessado[]
+): any {
+  const criarChave = (sistema: string, item: string) =>
+    `${sistema}::${item}`;
 
   const anteriorPorChave = new Map<string, ItemProcessado>();
   const atualPorChave = new Map<string, ItemProcessado>();
 
-  for (const item of anterior) anteriorPorChave.set(criarChave(item.sistema, item.item), item);
-  for (const item of atual) atualPorChave.set(criarChave(item.sistema, item.item), item);
+  for (const item of anterior) {
+    anteriorPorChave.set(criarChave(item.sistema, item.item), item);
+  }
 
-  const melhoraram: ComparacaoExames["melhoraram"] = [];
-  const pioraram: ComparacaoExames["pioraram"] = [];
-  const novos_problemas: ComparacaoExames["novos_problemas"] = [];
-  const normalizados: ComparacaoExames["normalizados"] = [];
+  for (const item of atual) {
+    atualPorChave.set(criarChave(item.sistema, item.item), item);
+  }
+
+  const melhoraram: any[] = [];
+  const pioraram: any[] = [];
+  const novos_problemas: any[] = [];
+  const normalizados: any[] = [];
 
   for (const [chave, itemAtual] of atualPorChave.entries()) {
     const itemAnterior = anteriorPorChave.get(chave);
+
     if (!itemAnterior) {
       novos_problemas.push({
         sistema: itemAtual.sistema,
@@ -121,6 +140,51 @@ function compararExames(
       continue;
     }
 
+    const antes = itemAnterior.status;
+    const depois = itemAtual.status;
+
+    if ((antes === "baixo" || antes === "alto") && depois === "normal") {
+      melhoraram.push({
+        sistema: itemAtual.sistema,
+        item: itemAtual.item,
+        antes,
+        depois,
+        evolucao: "melhora",
+      });
+      continue;
+    }
+
+    if (antes === "normal" && (depois === "baixo" || depois === "alto")) {
+      pioraram.push({
+        sistema: itemAtual.sistema,
+        item: itemAtual.item,
+        antes,
+        depois,
+        evolucao: "piora",
+      });
+      continue;
+    }
+  }
+
+  for (const [chave, itemAnterior] of anteriorPorChave.entries()) {
+    if (!atualPorChave.has(chave)) {
+      normalizados.push({
+        sistema: itemAnterior.sistema,
+        item: itemAnterior.item,
+        antes: itemAnterior.status,
+        depois: null,
+        evolucao: "normalizado",
+      });
+    }
+  }
+
+  return {
+    melhoraram,
+    pioraram,
+    novos_problemas,
+    normalizados,
+  };
+}
     if (
       (itemAnterior.status === "baixo" || itemAnterior.status === "alto") &&
       itemAtual.status === "normal"
@@ -287,7 +351,7 @@ function buildRelatorioData(
   row: ExameRow,
   paciente: string,
   data: AiStructuredData,
-  comparacao?: ComparacaoExames
+  function toComparacao(value: unknown): any
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
