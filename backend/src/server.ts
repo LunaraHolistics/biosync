@@ -50,67 +50,73 @@ function fallbackData(): AiStructuredData {
       tipo: "semanal",
       terapias: [],
     },
-    diagnostico: { problemas: [] }, // 🔥 evita erro no update
-  };
-}
+    diagnostico: {
+      problemas: [],
+      resumo: {
+        total: 0,
+        alta: 0,
+        media: 0,
+        baixa: 0,
+      },
+    }, // 🔥 evita erro no update
 
-function normalizeAiData(input: unknown): AiStructuredData {
-  const base = fallbackData();
-  if (!input || typeof input !== "object") return base;
+    function normalizeAiData(input: unknown): AiStructuredData {
+    const base = fallbackData();
+    if (!input || typeof input !== "object") return base;
 
-  const obj = input as any;
+    const obj = input as any;
 
-  return {
-    interpretacao: obj.interpretacao || base.interpretacao,
-    pontos_criticos: obj.pontos_criticos || [],
-    frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
-    justificativa: obj.justificativa || base.justificativa,
-    plano_terapeutico: base.plano_terapeutico,
-    diagnostico: base.diagnostico,
-  };
-}
+    return {
+      interpretacao: obj.interpretacao || base.interpretacao,
+      pontos_criticos: obj.pontos_criticos || [],
+      frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
+      justificativa: obj.justificativa || base.justificativa,
+      plano_terapeutico: base.plano_terapeutico,
+      diagnostico: base.diagnostico,
+    };
+  }
 
-function extractJsonCandidate(text: string): string | null {
-  const match = text.match(/\{[\s\S]*\}/);
-  return match?.[0] ?? null;
-}
+  function extractJsonCandidate(text: string): string | null {
+    const match = text.match(/\{[\s\S]*\}/);
+    return match?.[0] ?? null;
+  }
 
-function gerarHash(buffer: Buffer): string {
-  return createHash("sha256").update(buffer).digest("hex");
-}
+  function gerarHash(buffer: Buffer): string {
+    return createHash("sha256").update(buffer).digest("hex");
+  }
 
-// --- APP ---
-const app = express();
+  // --- APP ---
+  const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+  app.use(cors());
+  app.use(express.json({ limit: "50mb" }));
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
-});
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 },
+  });
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
-});
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY || "",
+  });
 
-// 🔥 IA + MOTOR TERAPÊUTICO
-async function analisarComIA(dados: any): Promise<AiStructuredData> {
-  const diagnosticoRaw = gerarDiagnostico(dados);
+  // 🔥 IA + MOTOR TERAPÊUTICO
+  async function analisarComIA(dados: any): Promise<AiStructuredData> {
+    const diagnosticoRaw = gerarDiagnostico(dados);
 
-  const diagnostico = {
-    problemas: diagnosticoRaw?.problemas ?? [],
-    resumo: diagnosticoRaw?.resumo ?? {
-      total: 0,
-      alta: 0,
-      media: 0,
-      baixa: 0,
-    },
-  };
+    const diagnostico: Diagnostico = {
+      problemas: diagnosticoRaw?.problemas ?? [],
+      resumo: diagnosticoRaw?.resumo ?? {
+        total: 0,
+        alta: 0,
+        media: 0,
+        baixa: 0,
+      },
+    };
 
-  const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
+    const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
-  const prompt = `
+    const prompt = `
 Analise os dados abaixo como terapeuta integrativo.
 
 Considere:
@@ -132,71 +138,69 @@ DADOS:
 ${JSON.stringify(dados)}
 `;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-  });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
 
-  const raw = response.text ?? "";
+    const raw = response.text ?? "";
 
-  let parsed: any = null;
-  try {
-    const json = extractJsonCandidate(raw);
-    parsed = json ? JSON.parse(json) : null;
-  } catch (e) {
-    console.warn("Erro ao parsear JSON da IA");
+    let parsed: any = null;
+    try {
+      const json = extractJsonCandidate(raw);
+      parsed = json ? JSON.parse(json) : null;
+    } catch (e) {
+      console.warn("Erro ao parsear JSON da IA");
+    }
+
+    const data = normalizeAiData(parsed);
+
+    data.plano_terapeutico = plano_terapeutico;
+    data.diagnostico = diagnostico;
+
+    return data;
   }
 
-  const data = normalizeAiData(parsed);
+  // 🔥 ROTA PRINCIPAL
+  app.post("/api/upload", upload.array("files"), async (req, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
 
-  data.plano_terapeutico = plano_terapeutico;
-  data.diagnostico = diagnostico;
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "Nenhum arquivo enviado" });
+      }
 
-  return data;
-}
+      const resultados = [];
 
-// 🔥 ROTA PRINCIPAL
-app.post("/api/upload", upload.array("files"), async (req, res) => {
-  try {
-    const files = req.files as Express.Multer.File[];
+      for (const file of files) {
+        const dados = parseHtmReport(file.buffer);
+        resultados.push(dados);
+      }
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "Nenhum arquivo enviado" });
-    }
+      const primeiro = resultados[0];
+      const nome = primeiro?.nome || "Desconhecido";
 
-    const resultados = [];
+      const hash = gerarHash(Buffer.concat(files.map((f) => f.buffer)));
 
-    for (const file of files) {
-      const dados = parseHtmReport(file.buffer);
-      resultados.push(dados);
-    }
+      // 💾 SALVAR INICIAL
+      const { data: exame, error } = await supabase
+        .from("exames")
+        .insert({
+          nome_paciente: nome,
+          data_exame: new Date(),
+          resultado_json: resultados,
+          status: "processando",
+        })
+        .select()
+        .single();
 
-    const primeiro = resultados[0];
-    const nome = primeiro?.nome || "Desconhecido";
+      if (error) throw error;
 
-    const hash = gerarHash(Buffer.concat(files.map((f) => f.buffer)));
+      // 🤖 IA + PLANO
+      const analise = await analisarComIA(resultados).catch(err => {
+        console.error("Erro na IA:", err);
 
-    // 💾 SALVAR INICIAL
-    const { data: exame, error } = await supabase
-      .from("exames")
-      .insert({
-        nome_paciente: nome,
-        data_exame: new Date(),
-        resultado_json: resultados,
-        status: "processando",
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // 🤖 IA + PLANO
-    const analise = await analisarComIA(resultados).catch(err => {
-      console.error("Erro na IA:", err);
-
-      return {
-        ...fallbackData(),
-        diagnostico: {
+        const diagnosticoFallback: Diagnostico = {
           problemas: [],
           resumo: {
             total: 0,
@@ -204,55 +208,58 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
             media: 0,
             baixa: 0,
           },
-        },
-      };
+        };
+
+        return {
+          ...fallbackData(),
+          diagnostico: diagnosticoFallback,
+        };
+
+        // 💾 ATUALIZAR
+        await supabase
+          .from("exames")
+          .update({
+            analise_ia: analise,
+            pontos_criticos: analise.pontos_criticos,
+            plano_terapeutico: analise.plano_terapeutico,
+            diagnostico: analise.diagnostico,
+            status: "concluido",
+          })
+          .eq("id", exame.id);
+
+        console.log(`Processado e salvo: ${nome}`);
+
+        res.json({
+          success: true,
+          exame_id: exame.id,
+          dados: resultados,
+          analise,
+          hash,
+        });
+      } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+      }
     });
 
-    // 💾 ATUALIZAR
-    await supabase
+  // 🔎 LISTAGEM
+  app.get("/api/exames", async (_, res) => {
+    const { data, error } = await supabase
       .from("exames")
-      .update({
-        analise_ia: analise,
-        pontos_criticos: analise.pontos_criticos,
-        plano_terapeutico: analise.plano_terapeutico,
-        diagnostico: analise.diagnostico,
-        status: "concluido",
-      })
-      .eq("id", exame.id);
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    console.log(`Processado e salvo: ${nome}`);
+    if (error) return res.status(500).json(error);
 
-    res.json({
-      success: true,
-      exame_id: exame.id,
-      dados: resultados,
-      analise,
-      hash,
-    });
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+    res.json(data);
+  });
 
-// 🔎 LISTAGEM
-app.get("/api/exames", async (_, res) => {
-  const { data, error } = await supabase
-    .from("exames")
-    .select("*")
-    .order("created_at", { ascending: false });
+  // Rotas existentes
+  app.use(uploadRouter);
+  app.use(analyzeRoute);
 
-  if (error) return res.status(500).json(error);
+  const PORT = process.env.PORT || 10000;
 
-  res.json(data);
-});
-
-// Rotas existentes
-app.use(uploadRouter);
-app.use(analyzeRoute);
-
-const PORT = process.env.PORT || 10000;
-
-app.listen(PORT, () => {
-  console.log(`Backend BioSync rodando na porta ${PORT}`);
-});
+  app.listen(PORT, () => {
+    console.log(`Backend BioSync rodando na porta ${PORT}`);
+  });
