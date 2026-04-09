@@ -27,10 +27,10 @@ export type EvolucaoItem = {
 };
 
 export type ComparacaoExames = {
-  melhoraram: EvolucaoItem[];
-  pioraram: EvolucaoItem[];
-  novos_problemas: EvolucaoItem[];
-  normalizados: EvolucaoItem[];
+  melhoraram: ItemComparacao[];
+  pioraram: ItemComparacao[];
+  novos_problemas: ItemComparacao[];
+  normalizados: ItemComparacao[];
 };
 
 function criarChave(sistema: string, item: string): string {

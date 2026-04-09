@@ -69,10 +69,10 @@ function toComparacao(value: unknown): ComparacaoExames {
   const obj = value as Record<string, unknown>;
 
   return {
-    melhoraram: Array.isArray(obj.melhoraram) ? obj.melhoraram : [],
-    pioraram: Array.isArray(obj.pioraram) ? obj.pioraram : [],
-    novos_problemas: Array.isArray(obj.novos_problemas) ? obj.novos_problemas : [],
-    normalizados: Array.isArray(obj.normalizados) ? obj.normalizados : [],
+    melhoraram: Array.isArray(obj.melhoraram) ? obj.melhoraram as any : [],
+    pioraram: Array.isArray(obj.pioraram) ? obj.pioraram as any : [],
+    novos_problemas: Array.isArray(obj.novos_problemas) ? obj.novos_problemas as any : [],
+    normalizados: Array.isArray(obj.normalizados) ? obj.normalizados as any : [],
   };
 }
 
@@ -624,7 +624,7 @@ function App() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <ComparativoExames comparacao={comparativoExamesData} />
+              <ComparativoExamesView comparacao={comparativoExamesData} />
               <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
                 <section
                   style={{
