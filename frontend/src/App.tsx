@@ -3,7 +3,6 @@ import type { AiStructuredData } from "./services/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
-import type { ComparacaoExames } from "./types/comparacao";
 import { parsePlanoTerapeutico } from "./services/api";
 import ComparativoExamesView from "./components/ComparativoExames";
 import {
@@ -346,7 +345,7 @@ function App() {
     : null;
 
   // 🔥 CORREÇÃO: vem antes do uso
-  const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
+  const comparativoExamesData = useMemo(() => {
     if (examesPaciente.length < 2) return null;
 
     const ordenados = [...examesPaciente].sort(
@@ -624,7 +623,7 @@ function App() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <ComparativoExamesView comparacao={comparativoExamesData} />
+              <ComparativoExamesView data={comparativoExamesData} />
               <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
                 <section
                   style={{

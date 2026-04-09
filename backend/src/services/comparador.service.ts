@@ -11,26 +11,22 @@ export type ItemProcessado = {
 
 export type Evolucao = "melhora" | "piora" | "novo" | "normalizado";
 
-export type EvolucaoItem = {
+type EvolucaoItem = {
   sistema: string;
   item: string;
-
-  antes: Status | null;
-  depois: Status | null;
-
-  // 🔥 NOVO
+  antes: "baixo" | "normal" | "alto" | null;
+  depois: "baixo" | "normal" | "alto" | null;
   valor_antes?: number;
   valor_depois?: number;
   variacao?: number;
-
-  evolucao: Evolucao;
+  evolucao: "melhora" | "piora" | "novo" | "normalizado";
 };
 
-export type ComparacaoExames = {
-  melhoraram: ItemComparacao[];
-  pioraram: ItemComparacao[];
-  novos_problemas: ItemComparacao[];
-  normalizados: ItemComparacao[];
+type ComparacaoExames = {
+  melhoraram: EvolucaoItem[];
+  pioraram: EvolucaoItem[];
+  novos_problemas: EvolucaoItem[];
+  normalizados: EvolucaoItem[];
 };
 
 function criarChave(sistema: string, item: string): string {
