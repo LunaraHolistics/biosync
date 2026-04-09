@@ -49,14 +49,14 @@ export default function Dashboard() {
     return { score: 30, status: "Crítico" };
   }
 
-  // 🔥 TENDÊNCIA PELO COMPARATIVO
+  // 🔥 TENDÊNCIA
   function calcularTendencia(exame: ExameRow) {
     const comp = (exame.analise_ia as any)?.comparativo;
-
     if (!comp) return null;
 
     const score =
-      comp.melhoraram.length - comp.pioraram.length;
+      (comp.melhoraram?.length ?? 0) -
+      (comp.pioraram?.length ?? 0);
 
     if (score > 0) return "Melhora";
     if (score < 0) return "Piora";
@@ -70,10 +70,7 @@ export default function Dashboard() {
       const raw = exame.nome_paciente || "Sem nome";
       const nome = raw.split("Sexo")[0].trim();
 
-      if (!grupos[nome]) {
-        grupos[nome] = [];
-      }
-
+      if (!grupos[nome]) grupos[nome] = [];
       grupos[nome].push(exame);
     });
 
@@ -87,8 +84,6 @@ export default function Dashboard() {
       exame.analise_ia && typeof exame.analise_ia === "object"
         ? (exame.analise_ia as any)
         : {};
-
-    const plano = analise.plano_terapeutico || { terapias: [] };
 
     let y = 10;
 
@@ -145,12 +140,26 @@ export default function Dashboard() {
               border: "1px solid #1e293b",
             }}
           >
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ color: "#38bdf8", fontWeight: 700 }}>
+            {/* 🔥 HEADER PACIENTE */}
+            <div style={{ marginBottom: 12 }}>
+              <div
+                style={{
+                  color: "#38bdf8",
+                  fontWeight: 700,
+                  fontSize: 16,
+                }}
+              >
                 {nomePaciente}
               </div>
 
-              <div style={{ fontSize: 13, opacity: 0.8 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.8,
+                  marginTop: 4,
+                  lineHeight: "18px",
+                }}
+              >
                 {formatarPaciente(infoCompleta)
                   .split("\n")
                   .slice(1)
@@ -174,10 +183,10 @@ export default function Dashboard() {
                 status === "Ótimo"
                   ? "#22c55e"
                   : status === "Bom"
-                    ? "#84cc16"
-                    : status === "Atenção"
-                      ? "#facc15"
-                      : "#ef4444";
+                  ? "#84cc16"
+                  : status === "Atenção"
+                  ? "#facc15"
+                  : "#ef4444";
 
               return (
                 <div
@@ -188,6 +197,7 @@ export default function Dashboard() {
                     marginTop: 16,
                   }}
                 >
+                  {/* timeline */}
                   <div
                     style={{
                       display: "flex",
@@ -201,7 +211,9 @@ export default function Dashboard() {
                         width: 12,
                         height: 12,
                         borderRadius: "50%",
-                        background: isMaisRecente ? "#22c55e" : "#38bdf8",
+                        background: isMaisRecente
+                          ? "#22c55e"
+                          : "#38bdf8",
                       }}
                     />
 
@@ -218,6 +230,7 @@ export default function Dashboard() {
                     )}
                   </div>
 
+                  {/* card */}
                   <div
                     style={{
                       background: "#1e293b",
@@ -231,7 +244,13 @@ export default function Dashboard() {
                     }}
                   >
                     {isMaisRecente && (
-                      <div style={{ color: "#22c55e", fontSize: 11 }}>
+                      <div
+                        style={{
+                          color: "#22c55e",
+                          fontSize: 11,
+                          marginBottom: 4,
+                        }}
+                      >
                         MAIS RECENTE
                       </div>
                     )}
@@ -240,19 +259,33 @@ export default function Dashboard() {
                       <strong>{dataFormatada}</strong>
                     </p>
 
-                    {/* 🔥 SCORE */}
-                    <div style={{ color: corStatus, fontWeight: 600 }}>
+                    <div
+                      style={{
+                        color: corStatus,
+                        fontWeight: 600,
+                      }}
+                    >
                       {status} — Score {score}
                     </div>
 
-                    {/* 🔥 TENDÊNCIA */}
                     {tendencia && (
-                      <div style={{ fontSize: 12, opacity: 0.8 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          opacity: 0.8,
+                        }}
+                      >
                         Tendência: {tendencia}
                       </div>
                     )}
 
-                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        marginTop: 6,
+                      }}
+                    >
                       <button
                         onClick={() => {
                           setSelecionado(exame);
@@ -291,7 +324,9 @@ export default function Dashboard() {
         const examesPaciente = exames
           .filter(
             (e) =>
-              (e.nome_paciente || "").split("Sexo")[0].trim() === nomeBase
+              (e.nome_paciente || "")
+                .split("Sexo")[0]
+                .trim() === nomeBase
           )
           .sort(
             (a, b) =>
@@ -299,17 +334,17 @@ export default function Dashboard() {
               new Date(b.data_exame).getTime()
           );
 
-        // 🔥 GERAR DADOS DO GRÁFICO
         const dadosGrafico = examesPaciente.map((exame) => {
           const analise = (exame.analise_ia as any) || {};
-
           const pontos =
             analise.pontos_criticos ||
             exame.pontos_criticos ||
             [];
 
           return {
-            data: new Date(exame.data_exame).toLocaleDateString(),
+            data: new Date(
+              exame.data_exame
+            ).toLocaleDateString(),
             score: 100 - pontos.length * 5,
           };
         });
@@ -340,22 +375,23 @@ export default function Dashboard() {
               ))}
             </ul>
 
-            {/* 🔥 BOTÃO GRÁFICO */}
             <button
-              onClick={() => setMostrarGrafico(!mostrarGrafico)}
+              onClick={() =>
+                setMostrarGrafico(!mostrarGrafico)
+              }
               style={{ marginTop: 10 }}
             >
-              {mostrarGrafico ? "Ocultar evolução" : "Ver evolução"}
+              {mostrarGrafico
+                ? "Ocultar evolução"
+                : "Ver evolução"}
             </button>
 
-            {/* 🔥 GRÁFICO CORRETO */}
             {mostrarGrafico && dadosGrafico.length > 1 && (
               <div style={{ marginTop: 20 }}>
                 <GraficoEvolucao dados={dadosGrafico} />
               </div>
             )}
 
-            {/* 🔥 COMPARATIVO */}
             <ComparativoExamesView data={comparativo} />
           </div>
         );
