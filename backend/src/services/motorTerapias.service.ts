@@ -1,15 +1,18 @@
+// backend/src/services/motorTerapias.service.ts
+
 import type { Diagnostico, Problema } from "./diagnostico.service";
 import type { PlanoTerapeutico, ItemPlanoTerapeutico } from "../types/plano_terapeutico";
 
-function adicionarUnico(lista: ItemPlanoTerapeutico[], item: ItemPlanoTerapeutico) {
+// 🔹 Função auxiliar para evitar duplicatas na lista de terapias
+function adicionarUnico(lista: ItemPlanoTerapeutico[], item: ItemPlanoTerapeutico): void {
   if (!lista.some((t) => t.nome === item.nome)) {
     lista.push(item);
   }
 }
 
+// 🔹 Gera terapias baseadas na categoria e prioridade do problema
 function criarTerapiaBase(problema: Problema): ItemPlanoTerapeutico[] {
   const { categoria, prioridade, item } = problema;
-
   const terapias: ItemPlanoTerapeutico[] = [];
 
   // 🔥 HORMONAL
@@ -72,7 +75,7 @@ function criarTerapiaBase(problema: Problema): ItemPlanoTerapeutico[] {
     });
   }
 
-  // 🔥 PRIORIDADE ALTA → terapia intensiva
+  // 🔥 PRIORIDADE ALTA → terapia intensiva adicional
   if (prioridade === "alta") {
     terapias.push({
       nome: "Intervenção Terapêutica Intensiva",
@@ -85,17 +88,17 @@ function criarTerapiaBase(problema: Problema): ItemPlanoTerapeutico[] {
   return terapias;
 }
 
+// 🔹 Função principal exportada
 export function gerarPlanoTerapeutico(diagnostico: Diagnostico): PlanoTerapeutico {
   const terapias: ItemPlanoTerapeutico[] = [];
 
   diagnostico.problemas.forEach((problema) => {
     const novas = criarTerapiaBase(problema);
-
     novas.forEach((t) => adicionarUnico(terapias, t));
   });
 
   return {
-    tipo: "personalizado",
+    tipo: "personalizado", // ✅ Agora compatível com o tipo definido
     terapias,
   };
 }

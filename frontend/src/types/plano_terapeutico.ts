@@ -1,4 +1,10 @@
-export type PlanoTerapeuticoTipo = "semanal" | "quinzenal" | "mensal";
+// frontend/src/types/plano_terapeutico.ts
+
+export type PlanoTerapeuticoTipo = 
+  | "semanal" 
+  | "quinzenal" 
+  | "mensal" 
+  | "personalizado"; // ✅ Adicionado para compatibilidade com o backend
 
 export type ItemPlanoTerapeutico = {
   nome: string;
