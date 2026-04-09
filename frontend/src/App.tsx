@@ -506,7 +506,6 @@ function App() {
       setHistoryLoading(false);
     }
   }
-}
 
       return (
         <>
