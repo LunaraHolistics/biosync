@@ -185,6 +185,7 @@ function compararExames(
     normalizados,
   };
 }
+
     if (
       (itemAnterior.status === "baixo" || itemAnterior.status === "alto") &&
       itemAtual.status === "normal"
@@ -351,7 +352,7 @@ function buildRelatorioData(
   row: ExameRow,
   paciente: string,
   data: AiStructuredData,
-  function toComparacao(value: unknown): any
+  comparacao?: any
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
