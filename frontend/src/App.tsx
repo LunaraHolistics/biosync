@@ -1,5 +1,4 @@
-import type { AiStructuredData } from './types/ai';
-import type { ExameRow } from './types/database'; // Ajuste o caminho
+import type { AiStructuredData } from "./services/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
@@ -177,7 +176,7 @@ function SecaoPlanoTerapeutico({ data }: { data: AiStructuredData }) {
         <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {p.terapias.map((item, i) => (
+        {p.terapias.map((item: any, i: number) => (
           <div
             key={i}
             style={{
@@ -287,14 +286,10 @@ function buildRelatorioData(
 
 function App() {
   const [clientName, setClientName] = useState("");
-  const [analysis, setAnalysis] = useState<AiStructuredData | null>(null);
-  const [createdAt, setCreatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [diagnostico, setDiagnostico] = useState<unknown>(null);
   const [existingAnalysisId, setExistingAnalysisId] = useState<string | null>(null);
   const analysisRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
   const [todosExames, setTodosExames] = useState<ExameRow[]>([]);
   const [buscaPacientes, setBuscaPacientes] = useState("");
   const [pacienteSelecionado, setPacienteSelecionado] = useState<string | null>(null);
@@ -710,7 +705,7 @@ return (
                       </div>
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
                         {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                          analiseSelecionadaData.pontos_criticos.map((p, i) => (
+                          analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
                             <li key={i}>{p}</li>
                           ))
                         ) : (
@@ -896,7 +891,7 @@ return (
                 </div>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                    analiseSelecionadaData.pontos_criticos.map((p, i) => (
+                    analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
                       <li key={i}>{p}</li>
                     ))
                   ) : (
