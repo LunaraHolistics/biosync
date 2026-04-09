@@ -186,49 +186,6 @@ function compararExames(
   };
 }
 
-    if (
-      (itemAnterior.status === "baixo" || itemAnterior.status === "alto") &&
-      itemAtual.status === "normal"
-    ) {
-      melhoraram.push({
-        sistema: itemAtual.sistema,
-        item: itemAtual.item,
-        antes: itemAnterior.status,
-        depois: itemAtual.status,
-        evolucao: "melhora",
-      });
-      continue;
-    }
-
-    if (
-      itemAnterior.status === "normal" &&
-      (itemAtual.status === "baixo" || itemAtual.status === "alto")
-    ) {
-      pioraram.push({
-        sistema: itemAtual.sistema,
-        item: itemAtual.item,
-        antes: itemAnterior.status,
-        depois: itemAtual.status,
-        evolucao: "piora",
-      });
-    }
-  }
-
-  for (const [chave, itemAnterior] of anteriorPorChave.entries()) {
-    if (!atualPorChave.has(chave)) {
-      normalizados.push({
-        sistema: itemAnterior.sistema,
-        item: itemAnterior.item,
-        antes: itemAnterior.status,
-        depois: null,
-        evolucao: "normalizado",
-      });
-    }
-  }
-
-  return { melhoraram, pioraram, novos_problemas, normalizados };
-}
-
 function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): string {
   if (t === "semanal") return "Semanal";
   if (t === "quinzenal") return "Quinzenal";
