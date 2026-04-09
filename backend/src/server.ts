@@ -1,3 +1,4 @@
+// src/server.ts
 console.log("SERVER ATIVO");
 
 import dotenv from "dotenv";
@@ -14,8 +15,6 @@ import { createClient } from "@supabase/supabase-js";
 import { parseHtmReport } from "./utils/parserHtml";
 import { gerarDiagnostico, type Diagnostico } from "./services/diagnostico.service";
 import { compararExames } from "./services/comparador.service";
-
-// 🔥 MOTOR CORRETO
 import { gerarPlanoTerapeutico } from "./services/motorTerapias.service";
 
 import uploadRouter from "./routes/upload";
@@ -34,8 +33,6 @@ type AiStructuredData = {
   frequencia_lunara: string;
   justificativa: string;
   plano_terapeutico: any;
-
-  // 🔥 CORREÇÃO
   diagnostico?: Diagnostico;
 };
 
@@ -58,65 +55,68 @@ function fallbackData(): AiStructuredData {
         media: 0,
         baixa: 0,
       },
-    }, // 🔥 evita erro no update
+    },
+  };
+}
 
-    function normalizeAiData(input: unknown): AiStructuredData {
-    const base = fallbackData();
-    if (!input || typeof input !== "object") return base;
+// 🔥 FUNÇÕES AUXILIARES (FORA DO FALLBACK)
+function normalizeAiData(input: unknown): AiStructuredData {
+  const base = fallbackData();
+  if (!input || typeof input !== "object") return base;
 
-    const obj = input as any;
+  const obj = input as any;
 
-    return {
-      interpretacao: obj.interpretacao || base.interpretacao,
-      pontos_criticos: obj.pontos_criticos || [],
-      frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
-      justificativa: obj.justificativa || base.justificativa,
-      plano_terapeutico: base.plano_terapeutico,
-      diagnostico: base.diagnostico,
-    };
-  }
+  return {
+    interpretacao: obj.interpretacao || base.interpretacao,
+    pontos_criticos: obj.pontos_criticos || [],
+    frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
+    justificativa: obj.justificativa || base.justificativa,
+    plano_terapeutico: base.plano_terapeutico,
+    diagnostico: base.diagnostico,
+  };
+}
 
-  function extractJsonCandidate(text: string): string | null {
-    const match = text.match(/\{[\s\S]*\}/);
-    return match?.[0] ?? null;
-  }
+function extractJsonCandidate(text: string): string | null {
+  const match = text.match(/\{[\s\S]*\}/);
+  return match?.[0] ?? null;
+}
 
-  function gerarHash(buffer: Buffer): string {
-    return createHash("sha256").update(buffer).digest("hex");
-  }
+function gerarHash(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
+}
 
-  // --- APP ---
-  const app = express();
+// --- APP ---
+const app = express();
 
-  app.use(cors());
-  app.use(express.json({ limit: "50mb" }));
+app.use(cors());
+app.use(express.json({ limit: "50mb" }));
 
-  const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 20 * 1024 * 1024 },
-  });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
 
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY || "",
-  });
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
+});
 
-  // 🔥 IA + MOTOR TERAPÊUTICO
-  async function analisarComIA(dados: any): Promise<AiStructuredData> {
-    const diagnosticoRaw = gerarDiagnostico(dados);
+// 🔥 IA + MOTOR TERAPÊUTICO
+async function analisarComIA(dados: any): Promise<AiStructuredData> {
+  const diagnosticoRaw = gerarDiagnostico(dados);
 
-    const diagnostico: Diagnostico = {
-      problemas: diagnosticoRaw?.problemas ?? [],
-      resumo: diagnosticoRaw?.resumo ?? {
-        total: 0,
-        alta: 0,
-        media: 0,
-        baixa: 0,
-      },
-    };
+  const diagnostico: Diagnostico = {
+    problemas: diagnosticoRaw?.problemas ?? [],
+    resumo: diagnosticoRaw?.resumo ?? {
+      total: 0,
+      alta: 0,
+      media: 0,
+      baixa: 0,
+    },
+  };
 
-    const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
+  const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
-    const prompt = `
+  const prompt = `
 Analise os dados abaixo como terapeuta integrativo.
 
 Considere:
@@ -138,8 +138,9 @@ DADOS:
 ${JSON.stringify(dados)}
 `;
 
+  try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.0-flash", // ✅ modelo válido
       contents: prompt,
     });
 
@@ -154,112 +155,108 @@ ${JSON.stringify(dados)}
     }
 
     const data = normalizeAiData(parsed);
-
     data.plano_terapeutico = plano_terapeutico;
     data.diagnostico = diagnostico;
 
     return data;
+  } catch (error) {
+    console.error("Erro na IA:", error);
+    const fallback = fallbackData();
+    fallback.plano_terapeutico = plano_terapeutico;
+    fallback.diagnostico = diagnostico;
+    return fallback;
   }
+}
 
-  // 🔥 ROTA PRINCIPAL
-  app.post("/api/upload", upload.array("files"), async (req, res) => {
-    try {
-      const files = req.files as Express.Multer.File[];
+// 🔥 ROTA PRINCIPAL
+app.post("/api/upload", upload.array("files"), async (req, res) => {
+  try {
+    const files = req.files as Express.Multer.File[];
 
-      if (!files || files.length === 0) {
-        return res.status(400).json({ error: "Nenhum arquivo enviado" });
-      }
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "Nenhum arquivo enviado" });
+    }
 
-      const resultados = [];
+    const resultados = [];
 
-      for (const file of files) {
-        const dados = parseHtmReport(file.buffer);
-        resultados.push(dados);
-      }
+    for (const file of files) {
+      const dados = parseHtmReport(file.buffer);
+      resultados.push(dados);
+    }
 
-      const primeiro = resultados[0];
-      const nome = primeiro?.nome || "Desconhecido";
+    const primeiro = resultados[0];
+    const nome = primeiro?.nome || "Desconhecido";
 
-      const hash = gerarHash(Buffer.concat(files.map((f) => f.buffer)));
+    const hash = gerarHash(Buffer.concat(files.map((f) => f.buffer)));
 
-      // 💾 SALVAR INICIAL
-      const { data: exame, error } = await supabase
-        .from("exames")
-        .insert({
-          nome_paciente: nome,
-          data_exame: new Date(),
-          resultado_json: resultados,
-          status: "processando",
-        })
-        .select()
-        .single();
+    // 💾 SALVAR INICIAL
+    const { data: exame, error } = await supabase
+      .from("exames")
+      .insert({
+        nome_paciente: nome,
+        data_exame: new Date(),
+        resultado_json: resultados,
+        status: "processando",
+      })
+      .select()
+      .single();
 
-      if (error) throw error;
+    if (error) throw error;
 
-      // 🤖 IA + PLANO
-      const analise = await analisarComIA(resultados).catch(err => {
-        console.error("Erro na IA:", err);
+    // 🤖 IA + PLANO
+    const analise = await analisarComIA(resultados);
 
-        const diagnosticoFallback: Diagnostico = {
-          problemas: [],
-          resumo: {
-            total: 0,
-            alta: 0,
-            media: 0,
-            baixa: 0,
-          },
-        };
+    // 💾 ATUALIZAR COM RESULTADO
+    await supabase
+      .from("exames")
+      .update({
+        analise_ia: analise,
+        pontos_criticos: analise.pontos_criticos,
+        plano_terapeutico: analise.plano_terapeutico,
+        diagnostico: analise.diagnostico,
+        status: "concluido",
+      })
+      .eq("id", exame.id);
 
-        return {
-          ...fallbackData(),
-          diagnostico: diagnosticoFallback,
-        };
+    console.log(`Processado e salvo: ${nome}`);
 
-        // 💾 ATUALIZAR
-        await supabase
-          .from("exames")
-          .update({
-            analise_ia: analise,
-            pontos_criticos: analise.pontos_criticos,
-            plano_terapeutico: analise.plano_terapeutico,
-            diagnostico: analise.diagnostico,
-            status: "concluido",
-          })
-          .eq("id", exame.id);
-
-        console.log(`Processado e salvo: ${nome}`);
-
-        res.json({
-          success: true,
-          exame_id: exame.id,
-          dados: resultados,
-          analise,
-          hash,
-        });
-      } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-      }
+    res.json({
+      success: true,
+      exame_id: exame.id,
+      dados: resultados,
+      analise,
+      hash,
     });
+  } catch (err: any) {
+    console.error("Erro no upload:", err);
+    res.status(500).json({ error: err.message || "Erro interno no servidor" });
+  }
+});
 
-  // 🔎 LISTAGEM
-  app.get("/api/exames", async (_, res) => {
+// 🔎 LISTAGEM
+app.get("/api/exames", async (_, res) => {
+  try {
     const { data, error } = await supabase
       .from("exames")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) return res.status(500).json(error);
+    if (error) throw error;
 
     res.json(data);
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-  // Rotas existentes
-  app.use(uploadRouter);
-  app.use(analyzeRoute);
+// Rotas existentes
+app.use(uploadRouter);
+app.use(analyzeRoute);
 
-  const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 10000;
 
-  app.listen(PORT, () => {
-    console.log(`Backend BioSync rodando na porta ${PORT}`);
-  });
+app.listen(PORT, () => {
+  console.log(`Backend BioSync rodando na porta ${PORT}`);
+});
+
+export { app }; // ✅ para testes
