@@ -1,3 +1,5 @@
+import type { AiStructuredData } from './types/ai';
+import type { ExameRow } from './types/database'; // Ajuste o caminho
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
