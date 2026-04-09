@@ -1,4 +1,5 @@
 console.log("SERVER ATIVO");
+
 import dotenv from "dotenv";
 dotenv.config({ path: "./.env" });
 
@@ -11,11 +12,11 @@ import { createClient } from "@supabase/supabase-js";
 
 // Parsers e serviços
 import { parseHtmReport } from "./utils/parserHtml";
-import { gerarDiagnostico } from "./services/diagnostico.service";
+import { gerarDiagnostico, type Diagnostico } from "./services/diagnostico.service";
 import { compararExames } from "./services/comparador.service";
 
-// 🔥 NOVO MOTOR
-import { gerarPlanoTerapeutico } from "./services/planoTerapeutico.service";
+// 🔥 MOTOR CORRETO
+import { gerarPlanoTerapeutico } from "./services/motorTerapias.service";
 
 import uploadRouter from "./routes/upload";
 import analyzeRoute from "./routes/analyze";
@@ -33,6 +34,9 @@ type AiStructuredData = {
   frequencia_lunara: string;
   justificativa: string;
   plano_terapeutico: any;
+
+  // 🔥 CORREÇÃO
+  diagnostico?: Diagnostico;
 };
 
 // --- Fallback ---
@@ -46,6 +50,7 @@ function fallbackData(): AiStructuredData {
       tipo: "semanal",
       terapias: [],
     },
+    diagnostico: { problemas: [] }, // 🔥 evita erro no update
   };
 }
 
@@ -60,7 +65,8 @@ function normalizeAiData(input: unknown): AiStructuredData {
     pontos_criticos: obj.pontos_criticos || [],
     frequencia_lunara: obj.frequencia_lunara || base.frequencia_lunara,
     justificativa: obj.justificativa || base.justificativa,
-    plano_terapeutico: base.plano_terapeutico, // sempre gerado internamente
+    plano_terapeutico: base.plano_terapeutico,
+    diagnostico: base.diagnostico,
   };
 }
 
@@ -89,10 +95,9 @@ const ai = new GoogleGenAI({
 });
 
 // 🔥 IA + MOTOR TERAPÊUTICO
-async function analisarComIA(dados: any) {
+async function analisarComIA(dados: any): Promise<AiStructuredData> {
   const diagnostico = gerarDiagnostico(dados);
 
-  // 🔥 NOVO MOTOR
   const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
   const prompt = `
@@ -123,18 +128,21 @@ ${JSON.stringify(dados)}
   });
 
   const raw = response.text ?? "";
-  const json = extractJsonCandidate(raw);
-  const parsed = json ? JSON.parse(json) : null;
+
+  let parsed: any = null;
+  try {
+    const json = extractJsonCandidate(raw);
+    parsed = json ? JSON.parse(json) : null;
+  } catch (e) {
+    console.warn("Erro ao parsear JSON da IA");
+  }
 
   const data = normalizeAiData(parsed);
 
-  // 🔥 injeta plano terapêutico real
   data.plano_terapeutico = plano_terapeutico;
+  data.diagnostico = diagnostico;
 
-  return {
-    ...data,
-    diagnostico,
-  };
+  return data;
 }
 
 // 🔥 ROTA PRINCIPAL
@@ -156,7 +164,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
     const primeiro = resultados[0];
     const nome = primeiro?.nome || "Desconhecido";
 
-    const hash = gerarHash(Buffer.concat(files.map(f => f.buffer)));
+    const hash = gerarHash(Buffer.concat(files.map((f) => f.buffer)));
 
     // 💾 SALVAR INICIAL
     const { data: exame, error } = await supabase
@@ -165,7 +173,7 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
         nome_paciente: nome,
         data_exame: new Date(),
         resultado_json: resultados,
-        status: "processando"
+        status: "processando",
       })
       .select()
       .single();
@@ -173,20 +181,20 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
     if (error) throw error;
 
     // 🤖 IA + PLANO
-    const analise = await analisarComIA(resultados).catch(err => {
+    const analise = await analisarComIA(resultados).catch((err) => {
       console.error("Erro na IA:", err);
       return fallbackData();
     });
 
-    // 💾 ATUALIZAR COM NOVO MODELO
+    // 💾 ATUALIZAR
     await supabase
       .from("exames")
       .update({
         analise_ia: analise,
         pontos_criticos: analise.pontos_criticos,
-        plano_terapeutico: analise.plano_terapeutico, // 🔥 NOVO
+        plano_terapeutico: analise.plano_terapeutico,
         diagnostico: analise.diagnostico,
-        status: "concluido"
+        status: "concluido",
       })
       .eq("id", exame.id);
 
@@ -197,9 +205,8 @@ app.post("/api/upload", upload.array("files"), async (req, res) => {
       exame_id: exame.id,
       dados: resultados,
       analise,
-      hash
+      hash,
     });
-
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
