@@ -348,7 +348,7 @@ function App() {
         frequencia_lunara: "",
         justificativa: "",
       },
-      toComparacao(resultadoMeta(analiseSelecionada).comparacao)
+      comparativoExamesData // 🔥 AQUI
     )
     : null;
 
@@ -362,9 +362,23 @@ function App() {
 
   const comparativoExamesData: ComparacaoExames | null = useMemo(() => {
     if (examesPaciente.length < 2) return null;
-    const atual = toItemProcessadoArray(resultadoMeta(examesPaciente[0]).dados_processados);
-    const anterior = toItemProcessadoArray(resultadoMeta(examesPaciente[1]).dados_processados);
-    if (!atual.length && !anterior.length) return null;
+
+    // 🔥 GARANTIR ORDEM CORRETA (mais recente primeiro)
+    const ordenados = [...examesPaciente].sort(
+      (a, b) =>
+        new Date(b.data_exame || b.created_at).getTime() -
+        new Date(a.data_exame || a.created_at).getTime()
+    );
+
+    const atualMeta = resultadoMeta(ordenados[0]);
+    const anteriorMeta = resultadoMeta(ordenados[1]);
+
+    const atual = toItemProcessadoArray(atualMeta?.dados_processados);
+    const anterior = toItemProcessadoArray(anteriorMeta?.dados_processados);
+
+    // 🔥 segurança contra vazio
+    if (!atual.length || !anterior.length) return null;
+
     return compararExames(atual, anterior);
   }, [examesPaciente]);
 
@@ -485,467 +499,469 @@ function App() {
 
     try {
       const list = await listarExamesPorPaciente(nome);
+
+      // 🔥 GARANTIR ORDEM
+      list.sort(
+        (a, b) =>
+          new Date(b.data_exame || b.created_at).getTime() -
+          new Date(a.data_exame || a.created_at).getTime()
+      );
+
       setExamesPaciente(list);
-    } catch (e: unknown) {
-      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
-    } finally {
-      setHistoryLoading(false);
-    }
-  }
 
-  return (
-    <>
-      <div
-        style={{
-          display: "flex",
-          minHeight: "100vh",
-          width: "100%",
-        }}
-      >
-        <aside
-          style={{
-            width: 300,
-            borderRight: "1px solid var(--border)",
-            padding: 16,
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
-            Clientes
-          </div>
-          <input
-            value={buscaPacientes}
-            onChange={(e) => setBuscaPacientes(e.target.value)}
-            placeholder="Buscar por nome..."
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "inherit",
-              marginBottom: 10,
-              boxSizing: "border-box",
-            }}
-          />
-          {historyError ? (
-            <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>
-              {historyError}
-            </div>
-          ) : null}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {nomesPacientes.map((nome) => (
-              <button
-                key={nome}
-                onClick={() => onSelecionarPaciente(nome)}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background:
-                    pacienteSelecionado === nome ? "var(--accent-bg)" : "transparent",
-                  color: "inherit",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>{nome}</div>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main style={{ flex: 1, padding: 18 }}>
+      return (
+        <>
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 12,
-              marginBottom: 20,
+              display: "flex",
+              minHeight: "100vh",
+              width: "100%",
             }}
           >
-            {(
-              [
-                ["Total de exames", dashboard.totalExames],
-                ["Exames no mês", dashboard.examesMesAtual],
-                ["Pacientes (lista atual)", nomesPacientes.length],
-              ] as const
-            ).map(([label, value]) => (
-              <div
-                key={label}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 12,
-                  padding: 14,
-                  background: "rgba(255,255,255,0.02)",
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
-                  {label}
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
-                  {value}
-                </div>
+            <aside
+              style={{
+                width: 300,
+                borderRight: "1px solid var(--border)",
+                padding: 16,
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
+                Clientes
               </div>
-            ))}
-          </div>
-
-          <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>
-            Histórico de análises
-          </div>
-
-          {!pacienteSelecionado ? (
-            <div style={{ opacity: 0.8 }}>
-              Selecione um cliente à esquerda para ver os exames.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <ComparativoExames comparacao={comparativoExamesData} />
-              <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
-                <section
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                    Exames — {pacienteSelecionado}
-                  </div>
-                  {historyLoading ? (
-                    <div style={{ opacity: 0.8 }}>Carregando...</div>
-                  ) : examesPaciente.length === 0 ? (
-                    <div style={{ opacity: 0.8 }}>Nenhum exame encontrado.</div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {examesPaciente.map((a) => {
-                        const date = new Date(a.data_exame || a.created_at);
-                        const label = Number.isNaN(date.getTime())
-                          ? a.data_exame || a.created_at
-                          : date.toLocaleString();
-                        return (
-                          <div
-                            key={a.id}
-                            ref={(el) => {
-                              analysisRefs.current[a.id] = el;
-                            }}
-                            className={existingAnalysisId === a.id ? "analysis-pulse" : undefined}
-                            style={{
-                              border:
-                                existingAnalysisId === a.id
-                                  ? "2px solid #f59e0b"
-                                  : "1px solid var(--border)",
-                              borderRadius: 10,
-                              padding: 10,
-                              background:
-                                existingAnalysisId === a.id
-                                  ? "rgba(245, 158, 11, 0.08)"
-                                  : "transparent",
-                            }}
-                          >
-                            <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                              {label}
-                            </div>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button
-                                className="counter"
-                                onClick={() => {
-                                  setAnaliseSelecionada(a);
-                                  setModalOpen(true);
-                                }}
-                                style={{ marginBottom: 0 }}
-                              >
-                                Ver
-                              </button>
-
-                              <button
-                                className="counter"
-                                onClick={() => {
-                                  setAnaliseSelecionada(a);
-
-                                  const data = exameRowToAiData(a);
-
-                                  const relatorio = buildRelatorioData(
-                                    a,
-                                    pacienteSelecionado || "Cliente",
-                                    data
-                                  );
-                                  gerarRelatorioPDF(relatorio);
-                                }}
-                                style={{ marginBottom: 0 }}
-                                disabled={!exameTemConteudoParaPdf(a)}
-                              >
-                                Baixar PDF
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-
-                <section
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    padding: 14,
-                    minHeight: 220,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                    Detalhes da análise
-                  </div>
-                  {!analiseSelecionada ? (
-                    <div style={{ opacity: 0.8 }}>
-                      Selecione um exame e clique em “Ver”.
-                    </div>
-                  ) : !analiseSelecionadaData ? (
-                    <div style={{ opacity: 0.8 }}>
-                      Não foi possível interpretar o resultado salvo deste exame.
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                      <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          INTERPRETAÇÃO
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>
-                          {analiseSelecionadaData.interpretacao || "—"}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          PONTOS CRÍTICOS
-                        </div>
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                            analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
-                              <li key={i}>{p}</li>
-                            ))
-                          ) : (
-                            <li>—</li>
-                          )}
-                        </ul>
-                      </div>
-
-                      <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
-
-                      <div className="lunara">
-                        <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                          Frequência Lunara
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
-                          {analiseSelecionadaData.frequencia_lunara || "—"}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          JUSTIFICATIVA TERAPÊUTICA
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>
-                          {analiseSelecionadaData.justificativa || "—"}
-                        </div>
-                      </div>
-
-                      {relatorioDataHistorico ? (
-                        <button className="counter" onClick={() => gerarRelatorioPDF(relatorioDataHistorico)}>
-                          Baixar PDF
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                </section>
-              </div>
-            </div>
-          )}
-
-          <div style={{ height: 20 }} />
-
-          <section
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: 14,
-              maxWidth: 760,
-            }}
-          >
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Nova análise (PDF)</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <input
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="Nome do paciente (nome_paciente / PDF)"
+                value={buscaPacientes}
+                onChange={(e) => setBuscaPacientes(e.target.value)}
+                placeholder="Buscar por nome..."
                 style={{
+                  width: "100%",
                   padding: 10,
                   borderRadius: 8,
                   border: "1px solid var(--border)",
                   background: "transparent",
                   color: "inherit",
+                  marginBottom: 10,
+                  boxSizing: "border-box",
                 }}
               />
-              <button
-                className="counter"
-                onClick={buscarUltimaAnalise}
-                disabled={loading}
-              >
-                {loading ? "Carregando..." : "Gerar Última Análise"}
-              </button>
-
-              {error ? (
-                <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div>
-              ) : null}
-
-              {analiseSelecionadaData ? (
-                <div style={{ marginTop: 8 }}>
-                  <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+              {historyError ? (
+                <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>
+                  {historyError}
                 </div>
               ) : null}
-
-              {relatorioData ? (
-                <button
-                  className="counter"
-                  onClick={() => gerarRelatorioPDF(relatorioData)}
-                >
-                  Gerar Relatório PDF
-                </button>
-              ) : null}
-            </div>
-          </section>
-        </main>
-      </div>
-
-      {modalOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setModalOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.55)",
-            display: "grid",
-            placeItems: "center",
-            padding: 16,
-            zIndex: 50,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(920px, 96vw)",
-              maxHeight: "92vh",
-              overflow: "auto",
-              background: "rgba(17, 24, 39, 0.98)",
-              border: "1px solid var(--border)",
-              borderRadius: 14,
-              padding: 16,
-              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 10,
-                marginBottom: 12,
-              }}
-            >
-              <div style={{ fontWeight: 900 }}>
-                {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
-                {analiseSelecionada?.data_exame ??
-                  analiseSelecionada?.created_at ??
-                  ""}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  className="counter"
-                  onClick={() => {
-                    if (relatorioDataHistorico)
-                      gerarRelatorioPDF(relatorioDataHistorico);
-                  }}
-                  disabled={!relatorioDataHistorico}
-                  style={{ marginBottom: 0 }}
-                >
-                  Gerar PDF
-                </button>
-                <button
-                  className="counter"
-                  onClick={() => setModalOpen(false)}
-                  style={{ marginBottom: 0 }}
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-
-            {!analiseSelecionada ? (
-              <div style={{ opacity: 0.85 }}>
-                Nenhum exame selecionado.
-              </div>
-            ) : !analiseSelecionadaData ? (
-              <div style={{ opacity: 0.85 }}>
-                Não foi possível interpretar o resultado salvo deste exame.
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    INTERPRETAÇÃO
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    {analiseSelecionadaData.interpretacao || "—"}
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    PONTOS CRÍTICOS
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                      analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
-                        <li key={i}>{p}</li>
-                      ))
-                    ) : (
-                      <li>—</li>
-                    )}
-                  </ul>
-                </div>
-
-                <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
-
-                <div className="lunara">
-                  <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                    Frequência Lunara
-                  </div>
-                  <div
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {nomesPacientes.map((nome) => (
+                  <button
+                    key={nome}
+                    onClick={() => onSelecionarPaciente(nome)}
                     style={{
-                      whiteSpace: "pre-wrap",
-                      color: "var(--text-h)",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                      background:
+                        pacienteSelecionado === nome ? "var(--accent-bg)" : "transparent",
+                      color: "inherit",
+                      cursor: "pointer",
                     }}
                   >
-                    {analiseSelecionadaData.frequencia_lunara || "—"}
+                    <div style={{ fontWeight: 700 }}>{nome}</div>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            <main style={{ flex: 1, padding: 18 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 12,
+                  marginBottom: 20,
+                }}
+              >
+                {(
+                  [
+                    ["Total de exames", dashboard.totalExames],
+                    ["Exames no mês", dashboard.examesMesAtual],
+                    ["Pacientes (lista atual)", nomesPacientes.length],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div
+                    key={label}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      padding: 14,
+                      background: "rgba(255,255,255,0.02)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
+                      {label}
+                    </div>
+                    <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>
+                Histórico de análises
+              </div>
+
+              {!pacienteSelecionado ? (
+                <div style={{ opacity: 0.8 }}>
+                  Selecione um cliente à esquerda para ver os exames.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <ComparativoExames comparacao={comparativoExamesData} />
+                  <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
+                    <section
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: 12,
+                        padding: 14,
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, marginBottom: 10 }}>
+                        Exames — {pacienteSelecionado}
+                      </div>
+                      {historyLoading ? (
+                        <div style={{ opacity: 0.8 }}>Carregando...</div>
+                      ) : examesPaciente.length === 0 ? (
+                        <div style={{ opacity: 0.8 }}>Nenhum exame encontrado.</div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {examesPaciente.map((a) => {
+                            const date = new Date(a.data_exame || a.created_at);
+                            const label = Number.isNaN(date.getTime())
+                              ? a.data_exame || a.created_at
+                              : date.toLocaleString();
+                            return (
+                              <div
+                                key={a.id}
+                                ref={(el) => {
+                                  analysisRefs.current[a.id] = el;
+                                }}
+                                className={existingAnalysisId === a.id ? "analysis-pulse" : undefined}
+                                style={{
+                                  border:
+                                    existingAnalysisId === a.id
+                                      ? "2px solid #f59e0b"
+                                      : "1px solid var(--border)",
+                                  borderRadius: 10,
+                                  padding: 10,
+                                  background:
+                                    existingAnalysisId === a.id
+                                      ? "rgba(245, 158, 11, 0.08)"
+                                      : "transparent",
+                                }}
+                              >
+                                <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                                  {label}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  <button
+                                    className="counter"
+                                    onClick={() => {
+                                      setAnaliseSelecionada(a);
+                                      setModalOpen(true);
+                                    }}
+                                    style={{ marginBottom: 0 }}
+                                  >
+                                    Ver
+                                  </button>
+
+                                  <button
+                                    className="counter"
+                                    onClick={() => {
+                                      setAnaliseSelecionada(a);
+
+                                      const data = exameRowToAiData(a);
+
+                                      const relatorio = buildRelatorioData(
+                                        a,
+                                        pacienteSelecionado || "Cliente",
+                                        data
+                                      );
+                                      gerarRelatorioPDF(relatorio);
+                                    }}
+                                    style={{ marginBottom: 0 }}
+                                    disabled={!exameTemConteudoParaPdf(a)}
+                                  >
+                                    Baixar PDF
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+
+                    <section
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: 12,
+                        padding: 14,
+                        minHeight: 220,
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, marginBottom: 10 }}>
+                        Detalhes da análise
+                      </div>
+                      {!analiseSelecionada ? (
+                        <div style={{ opacity: 0.8 }}>
+                          Selecione um exame e clique em “Ver”.
+                        </div>
+                      ) : !analiseSelecionadaData ? (
+                        <div style={{ opacity: 0.8 }}>
+                          Não foi possível interpretar o resultado salvo deste exame.
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                          <div>
+                            <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                              INTERPRETAÇÃO
+                            </div>
+                            <div style={{ whiteSpace: "pre-wrap" }}>
+                              {analiseSelecionadaData.interpretacao || "—"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                              PONTOS CRÍTICOS
+                            </div>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
+                                analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
+                                  <li key={i}>{p}</li>
+                                ))
+                              ) : (
+                                <li>—</li>
+                              )}
+                            </ul>
+                          </div>
+
+                          <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+
+                          <div className="lunara">
+                            <div className="sectionTitle" style={{ marginBottom: 8 }}>
+                              Frequência Lunara
+                            </div>
+                            <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
+                              {analiseSelecionadaData.frequencia_lunara || "—"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                              JUSTIFICATIVA TERAPÊUTICA
+                            </div>
+                            <div style={{ whiteSpace: "pre-wrap" }}>
+                              {analiseSelecionadaData.justificativa || "—"}
+                            </div>
+                          </div>
+
+                          {relatorioDataHistorico ? (
+                            <button className="counter" onClick={() => gerarRelatorioPDF(relatorioDataHistorico)}>
+                              Baixar PDF
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
+                    </section>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ height: 20 }} />
+
+              <section
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: 14,
+                  maxWidth: 760,
+                }}
+              >
+                <div style={{ fontWeight: 900, marginBottom: 10 }}>Nova análise (PDF)</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <input
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="Nome do paciente (nome_paciente / PDF)"
+                    style={{
+                      padding: 10,
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: "transparent",
+                      color: "inherit",
+                    }}
+                  />
+                  <button
+                    className="counter"
+                    onClick={buscarUltimaAnalise}
+                    disabled={loading}
+                  >
+                    {loading ? "Carregando..." : "Gerar Última Análise"}
+                  </button>
+
+                  {error ? (
+                    <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div>
+                  ) : null}
+
+                  {analiseSelecionadaData ? (
+                    <div style={{ marginTop: 8 }}>
+                      <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+                    </div>
+                  ) : null}
+
+                  {relatorioData ? (
+                    <button
+                      className="counter"
+                      onClick={() => gerarRelatorioPDF(relatorioData)}
+                    >
+                      Gerar Relatório PDF
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+            </main>
+          </div>
+
+          {modalOpen ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              onClick={() => setModalOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                display: "grid",
+                placeItems: "center",
+                padding: 16,
+                zIndex: 50,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "min(920px, 96vw)",
+                  maxHeight: "92vh",
+                  overflow: "auto",
+                  background: "rgba(17, 24, 39, 0.98)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 14,
+                  padding: 16,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>
+                    {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
+                    {analiseSelecionada?.data_exame ??
+                      analiseSelecionada?.created_at ??
+                      ""}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      className="counter"
+                      onClick={() => {
+                        if (relatorioDataHistorico)
+                          gerarRelatorioPDF(relatorioDataHistorico);
+                      }}
+                      disabled={!relatorioDataHistorico}
+                      style={{ marginBottom: 0 }}
+                    >
+                      Gerar PDF
+                    </button>
+                    <button
+                      className="counter"
+                      onClick={() => setModalOpen(false)}
+                      style={{ marginBottom: 0 }}
+                    >
+                      Fechar
+                    </button>
                   </div>
                 </div>
 
-                <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    JUSTIFICATIVA TERAPÊUTICA
+                {!analiseSelecionada ? (
+                  <div style={{ opacity: 0.85 }}>
+                    Nenhum exame selecionado.
                   </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    {analiseSelecionadaData.justificativa || "—"}
+                ) : !analiseSelecionadaData ? (
+                  <div style={{ opacity: 0.85 }}>
+                    Não foi possível interpretar o resultado salvo deste exame.
                   </div>
-                </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                        INTERPRETAÇÃO
+                      </div>
+                      <div style={{ whiteSpace: "pre-wrap" }}>
+                        {analiseSelecionadaData.interpretacao || "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                        PONTOS CRÍTICOS
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
+                          analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
+                            <li key={i}>{p}</li>
+                          ))
+                        ) : (
+                          <li>—</li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+
+                    <div className="lunara">
+                      <div className="sectionTitle" style={{ marginBottom: 8 }}>
+                        Frequência Lunara
+                      </div>
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          color: "var(--text-h)",
+                        }}
+                      >
+                        {analiseSelecionadaData.frequencia_lunara || "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                        JUSTIFICATIVA TERAPÊUTICA
+                      </div>
+                      <div style={{ whiteSpace: "pre-wrap" }}>
+                        {analiseSelecionadaData.justificativa || "—"}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
-}
+            </div>
+          ) : null}
+        </>
+      );
+    }
 
 export default App;
