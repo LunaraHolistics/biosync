@@ -242,11 +242,24 @@ function exameRowToAiData(row: ExameRow): AiStructuredData {
   };
 }
 
+function exameTemConteudoParaPdf(row: ExameRow): boolean {
+  if (row.pontos_criticos && row.pontos_criticos.length > 0) return true;
+
+  const meta = resultadoMeta(row);
+  const plano = parsePlanoTerapeutico(meta.plano_terapeutico);
+
+  if (plano && plano.terapias.length > 0) return true;
+
+  if (row.analise_ia == null) return false;
+  if (typeof row.analise_ia === "object") return true;
+
+  return typeof row.analise_ia === "string" && row.analise_ia.trim().length > 0;
+}
+
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  data: AiStructuredData,
-  comparacao?: ComparacaoExames
+  data: AiStructuredData
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -766,9 +779,9 @@ function App() {
                 <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div>
               ) : null}
 
-              {analysis ? (
+              {analiseSelecionadaData ? (
                 <div style={{ marginTop: 8 }}>
-                  <SecaoPlanoTerapeutico data={analysis} />
+                  <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
                 </div>
               ) : null}
 
