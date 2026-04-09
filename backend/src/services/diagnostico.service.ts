@@ -23,8 +23,6 @@ export type Problema = {
   categoria: string;
   score: number;
   prioridade: "baixa" | "media" | "alta";
-
-  // 🔥 NOVO
   impacto_fitness?: ImpactoFitness;
 };
 
@@ -38,6 +36,14 @@ export type Diagnostico = {
   };
 };
 
+// 🔥 tipo interno correto
+type AnaliseItem = {
+  impacto: string;
+  prioridadeBase: "baixa" | "media" | "alta";
+  categoria: string;
+  impacto_fitness?: ImpactoFitness;
+};
+
 function normalize(input: string): string {
   return input
     .toLowerCase()
@@ -45,14 +51,14 @@ function normalize(input: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function analisarItem(item: ItemProcessado) {
+function analisarItem(item: ItemProcessado): AnaliseItem {
   const texto = normalize(`${item.sistema} ${item.item}`);
 
   // 🔥 HORMONAL
   if (texto.includes("testosterona")) {
     return {
       impacto: "queda de energia, libido e vitalidade geral",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "alta",
       categoria: "hormonal",
       impacto_fitness: {
         performance: "redução de força e disposição",
@@ -65,7 +71,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("tireoide") || texto.includes("paratireoide")) {
     return {
       impacto: "desregulação metabólica e energética",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "alta",
       categoria: "hormonal",
       impacto_fitness: {
         emagrecimento: "dificuldade ou aceleração desregulada",
@@ -78,7 +84,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("intestino") || texto.includes("digest")) {
     return {
       impacto: "baixa absorção de nutrientes e impacto na imunidade",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "alta",
       categoria: "digestivo",
       impacto_fitness: {
         hipertrofia: "baixa absorção proteica",
@@ -91,7 +97,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("circulacao") || texto.includes("vascular")) {
     return {
       impacto: "fadiga, baixa oxigenação e circulação deficiente",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "media",
       categoria: "circulatorio",
       impacto_fitness: {
         performance: "queda de resistência",
@@ -104,7 +110,7 @@ function analisarItem(item: ItemProcessado) {
   if (texto.includes("imun") || texto.includes("linfa")) {
     return {
       impacto: "queda da resposta imunológica",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "media",
       categoria: "imunologico",
       impacto_fitness: {
         recuperacao: "maior tempo de recuperação",
@@ -120,7 +126,7 @@ function analisarItem(item: ItemProcessado) {
   ) {
     return {
       impacto: "sobrecarga mental e desequilíbrio emocional",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "media",
       categoria: "emocional",
       impacto_fitness: {
         performance: "queda de foco",
@@ -137,7 +143,7 @@ function analisarItem(item: ItemProcessado) {
   ) {
     return {
       impacto: "sobrecarga tóxica e interferência energética",
-      prioridadeBase: "baixa" | "media" | "alta",
+      prioridadeBase: "alta",
       categoria: "toxico",
       impacto_fitness: {
         performance: "fadiga constante",
@@ -148,7 +154,7 @@ function analisarItem(item: ItemProcessado) {
 
   return {
     impacto: "desequilíbrio funcional leve",
-    prioridadeBase: "baixa" | "media" | "alta",
+    prioridadeBase: "baixa",
     categoria: "geral",
     impacto_fitness: {},
   };
@@ -166,12 +172,10 @@ function calcularScore(item: ItemProcessado): number {
 
 function prioridadeFinal(
   score: number,
-  prioridadeBase: "baixa" | "media" | "alta",
+  prioridadeBase: "baixa" | "media" | "alta"
 ): "baixa" | "media" | "alta" {
   if (score > 60) return "alta";
   if (score > 30) return "media";
-
-  // fallback inteligente
   return prioridadeBase;
 }
 
@@ -190,8 +194,6 @@ export function gerarDiagnostico(dados: ItemProcessado[]): Diagnostico {
         categoria: analise.categoria,
         score,
         prioridade: prioridadeFinal(score, analise.prioridadeBase),
-
-        // 🔥 NOVO
         impacto_fitness: analise.impacto_fitness,
       };
     });
