@@ -276,7 +276,8 @@ function getRelatorioOriginal(
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  data: AiStructuredData
+  data: AiStructuredData,
+  comparacao?: ComparacaoExames
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -293,6 +294,9 @@ function buildRelatorioData(
     justificativa: data.justificativa || "",
 
     diagnostico: toDiagnostico(meta.diagnostico),
+
+    // 🔥 ADICIONE ISSO
+    comparacao,
 
     relatorio_original_html: getRelatorioOriginal(meta, row),
   };
@@ -343,7 +347,8 @@ function App() {
         plano_terapeutico: { tipo: "mensal", terapias: [] },
         frequencia_lunara: "",
         justificativa: "",
-      }
+      },
+      toComparacao(resultadoMeta(analiseSelecionada).comparacao)
     )
     : null;
 
@@ -351,8 +356,7 @@ function App() {
     ? buildRelatorioData(
       analiseSelecionada,
       clientName || "Cliente",
-      analiseSelecionadaData,
-      undefined
+      analiseSelecionadaData
     )
     : null;
 
