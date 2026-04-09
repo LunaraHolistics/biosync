@@ -1,5 +1,5 @@
 import type { Diagnostico, Problema } from "./diagnostico.service";
-import type { PlanoTerapeutico, ItemPlanoTerapeutico } from "../types/planoTerapeutico";
+import type { PlanoTerapeutico, ItemPlanoTerapeutico } from "../types/plano_terapeutico";
 
 function adicionarUnico(lista: ItemPlanoTerapeutico[], item: ItemPlanoTerapeutico) {
   if (!lista.some((t) => t.nome === item.nome)) {
