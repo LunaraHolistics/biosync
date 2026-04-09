@@ -488,26 +488,33 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [existingAnalysisId, examesPaciente]);
 
-  async function onSelecionarPaciente(nome: string) {
-    setPacienteSelecionado(nome);
-    setClientName(nome);
+async function onSelecionarPaciente(nome: string) {
+  setPacienteSelecionado(nome);
+  setClientName(nome);
 
-    setAnaliseSelecionada(null);
-    setExamesPaciente([]);
-    setHistoryError(null);
-    setHistoryLoading(true);
+  setAnaliseSelecionada(null);
+  setExamesPaciente([]);
+  setHistoryError(null);
+  setHistoryLoading(true);
 
-    try {
-      const list = await listarExamesPorPaciente(nome);
+  try {
+    const list = await listarExamesPorPaciente(nome);
 
-      // 🔥 GARANTIR ORDEM
-      list.sort(
-        (a, b) =>
-          new Date(b.data_exame || b.created_at).getTime() -
-          new Date(a.data_exame || a.created_at).getTime()
-      );
+    const listOrdenada = [...list].sort(
+      (a, b) =>
+        new Date(b.data_exame || b.created_at).getTime() -
+        new Date(a.data_exame || a.created_at).getTime()
+    );
 
-      setExamesPaciente(list);
+    setExamesPaciente(listOrdenada);
+  } catch (e: unknown) {
+    setHistoryError(
+      e instanceof Error ? e.message : "Erro ao carregar exames."
+    );
+  } finally {
+    setHistoryLoading(false);
+  }
+}
 
       return (
         <>
