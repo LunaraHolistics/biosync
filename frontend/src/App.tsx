@@ -34,9 +34,8 @@ type DiagnosticoPdf = {
 
 function resultadoMeta(row: ExameRow): Record<string, unknown> {
   const r = row.resultado_json;
-  // ✅ Adiciona veração explícita contra arrays
-  return r && typeof r === "object" && !Array.isArray(r)
-    ? (r as Record<string, unknown>)
+  return r && typeof r === "object" && !Array.isArray(r) 
+    ? (r as Record<string, unknown>) 
     : {};
 }
 
