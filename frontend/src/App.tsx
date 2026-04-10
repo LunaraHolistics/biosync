@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import { parsePlanoTerapeutico } from "./services/api";
-import ComparativoExamesView from "../components/ComparativoExames";
+import ComparativoExamesView from "../components/ComparativoExames.tsx";
 import {
   listarExames,
   buscarExamesPorNome,
@@ -290,6 +290,18 @@ function exameTemConteudoParaPdf(row: ExameRow): boolean {
     typeof row.analise_ia === "string" &&
     String(row.analise_ia).trim().length > 0
   );
+}
+
+// 🔧 Função auxiliar para extrair o relatório original do metadata
+function getRelatorioOriginal(
+  meta: Record<string, unknown>,
+  _row: ExameRow
+): string | null {
+  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
+    const val = (meta as any).relatorio_original_html;
+    if (typeof val === "string") return val;
+  }
+  return null;
 }
 
 function buildRelatorioData(

@@ -375,15 +375,11 @@ export default function Dashboard() {
 
       {/* 🔥 MODAL */}
       {selecionado && (() => {
-        const analise =
-          gerarAnaliseInteligente(selecionado);
+        const analise = gerarAnaliseInteligente(selecionado);
 
-        const nomeBase = String(
-          selecionado.nome_paciente || ""
-        )
-        String(valor || "")
+        const nomeBase = String(selecionado.nome_paciente || "")
           .split("Sexo")[0]
-          .trim()
+          .trim();
 
         const examesPaciente = exames
           .filter(
@@ -448,14 +444,11 @@ export default function Dashboard() {
                 : "Ver evolução"}
             </button>
 
-            {mostrarGrafico &&
-              examesPaciente.length > 1 && (
-                <div style={{ marginTop: 20 }}>
-                  <GraficoEvolucao
-                    exames={examesPaciente}
-                  />
-                </div>
-              )}
+            {mostrarGrafico && examesPaciente.length > 1 && (
+              <div style={{ marginTop: 20 }}>
+                <GraficoEvolucao exames={examesPaciente} />
+              </div>
+            )}
 
             {/* 🔥 NOVO COMPONENTE */}
             <ComparativoExamesView data={comparativo} />
