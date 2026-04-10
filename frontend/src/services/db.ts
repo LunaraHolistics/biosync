@@ -388,7 +388,6 @@ export function gerarAnaliseInteligente(
     const setores = (t.setores_alvo || []).map((x) =>
       x.toLowerCase()
     );
-
     return (
       tags.some((tag) => setoresAfetados.has(tag)) ||
       setores.some((s) => setoresAfetados.has(s))
