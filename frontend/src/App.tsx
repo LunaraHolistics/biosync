@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import { parsePlanoTerapeutico } from "./services/api";
-import ComparativoExamesView from "../components/ComparativoExames.tsx";
+import ComparativoExamesView from "../components/ComparativoExames";
 import {
   listarExames,
   buscarExamesPorNome,
@@ -296,12 +296,14 @@ function exameTemConteudoParaPdf(row: ExameRow): boolean {
 function getRelatorioOriginal(
   meta: Record<string, unknown>,
   _row: ExameRow
-): string | null {
+): string | undefined {
   if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
     const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string") return val;
+    if (typeof val === "string" && val.length > 0) {
+      return val;
+    }
   }
-  return null;
+  return undefined;
 }
 
 function buildRelatorioData(
