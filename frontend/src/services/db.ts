@@ -397,3 +397,30 @@ export function gerarAnaliseInteligente(
     comparativo: (exame.analise_ia as any)?.comparativo,
   };
 }
+
+// ==============================
+// 📊 DASHBOARD METRICS
+// ==============================
+
+export async function contarExames(): Promise<number> {
+  const { count, error } = await supabase
+    .from("exames")
+    .select("*", { count: "exact", head: true });
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+export async function contarExamesMesAtual(): Promise<number> {
+  const inicioMes = new Date();
+  inicioMes.setDate(1);
+  inicioMes.setHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from("exames")
+    .select("*", { count: "exact", head: true })
+    .gte("data_exame", inicioMes.toISOString());
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}

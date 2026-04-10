@@ -4,7 +4,7 @@ type Ponto = {
 };
 
 type Props = {
-  dados: Ponto[];
+  exames: ExameRow[];
 };
 
 export default function GraficoEvolucao({ dados }: Props) {

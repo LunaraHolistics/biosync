@@ -1,8 +1,8 @@
-import {
+import type {
   BaseAnaliseSaudeRow,
   TerapiaRow,
   ExameRow,
-} from "./db";
+} from "../services/db";
 
 type ResultadoAnalise = {
   interpretacao: string;

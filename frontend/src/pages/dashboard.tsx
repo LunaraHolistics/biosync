@@ -67,8 +67,8 @@ export default function Dashboard() {
     });
 
     const terapiasSugeridas = terapias.filter((t) =>
-      detalhes.some((d) =>
-        d.setores?.some((s) =>
+      detalhes.some((d: any) =>
+        d.setores?.some((s: string) =>
           t.tags?.includes(s)
         )
       )
@@ -77,7 +77,7 @@ export default function Dashboard() {
     return {
       interpretacao:
         detalhes
-          .map((d) => d.descricao)
+          .map((d: any) => d.descricao)
           .filter(Boolean)
           .join("\n\n") || "Sem interpretação",
 
@@ -139,7 +139,7 @@ export default function Dashboard() {
 
     exames.forEach((exame) => {
       const raw = exame.nome_paciente || "Sem nome";
-      const nome = raw.split("Sexo")[0].trim();
+      const nome = String(raw).split("Sexo")[0].trim();
 
       if (!grupos[nome]) grupos[nome] = [];
       grupos[nome].push(exame);
@@ -378,7 +378,7 @@ export default function Dashboard() {
         const analise =
           gerarAnaliseInteligente(selecionado);
 
-        const nomeBase = (
+        const nomeBase = String(
           selecionado.nome_paciente || ""
         )
           .split("Sexo")[0]
@@ -428,14 +428,14 @@ export default function Dashboard() {
 
             <p><b>Pontos Críticos:</b></p>
             <ul>
-              {analise.pontos_criticos.map((p, i) => (
+              {analise.pontos_criticos.map((p: string, i: number) => (
                 <li key={i}>{p}</li>
               ))}
             </ul>
 
             <p><b>Terapias:</b></p>
             <ul>
-              {analise.terapias.map((t) => (
+              {analise.terapias.map((t: TerapiaRow) => (
                 <li key={t.id}>{t.nome}</li>
               ))}
             </ul>
