@@ -1,5 +1,10 @@
 // src/services/db.ts
 import { createClient } from "@supabase/supabase-js";
+import {
+  ExameSchema,
+  TerapiaSchema,
+  BaseAnaliseSchema,
+} from "../validators/exameValidator";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -25,7 +30,6 @@ export type ExameRow = {
   created_at: string;
   updated_at?: string;
 
-  // 🔥 NOVO MODELO
   status?: string;
   indice_biosync?: Record<string, any>;
 
@@ -73,7 +77,7 @@ export type AnaliseRow = {
 };
 
 // ==============================
-// BASE DE CONHECIMENTO (🔥 NOVO)
+// BASE DE CONHECIMENTO
 // ==============================
 
 export async function listarBaseAnaliseSaude(): Promise<BaseAnaliseSaudeRow[]> {
@@ -82,10 +86,19 @@ export async function listarBaseAnaliseSaude(): Promise<BaseAnaliseSaudeRow[]> {
     .select("*");
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as BaseAnaliseSaudeRow[];
+
+  return (data ?? [])
+    .map((b) => {
+      const parsed = BaseAnaliseSchema.safeParse(b);
+      if (!parsed.success) {
+        console.warn("Erro base análise:", parsed.error);
+        return null;
+      }
+      return parsed.data;
+    })
+    .filter(Boolean) as BaseAnaliseSaudeRow[];
 }
 
-// buscar itens específicos pelo nome (match com exame)
 export async function buscarItensBasePorNome(
   nomes: string[]
 ): Promise<BaseAnaliseSaudeRow[]> {
@@ -97,7 +110,14 @@ export async function buscarItensBasePorNome(
     .in("item", nomes);
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as BaseAnaliseSaudeRow[];
+
+  return (data ?? [])
+    .map((b) => {
+      const parsed = BaseAnaliseSchema.safeParse(b);
+      if (!parsed.success) return null;
+      return parsed.data;
+    })
+    .filter(Boolean) as BaseAnaliseSaudeRow[];
 }
 
 // ==============================
@@ -112,12 +132,35 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
     .order("prioridade", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as TerapiaRow[];
+
+  return (data ?? [])
+    .map((t) => {
+      const parsed = TerapiaSchema.safeParse(t);
+      if (!parsed.success) {
+        console.warn("Erro terapia:", parsed.error);
+        return null;
+      }
+      return parsed.data;
+    })
+    .filter(Boolean) as TerapiaRow[];
 }
 
 // ==============================
 // EXAMES
 // ==============================
+
+function validarExameLista(data: any[]): ExameRow[] {
+  return (data ?? [])
+    .map((e) => {
+      const parsed = ExameSchema.safeParse(e);
+      if (!parsed.success) {
+        console.warn("Erro exame:", parsed.error);
+        return null;
+      }
+      return parsed.data;
+    })
+    .filter(Boolean) as ExameRow[];
+}
 
 export async function listarExames(): Promise<ExameRow[]> {
   const { data, error } = await supabase
@@ -126,7 +169,7 @@ export async function listarExames(): Promise<ExameRow[]> {
     .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as ExameRow[];
+  return validarExameLista(data ?? []);
 }
 
 export async function buscarExamesPorNome(
@@ -141,7 +184,7 @@ export async function buscarExamesPorNome(
     .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as ExameRow[];
+  return validarExameLista(data ?? []);
 }
 
 export async function listarExamesPorPaciente(
@@ -154,7 +197,7 @@ export async function listarExamesPorPaciente(
     .order("data_exame", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as ExameRow[];
+  return validarExameLista(data ?? []);
 }
 
 export async function buscarExamePorId(
@@ -167,7 +210,16 @@ export async function buscarExamePorId(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data as ExameRow | null;
+
+  if (!data) return null;
+
+  const parsed = ExameSchema.safeParse(data);
+  if (!parsed.success) {
+    console.warn("Erro exame:", parsed.error);
+    return null;
+  }
+
+  return parsed.data;
 }
 
 export async function buscarUltimoExamePorPaciente(
@@ -182,7 +234,13 @@ export async function buscarUltimoExamePorPaciente(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data as ExameRow | null;
+
+  if (!data) return null;
+
+  const parsed = ExameSchema.safeParse(data);
+  if (!parsed.success) return null;
+
+  return parsed.data;
 }
 
 // ==============================
@@ -213,11 +271,15 @@ export async function salvarNovoExame(
     .single();
 
   if (error) throw new Error(error.message);
-  return data as ExameRow;
+
+  const parsed = ExameSchema.safeParse(data);
+  if (!parsed.success) throw new Error("Erro validação pós-insert");
+
+  return parsed.data;
 }
 
 // ==============================
-// ANALISES (CORE FUTURO)
+// ANALISES
 // ==============================
 
 export async function buscarUltimaAnalise(): Promise<AnaliseRow | null> {
@@ -267,4 +329,71 @@ export async function atualizarAnalise(
 
   if (error) throw new Error(error.message);
   return data;
+}
+
+// ==============================
+// MOTOR INTELIGENTE
+// ==============================
+
+type AnaliseInteligente = {
+  interpretacao: string;
+  pontos_criticos: string[];
+  detalhes: BaseAnaliseSaudeRow[];
+  terapias_recomendadas: TerapiaRow[];
+  comparativo?: any;
+};
+
+export function gerarAnaliseInteligente(
+  exame: ExameRow,
+  base: BaseAnaliseSaudeRow[],
+  terapias: TerapiaRow[]
+): AnaliseInteligente {
+  const pontos =
+    (exame.analise_ia as any)?.pontos_criticos ??
+    exame.pontos_criticos ??
+    [];
+
+  const detalhes = base.filter((item) =>
+    pontos.some((p: string) =>
+      item.item.toLowerCase().includes(p.toLowerCase())
+    )
+  );
+
+  const interpretacao =
+    detalhes.length > 0
+      ? detalhes.map((d) => d.descricao_tecnica).join("\n\n")
+      : (exame.analise_ia as any)?.interpretacao ??
+        "Sem interpretação disponível";
+
+  const setoresAfetados = new Set<string>();
+
+  detalhes.forEach((d) => {
+    (d.setores || []).forEach((s) =>
+      setoresAfetados.add(s.toLowerCase())
+    );
+  });
+
+  const terapiasFiltradas = terapias.filter((t) => {
+    const tags = (t.tags || []).map((x) => x.toLowerCase());
+    const setores = (t.setores_alvo || []).map((x) =>
+      x.toLowerCase()
+    );
+
+    return (
+      tags.some((tag) => setoresAfetados.has(tag)) ||
+      setores.some((s) => setoresAfetados.has(s))
+    );
+  });
+
+  terapiasFiltradas.sort(
+    (a, b) => (a.prioridade ?? 999) - (b.prioridade ?? 999)
+  );
+
+  return {
+    interpretacao,
+    pontos_criticos: pontos,
+    detalhes,
+    terapias_recomendadas: terapiasFiltradas.slice(0, 5),
+    comparativo: (exame.analise_ia as any)?.comparativo,
+  };
 }

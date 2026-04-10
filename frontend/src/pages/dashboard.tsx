@@ -2,13 +2,21 @@ import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import {
   listarExames,
+  listarTerapias,
   type ExameRow,
+  type TerapiaRow,
+  listarBaseAnaliseSaude,
+  type BaseAnaliseSaudeRow,
 } from "../services/db";
+
+import { gerarComparativoAutomatico } from "../utils/gerarComparativo";
 import ComparativoExamesView from "../components/ComparativoExames";
 import GraficoEvolucao from "../components/GraficoEvolucao";
 
 export default function Dashboard() {
   const [exames, setExames] = useState<ExameRow[]>([]);
+  const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
+  const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [selecionado, setSelecionado] =
     useState<ExameRow | null>(null);
   const [mostrarGrafico, setMostrarGrafico] =
@@ -19,10 +27,17 @@ export default function Dashboard() {
 
     void (async () => {
       try {
-        const data = await listarExames();
-        if (!cancelled) setExames(data);
+        const examesData = await listarExames();
+        const terapiasData = await listarTerapias();
+        const baseData = await listarBaseAnaliseSaude();
+
+        if (!cancelled) {
+          setExames(examesData);
+          setTerapias(terapiasData);
+          setBaseAnalise(baseData);
+        }
       } catch (e) {
-        console.error("Erro ao buscar exames:", e);
+        console.error("Erro:", e);
       }
     })();
 
@@ -30,6 +45,55 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, []);
+
+  // 🔥 ANALISE INTELIGENTE
+  function gerarAnaliseInteligente(exame: ExameRow) {
+    const pontos =
+      exame.pontos_criticos ??
+      (exame.analise_ia as any)?.pontos_criticos ??
+      [];
+
+    const detalhes = pontos.map((ponto: string) => {
+      const match = baseAnalise.find((b) =>
+        ponto.toLowerCase().includes(b.item.toLowerCase())
+      );
+
+      return {
+        item: ponto,
+        descricao: match?.descricao_tecnica,
+        impacto: match?.impacto,
+        setores: match?.setores ?? [],
+      };
+    });
+
+    const terapiasSugeridas = terapias.filter((t) =>
+      detalhes.some((d) =>
+        d.setores?.some((s) =>
+          t.tags?.includes(s)
+        )
+      )
+    );
+
+    return {
+      interpretacao:
+        detalhes
+          .map((d) => d.descricao)
+          .filter(Boolean)
+          .join("\n\n") || "Sem interpretação",
+
+      pontos_criticos: pontos,
+
+      terapias: terapiasSugeridas.slice(0, 3),
+
+      comparativo:
+        (exame.analise_ia as any)?.comparativo ?? {
+          melhoraram: [],
+          pioraram: [],
+          novos_problemas: [],
+          normalizados: [],
+        },
+    };
+  }
 
   function formatarPaciente(texto: string) {
     return texto
@@ -86,21 +150,12 @@ export default function Dashboard() {
 
   function gerarPDF(exame: ExameRow) {
     const doc = new jsPDF();
-
-    const analise =
-      exame.analise_ia &&
-      typeof exame.analise_ia === "object"
-        ? (exame.analise_ia as any)
-        : {};
+    const analise = gerarAnaliseInteligente(exame);
 
     let y = 10;
 
     doc.setFontSize(14);
-    doc.text(
-      `Paciente: ${exame.nome_paciente}`,
-      10,
-      y
-    );
+    doc.text(`Paciente: ${exame.nome_paciente}`, 10, y);
     y += 10;
 
     doc.text(`Data: ${exame.data_exame}`, 10, y);
@@ -110,16 +165,21 @@ export default function Dashboard() {
     doc.text("Interpretação:", 10, y);
     y += 8;
 
-    const interpretacao =
-      analise.interpretacao || "Sem dados";
-
-    doc.text(interpretacao, 10, y, {
+    doc.text(analise.interpretacao, 10, y, {
       maxWidth: 180,
     });
 
-    doc.save(
-      `relatorio-${exame.nome_paciente}.pdf`
-    );
+    y += 20;
+
+    doc.text("Terapias:", 10, y);
+    y += 8;
+
+    analise.terapias.forEach((t) => {
+      doc.text(`- ${t.nome}`, 10, y);
+      y += 6;
+    });
+
+    doc.save(`relatorio-${exame.nome_paciente}.pdf`);
   }
 
   return (
@@ -130,9 +190,7 @@ export default function Dashboard() {
         ([nomePaciente, lista]) => {
           const examesOrdenados = [...lista].sort(
             (a, b) =>
-              new Date(
-                b.data_exame
-              ).getTime() -
+              new Date(b.data_exame).getTime() -
               new Date(a.data_exame).getTime()
           );
 
@@ -150,7 +208,7 @@ export default function Dashboard() {
                 border: "1px solid #1e293b",
               }}
             >
-              {/* HEADER */}
+              {/* HEADER ORIGINAL PRESERVADO */}
               <div style={{ marginBottom: 12 }}>
                 <div
                   style={{
@@ -179,179 +237,146 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {examesOrdenados.map(
-                (exame, index) => {
-                  const isMaisRecente =
-                    index === 0;
+              {examesOrdenados.map((exame, index) => {
+                const isMaisRecente = index === 0;
 
-                  const dataFormatada =
-                    exame.data_exame
-                      ? new Date(
-                          exame.data_exame
-                        ).toLocaleDateString()
-                      : "Data inválida";
+                const dataFormatada = new Date(
+                  exame.data_exame
+                ).toLocaleDateString();
 
-                  const { score, status } =
-                    calcularScore(exame);
+                const { score, status } =
+                  calcularScore(exame);
 
-                  const tendencia =
-                    calcularTendencia(exame);
+                const tendencia =
+                  calcularTendencia(exame);
 
-                  const corStatus =
-                    status === "Ótimo"
-                      ? "#22c55e"
-                      : status === "Bom"
+                const corStatus =
+                  status === "Ótimo"
+                    ? "#22c55e"
+                    : status === "Bom"
                       ? "#84cc16"
                       : status === "Atenção"
-                      ? "#facc15"
-                      : "#ef4444";
+                        ? "#facc15"
+                        : "#ef4444";
 
-                  return (
+                return (
+                  <div
+                    key={exame.id}
+                    style={{
+                      display: "flex",
+                      marginTop: 16,
+                    }}
+                  >
+                    {/* timeline ORIGINAL */}
                     <div
-                      key={exame.id}
                       style={{
                         display: "flex",
-                        marginTop: 16,
+                        flexDirection: "column",
+                        alignItems: "center",
+                        marginRight: 12,
                       }}
                     >
-                      {/* timeline */}
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          background: isMaisRecente
+                            ? "#22c55e"
+                            : "#38bdf8",
+                        }}
+                      />
+
+                      {index !== examesOrdenados.length - 1 && (
+                        <div
+                          style={{
+                            width: 2,
+                            flex: 1,
+                            minHeight: 40,
+                            background: "#334155",
+                            marginTop: 2,
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/* card ORIGINAL */}
+                    <div
+                      style={{
+                        background: "#1e293b",
+                        color: "white",
+                        padding: 12,
+                        borderRadius: 8,
+                        flex: 1,
+                        border: isMaisRecente
+                          ? "2px solid #22c55e"
+                          : "1px solid #1e293b",
+                      }}
+                    >
+                      {isMaisRecente && (
+                        <div
+                          style={{
+                            color: "#22c55e",
+                            fontSize: 11,
+                            marginBottom: 4,
+                          }}
+                        >
+                          MAIS RECENTE
+                        </div>
+                      )}
+
+                      <p>
+                        <strong>{dataFormatada}</strong>
+                      </p>
+
+                      <div
+                        style={{
+                          color: corStatus,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {status} — Score {score}
+                      </div>
+
+                      {tendencia && (
+                        <div style={{ fontSize: 12, opacity: 0.8 }}>
+                          Tendência: {tendencia}
+                        </div>
+                      )}
+
                       <div
                         style={{
                           display: "flex",
-                          flexDirection:
-                            "column",
-                          alignItems: "center",
-                          marginRight: 12,
+                          gap: 8,
+                          marginTop: 6,
                         }}
                       >
-                        <div
-                          style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: "50%",
-                            background:
-                              isMaisRecente
-                                ? "#22c55e"
-                                : "#38bdf8",
-                          }}
-                        />
-
-                        {index !==
-                          examesOrdenados.length -
-                            1 && (
-                          <div
-                            style={{
-                              width: 2,
-                              flex: 1,
-                              minHeight: 40,
-                              background:
-                                "#334155",
-                              marginTop: 2,
-                            }}
-                          />
-                        )}
-                      </div>
-
-                      {/* card */}
-                      <div
-                        style={{
-                          background: "#1e293b",
-                          color: "white",
-                          padding: 12,
-                          borderRadius: 8,
-                          flex: 1,
-                          border: isMaisRecente
-                            ? "2px solid #22c55e"
-                            : "1px solid #1e293b",
-                        }}
-                      >
-                        {isMaisRecente && (
-                          <div
-                            style={{
-                              color: "#22c55e",
-                              fontSize: 11,
-                              marginBottom: 4,
-                            }}
-                          >
-                            MAIS RECENTE
-                          </div>
-                        )}
-
-                        <p>
-                          <strong>
-                            {dataFormatada}
-                          </strong>
-                        </p>
-
-                        <div
-                          style={{
-                            color: corStatus,
-                            fontWeight: 600,
+                        <button
+                          onClick={() => {
+                            setSelecionado(exame);
+                            setMostrarGrafico(false);
                           }}
                         >
-                          {status} — Score {score}
-                        </div>
+                          Ver Análise
+                        </button>
 
-                        {tendencia && (
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.8,
-                            }}
-                          >
-                            Tendência:{" "}
-                            {tendencia}
-                          </div>
-                        )}
-
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 8,
-                            marginTop: 6,
-                          }}
-                        >
-                          <button
-                            onClick={() => {
-                              setSelecionado(
-                                exame
-                              );
-                              setMostrarGrafico(
-                                false
-                              );
-                            }}
-                          >
-                            Ver Análise
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              gerarPDF(exame)
-                            }
-                          >
-                            PDF
-                          </button>
-                        </div>
+                        <button onClick={() => gerarPDF(exame)}>
+                          PDF
+                        </button>
                       </div>
                     </div>
-                  );
-                }
-              )}
+                  </div>
+                );
+              })}
             </div>
           );
         }
       )}
 
-      {/* MODAL */}
+      {/* 🔥 MODAL */}
       {selecionado && (() => {
-        const comparativo =
-          (selecionado.analise_ia as any)
-            ?.comparativo ?? {
-            melhoraram: [],
-            pioraram: [],
-            novos_problemas: [],
-            normalizados: [],
-          };
+        const analise =
+          gerarAnaliseInteligente(selecionado);
 
         const nomeBase = (
           selecionado.nome_paciente || ""
@@ -368,11 +393,23 @@ export default function Dashboard() {
           )
           .sort(
             (a, b) =>
-              new Date(
-                a.data_exame
-              ).getTime() -
+              new Date(a.data_exame).getTime() -
               new Date(b.data_exame).getTime()
           );
+
+        // 🔥 NOVO: COMPARATIVO AUTOMÁTICO
+        const comparativo =
+          examesPaciente.length > 1
+            ? gerarComparativoAutomatico(
+              examesPaciente[examesPaciente.length - 2],
+              examesPaciente[examesPaciente.length - 1]
+            )
+            : {
+              melhoraram: [],
+              pioraram: [],
+              novos_problemas: [],
+              normalizados: [],
+            };
 
         return (
           <div
@@ -386,35 +423,27 @@ export default function Dashboard() {
           >
             <h3>Detalhes</h3>
 
-            <p>
-              <b>Interpretação:</b>
-            </p>
-            <p>
-              {(selecionado.analise_ia as any)
-                ?.interpretacao ?? ""}
-            </p>
+            <p><b>Interpretação:</b></p>
+            <p>{analise.interpretacao}</p>
 
-            <p>
-              <b>Pontos Críticos:</b>
-            </p>
+            <p><b>Pontos Críticos:</b></p>
             <ul>
-              {(
-                (selecionado.analise_ia as any)
-                  ?.pontos_criticos ??
-                selecionado.pontos_criticos ??
-                []
-              ).map((p: string, i: number) => (
+              {analise.pontos_criticos.map((p, i) => (
                 <li key={i}>{p}</li>
+              ))}
+            </ul>
+
+            <p><b>Terapias:</b></p>
+            <ul>
+              {analise.terapias.map((t) => (
+                <li key={t.id}>{t.nome}</li>
               ))}
             </ul>
 
             <button
               onClick={() =>
-                setMostrarGrafico(
-                  !mostrarGrafico
-                )
+                setMostrarGrafico(!mostrarGrafico)
               }
-              style={{ marginTop: 10 }}
             >
               {mostrarGrafico
                 ? "Ocultar evolução"
@@ -430,9 +459,8 @@ export default function Dashboard() {
                 </div>
               )}
 
-            <ComparativoExamesView
-              data={comparativo}
-            />
+            {/* 🔥 NOVO COMPONENTE */}
+            <ComparativoExamesView data={comparativo} />
           </div>
         );
       })()}
