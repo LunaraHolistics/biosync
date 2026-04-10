@@ -6,7 +6,8 @@ export const ExameSchema = z.object({
   nome_paciente: z.string(),
   data_exame: z.string(),
 
-  resultado_json: z.record(z.any()).default({}),
+  resultado_json: z.union([z.record(z.unknown()), z.array(z.unknown()), z.null()]).optional(),
+  indice_biosync: z.union([z.record(z.unknown()), z.null()]).optional(),
 
   analise_ia: z.record(z.any()).optional(),
 
