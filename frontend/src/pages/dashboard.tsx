@@ -388,10 +388,9 @@ export default function Dashboard() {
         const examesPaciente = exames
           .filter(
             (e) =>
-              (e.nome_paciente || "")
-                String(valor || "")
-              .split("Sexo")[0]
-              .trim() === nomeBase
+              String(e.nome_paciente || "")
+                .split("Sexo")[0]
+                .trim() === nomeBase
           )
           .sort(
             (a, b) =>
