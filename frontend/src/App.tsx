@@ -296,14 +296,14 @@ function exameTemConteudoParaPdf(row: ExameRow): boolean {
 function getRelatorioOriginal(
   meta: Record<string, unknown>,
   _row: ExameRow
-): string | undefined {
+): string | undefined {  // ← tipo de retorno
   if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
     const val = (meta as any).relatorio_original_html;
     if (typeof val === "string" && val.length > 0) {
       return val;
     }
   }
-  return undefined;
+  return undefined; // ← essencial: undefined, NÃO null
 }
 
 function buildRelatorioData(
