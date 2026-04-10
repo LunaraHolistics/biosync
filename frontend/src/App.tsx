@@ -283,26 +283,13 @@ function exameTemConteudoParaPdf(row: ExameRow): boolean {
   if (plano && plano.terapias.length > 0) return true;
 
   if (row.analise_ia == null) return false;
+
   if (typeof row.analise_ia === "object") return true;
 
-  return typeof row.analise_ia === "string" && row.analise_ia.trim().length > 0;
-}
-
-function getRelatorioOriginal(
-  meta: Record<string, unknown>,
-  row: ExameRow
-): string {
-  if (typeof meta.relatorio_original_html === "string") {
-    return meta.relatorio_original_html;
-  }
-
-  const raw = (row as any)?.relatorio_original_html;
-
-  if (typeof raw === "string") {
-    return raw;
-  }
-
-  return "";
+  return (
+    typeof row.analise_ia === "string" &&
+    String(row.analise_ia).trim().length > 0
+  );
 }
 
 function buildRelatorioData(
