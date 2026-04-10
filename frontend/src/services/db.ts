@@ -23,17 +23,20 @@ export type ExameRow = {
   id: string;
   nome_paciente: string;
   data_exame: string;
-  resultado_json?: Record<string, unknown> | unknown[] | null;
-  indice_biosync?: Record<string, unknown> | null;
-  analise_ia?: Record<string, any>;
-  protocolo?: string | null;
-  pontos_criticos?: string[];
   created_at: string;
   updated_at?: string;
 
-  status?: string;
-  indice_biosync?: Record<string, any>;
+  // Campos JSON flexíveis (aceitam objeto, array ou null)
+  resultado_json?: Record<string, unknown> | unknown[] | null;
+  indice_biosync?: Record<string, unknown> | null;
+  analise_ia?: Record<string, any>;
 
+  // Campos opcionais
+  protocolo?: string | null;
+  pontos_criticos?: string[];
+  status?: string;
+
+  // Métricas de comparativo
   total_pioraram?: number;
   total_melhoraram?: number;
 };

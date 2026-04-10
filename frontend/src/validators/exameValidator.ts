@@ -6,10 +6,12 @@ export const ExameSchema = z.object({
   nome_paciente: z.string(),
   data_exame: z.string(),
 
+  // Campos JSON flexíveis (aceitam objeto, array ou null)
   resultado_json: z.union([z.record(z.unknown()), z.array(z.unknown()), z.null()]).optional(),
   indice_biosync: z.union([z.record(z.unknown()), z.null()]).optional(),
 
-  analise_ia: z.record(z.any()).optional(),
+  // Analise IA - objeto genérico opcional
+  analise_ia: z.record(z.unknown()).optional(),
 
   protocolo: z.string().nullable().optional(),
   pontos_criticos: z.array(z.string()).optional(),
@@ -18,8 +20,8 @@ export const ExameSchema = z.object({
   updated_at: z.string().optional(),
 
   status: z.string().optional(),
-  indice_biosync: z.record(z.any()).optional(),
 
+  // Métricas de comparativo
   total_pioraram: z.number().optional(),
   total_melhoraram: z.number().optional(),
 });
