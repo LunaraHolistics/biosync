@@ -358,16 +358,22 @@ export function gerarAnaliseInteligente(
     [];
 
   const detalhes = base.filter((item) =>
-    pontos.some((p: string) =>
-      item.item.toLowerCase().includes(p.toLowerCase())
-    )
+    pontos.some((p: string) => {
+      const texto = p.toLowerCase();
+
+      return (
+        item.item.toLowerCase().includes(texto) ||
+        (item.palavras_chave || []).some((k) =>
+          texto.includes(k.toLowerCase())
+        )
+      );
+    })
   );
 
   const interpretacao =
     detalhes.length > 0
       ? detalhes.map((d) => d.descricao_tecnica).join("\n\n")
-      : (exame.analise_ia as any)?.interpretacao ??
-        "Sem interpretação disponível";
+      : "Base clínica insuficiente para interpretação detalhada.";
 
   const setoresAfetados = new Set<string>();
 

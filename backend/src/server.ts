@@ -102,6 +102,13 @@ const ai = new GoogleGenAI({
 
 // 🔥 IA + MOTOR TERAPÊUTICO
 async function analisarComIA(dados: any): Promise<AiStructuredData> {
+  // 🔧 Extrair dados do paciente dos resultados (CORREÇÃO PRINCIPAL)
+  const primeiroResultado = Array.isArray(dados) ? dados[0] : dados;
+  const nome = primeiroResultado?.nome || primeiroResultado?.nome_paciente || "Desconhecido";
+  const idade = primeiroResultado?.idade || "N/A";
+  const sexo = primeiroResultado?.sexo || "N/A";
+  const resultado_json = primeiroResultado?.resultado_json || dados;
+
   const diagnosticoRaw = gerarDiagnostico(dados);
 
   const diagnostico: Diagnostico = {
@@ -116,31 +123,59 @@ async function analisarComIA(dados: any): Promise<AiStructuredData> {
 
   const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
+  // 🔧 Template string corrigido (tudo dentro de um único bloco)
   const prompt = `
-Analise os dados abaixo como terapeuta integrativo.
+Você é um especialista em medicina integrativa e análise biossistêmica.
 
-Considere:
-- desempenho físico
-- sono
-- metabolismo
-- emocional
-- energia vital
+DADOS DO PACIENTE:
+- Nome: ${nome}
+- Idade: ${idade}
+- Sexo: ${sexo}
+- Resultados: ${JSON.stringify(resultado_json)}
 
-Responda em JSON:
-{
-  "interpretacao": string,
-  "pontos_criticos": string[],
-  "frequencia_lunara": string,
-  "justificativa": string
-}
+INSTRUÇÕES PARA A RESPOSTA (obrigatório seguir):
 
-DADOS:
+1️⃣ INTERPRETAÇÃO SISTÊMICA (mín. 150 palavras):
+   - Identifique o eixo primário de desequilíbrio (ex: Intestino-Cérebro-Coração)
+   - Explique a cascata fisiopatológica: como um desequilíbrio gera o próximo
+   - Conecte com sintomas clínicos prováveis (mesmo que não relatados)
+   - Mencione fatores ambientais/alimentares agravantes
+
+2️⃣ PONTOS CRÍTICOS (lista priorizada):
+   - Máx. 6 itens
+   - Formato: "[SISTEMA] Problema específico → Impacto clínico"
+   - Ex: "[INTESTINO] Disbiose com redução de butirato → Inflamação sistêmica de baixo grau"
+
+3️⃣ PLANO TERAPÊUTICO (obrigatório preencher):
+   {
+     "tipo": "semanal" | "quinzenal" | "mensal",
+     "terapias": [
+       {
+         "nome": "Nome da terapia/suplemento/intervenção",
+         "categoria": "nutricional" | "frequencial" | "comportamental" | "ambiental",
+         "dosagem_frequencia": "Ex: 500mg 2x/dia OU 15min diários",
+         "justificativa_mecanica": "Por que isso funciona no contexto deste paciente",
+         "prioridade": 1-3 (1 = essencial)
+       }
+     ]
+   }
+
+4️⃣ FREQUÊNCIA LUNARA + JUSTIFICATIVA:
+   - Escolha UMA frequência com base no eixo afetado
+   - Justifique em 2-3 frases conectando com a fisiologia do paciente
+
+5️⃣ MÉTRICAS DE ACOMPANHAMENTO:
+   - Liste 3 indicadores objetivos para reavaliar em 30-60 dias
+
+RESPOSTA EM JSON VÁLIDO, sem texto adicional.
+
+DADOS COMPLETOS PARA ANÁLISE:
 ${JSON.stringify(dados)}
 `;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash", // ✅ modelo válido
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
 
@@ -151,7 +186,7 @@ ${JSON.stringify(dados)}
       const json = extractJsonCandidate(raw);
       parsed = json ? JSON.parse(json) : null;
     } catch (e) {
-      console.warn("Erro ao parsear JSON da IA");
+      console.warn("Erro ao parsear JSON da IA:", e);
     }
 
     const data = normalizeAiData(parsed);
