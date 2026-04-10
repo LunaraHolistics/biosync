@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import { parsePlanoTerapeutico } from "./services/api";
-import ComparativoExamesView from "./components/ComparativoExames";
+import ComparativoExamesView from "../ComparativoExames";
 import {
   listarExames,
   buscarExamesPorNome,
