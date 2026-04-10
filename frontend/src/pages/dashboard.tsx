@@ -381,15 +381,17 @@ export default function Dashboard() {
         const nomeBase = String(
           selecionado.nome_paciente || ""
         )
+        String(valor || "")
           .split("Sexo")[0]
-          .trim();
+          .trim()
 
         const examesPaciente = exames
           .filter(
             (e) =>
               (e.nome_paciente || "")
-                .split("Sexo")[0]
-                .trim() === nomeBase
+                String(valor || "")
+              .split("Sexo")[0]
+              .trim() === nomeBase
           )
           .sort(
             (a, b) =>
@@ -400,10 +402,7 @@ export default function Dashboard() {
         // 🔥 NOVO: COMPARATIVO AUTOMÁTICO
         const comparativo =
           examesPaciente.length > 1
-            ? gerarComparativoAutomatico(
-              examesPaciente[examesPaciente.length - 2],
-              examesPaciente[examesPaciente.length - 1]
-            )
+            ? gerarComparativoAutomatico(examesPaciente)
             : {
               melhoraram: [],
               pioraram: [],

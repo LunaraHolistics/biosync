@@ -1,8 +1,7 @@
-import { ExameRow } from "../services/db";
+import type { ExameRow } from "../services/db";
 
-export function gerarComparativoAutomatico(
-  exames: ExameRow[]
-) {
+export function gerarComparativoAutomatico(exames: ExameRow[]) 
+{
   if (!exames || exames.length < 2) {
     return {
       melhoraram: [],

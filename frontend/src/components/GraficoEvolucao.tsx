@@ -1,99 +1,70 @@
-type Ponto = {
-  data: string;
-  score: number;
-};
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+
+import type { ExameRow } from "../services/db";
 
 type Props = {
   exames: ExameRow[];
 };
 
-export default function GraficoEvolucao({ dados }: Props) {
-  if (!dados || dados.length < 2) return null;
+type Ponto = {
+  data: string;
+  score: number;
+};
 
-  const width = 600;
-  const height = 250;
-  const padding = 40;
+// 🔥 função segura de score
+function calcularScore(exame: ExameRow): number {
+  const pontos =
+    (exame.analise_ia as any)?.pontos_criticos ??
+    exame.pontos_criticos ??
+    [];
 
-  const maxScore = 100;
-  const minScore = 0;
+  const qtd = pontos.length;
 
-  const getX = (index: number) => {
-    return (
-      padding +
-      (index / (dados.length - 1)) *
-        (width - padding * 2)
-    );
-  };
+  if (qtd === 0) return 90;
+  if (qtd <= 2) return 75;
+  if (qtd <= 4) return 55;
+  return 30;
+}
 
-  const getY = (valor: number) => {
-    return (
-      height -
-      padding -
-      ((valor - minScore) / (maxScore - minScore)) *
-        (height - padding * 2)
-    );
-  };
+export default function GraficoEvolucao({ exames }: Props) {
+  if (!exames || exames.length === 0) return null;
 
-  const pontos = dados.map((d, i) => ({
-    x: getX(i),
-    y: getY(d.score),
-    label: d.data,
-    score: d.score,
+  const dados: Ponto[] = exames.map((exame) => ({
+    data: new Date(exame.data_exame).toLocaleDateString(),
+    score: calcularScore(exame),
   }));
 
-  const path = pontos
-    .map((p, i) =>
-      i === 0
-        ? `M ${p.x} ${p.y}`
-        : `L ${p.x} ${p.y}`
-    )
-    .join(" ");
-
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>
-        Evolução do Índice BioSync
-      </div>
+    <div style={{ width: "100%", height: 300 }}>
+      <ResponsiveContainer>
+        <LineChart data={dados}>
+          <CartesianGrid strokeDasharray="3 3" />
 
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`}>
-        {/* 🔹 eixo Y */}
-        {[0, 25, 50, 75, 100].map((v) => (
-          <text
-            key={v}
-            x={5}
-            y={getY(v)}
-            fontSize="10"
-            fill="#94a3b8"
-          >
-            {v}
-          </text>
-        ))}
+          <XAxis dataKey="data" />
 
-        {/* 🔹 linha */}
-        <path
-          d={path}
-          fill="none"
-          stroke="#22c55e"
-          strokeWidth="2"
-        />
+          <YAxis />
 
-        {/* 🔹 pontos */}
-        {pontos.map((p, i) => (
-          <g key={i}>
-            <circle
-              cx={p.x}
-              cy={p.y}
-              r="4"
-              fill="#22c55e"
-            />
+          <Tooltip />
 
-            {/* tooltip simples */}
-            <title>
-              {p.label} — Score: {p.score}
-            </title>
-          </g>
-        ))}
-      </svg>
+          <Legend />
+
+          <Line
+            type="monotone"
+            dataKey="score"
+            stroke="#22c55e"
+            strokeWidth={2}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
