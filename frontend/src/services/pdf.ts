@@ -390,14 +390,29 @@ async function renderizarBlocoParaCanvas(
   el: HTMLElement,
   scale: number
 ): Promise<HTMLCanvasElement> {
-  return html2canvas(el, {
-    scale,
-    useCORS: true,
-    backgroundColor: "#ffffff",
-    logging: false,
-    removeContainer: true,
-    allowTaint: true,
-  });
+  // SOLUÇÃO: O html2canvas precisa que o elemento esteja anexado ao DOM
+  // para conseguir cloná-lo para o iframe. Movemos ele para fora da tela.
+  el.style.position = "absolute";
+  el.style.left = "-9999px";
+  el.style.top = "0";
+  document.body.appendChild(el);
+
+  try {
+    const canvas = await html2canvas(el, {
+      scale,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+      removeContainer: true,
+      allowTaint: true,
+    });
+    return canvas;
+  } finally {
+    // Garante a remoção do elemento do DOM mesmo se o html2canvas falhar
+    if (el.parentNode) {
+      document.body.removeChild(el);
+    }
+  }
 }
 
 // ============================================================
