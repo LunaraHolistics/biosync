@@ -3,14 +3,13 @@ import { jsPDF } from "jspdf";
 import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 // ============================================================
-// CONFIGURAÇÕES DO PDF
+// CONFIGURAÇÕES
 // ============================================================
 
 const PDF_CANVAS_SCALE = 2;
 const LIMITE_ITENS_RELATORIO = 40;
 const MAX_CHARS_POR_BLOCO = 4200;
 
-// Logos reais (public/)
 const LOGO_BIOSYNC_SRC = "/favicon.png";
 const LOGO_LUNARA_SRC = "/logo.jpeg";
 
@@ -38,7 +37,6 @@ export type RelatorioData = {
   };
 
   plano_terapeutico?: PlanoTerapeutico;
-
   frequencia_lunara: string;
   justificativa: string;
   comparacao?: unknown;
@@ -64,125 +62,105 @@ function escapeHtml(text: string): string {
 
 function dividirTexto(texto: string, maxChars: number): string[] {
   if (texto.length <= maxChars) return [texto];
-
   const pedacos: string[] = [];
   let resto = texto;
-
   while (resto.length > 0) {
     if (resto.length <= maxChars) {
       pedacos.push(resto);
       break;
     }
-
     let corte = resto.lastIndexOf("\n", maxChars);
     if (corte <= maxChars * 0.3) corte = maxChars;
-
     pedacos.push(resto.substring(0, corte));
     resto = resto.substring(corte).trimStart();
   }
-
   return pedacos;
 }
 
 // ============================================================
-// CARREGAR IMAGEM (Promise)
+// CARREGAR IMAGEM COMO DATA URL (sem CORS / iframe)
 // ============================================================
 
-function carregarImagem(src: string): Promise<HTMLImageElement> {
+function imagemParaDataURL(src: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth || 76;
+      c.height = img.naturalHeight || 76;
+      const ctx = c.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      resolve(c.toDataURL("image/png"));
+    };
     img.onerror = () => {
-      // Fallback: cria canvas placeholder se a imagem não carregar
-      const fallback = document.createElement("canvas");
-      fallback.width = 76;
-      fallback.height = 76;
-      const ctx = fallback.getContext("2d")!;
+      // Fallback: placeholder cinza
+      const c = document.createElement("canvas");
+      c.width = 76;
+      c.height = 76;
+      const ctx = c.getContext("2d")!;
       ctx.fillStyle = "#374151";
       ctx.fillRect(0, 0, 76, 76);
       ctx.fillStyle = "#9ca3af";
-      ctx.font = "bold 10px Arial";
+      ctx.font = "bold 9px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("LOGO", 38, 38);
-
-      const imgFallback = new Image();
-      imgFallback.onload = () => resolve(imgFallback);
-      imgFallback.src = fallback.toDataURL();
+      resolve(c.toDataURL("image/png"));
     };
     img.src = src;
   });
 }
 
 // ============================================================
-// CABEÇALHO COM LOGOS REAIS
+// CABEÇALHO DIRETO NO PDF (sem html2canvas)
 // ============================================================
 
-async function criarCabecalhoCanvas(
+function adicionarCabecalhoNoPDF(
+  pdf: jsPDF,
   data: RelatorioData,
-  _larguraUtil: number
-): Promise<HTMLCanvasElement> {
-  const W = 694;
-  const H = 60;
-  const scale = 2;
-  const canvas = document.createElement("canvas");
-  canvas.width = W * scale;
-  canvas.height = H * scale;
-  const ctx = canvas.getContext("2d")!;
-  ctx.scale(scale, scale);
+  logoBiosyncData: string,
+  logoLunaraData: string
+): number {
+  const pageW = pdf.internal.pageSize.getWidth();
+  const MARGIN_X = 20;
+  const logoSize = 38;
 
-  // Fundo branco
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, W, H);
+  const cabecalhoH = 48;
+  const y = 10;
 
-  // Linha separadora inferior
-  ctx.fillStyle = "#e5e7eb";
-  ctx.fillRect(0, H - 2, W, 2);
+  // Fundo da faixa do cabeçalho
+  pdf.setFillColor(255, 255, 255);
+  pdf.rect(MARGIN_X, y, pageW - MARGIN_X * 2, cabecalhoH);
+  pdf.fill();
 
-  // Carregar logos em paralelo
-  const [imgBiosync, imgLunara] = await Promise.all([
-    carregarImagem(LOGO_BIOSYNC_SRC),
-    carregarImagem(LOGO_LUNARA_SRC),
-  ]);
-
-  const logoSize = 42;
+  // Linha separadora
+  pdf.setDrawColor(229, 231, 235);
+  pdf.setLineWidth(0.5);
+  pdf.line(MARGIN_X, y + cabecalhoH, pageW - MARGIN_X, y + cabecalhoH);
 
   // Logo BioSync (esquerda)
-  ctx.drawImage(
-    imgBiosync,
-    12,
-    9,
-    logoSize,
-    logoSize
-  );
+  pdf.addImage(logoBiosyncData, "PNG", MARGIN_X + 4, y + 4, logoSize, logoSize);
 
   // Logo Lunara (direita)
-  ctx.drawImage(
-    imgLunara,
-    W - 12 - logoSize,
-    9,
-    logoSize,
-    logoSize
-  );
+  pdf.addImage(logoLunaraData, "PNG", pageW - MARGIN_X - 4 - logoSize, y + 4, logoSize, logoSize);
 
   // Título central
-  ctx.fillStyle = "#111111";
-  ctx.font = "bold 15px Arial, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("Relatório Terapêutico Integrativo", W / 2, 22);
+  pdf.setFont("helvetica", "bold", 14);
+  pdf.setTextColor(17, 17, 17);
+  pdf.text("Relatório Terapêutico Integrativo", pageW / 2, y + 18, { align: "center" });
 
   // Subtítulo
-  ctx.fillStyle = "#555555";
-  ctx.font = "10px Arial, sans-serif";
-  ctx.fillText(
+  pdf.setFont("helvetica", "normal", 9);
+  pdf.setTextColor(85, 85, 85);
+  pdf.text(
     `${data.clientName}  |  ${formatDate(data.createdAt)}`,
-    W / 2,
-    44
+    pageW / 2,
+    y + 34,
+    { align: "center" }
   );
 
-  return canvas;
+  return cabecalhoH + 6;
 }
 
 // ============================================================
@@ -197,13 +175,12 @@ function statusToNum(status: string | null | undefined): number {
   return 2;
 }
 
-function criarGraficoComparativo(
+function criarGraficoComparativoCanvas(
   comparacao: unknown
 ): HTMLCanvasElement | null {
   if (!comparacao || typeof comparacao !== "object") return null;
 
   const c = comparacao as Record<string, unknown>;
-
   const itens: {
     item: string;
     antes: number;
@@ -211,9 +188,7 @@ function criarGraficoComparativo(
     evolucao: string;
   }[] = [];
 
-  for (const item of Array.isArray(c.melhoraram)
-    ? c.melhoraram
-    : []) {
+  for (const item of Array.isArray(c.melhoraram) ? c.melhoraram : []) {
     itens.push({
       item: String(item.item || ""),
       antes: statusToNum(item.antes),
@@ -221,7 +196,6 @@ function criarGraficoComparativo(
       evolucao: "melhora",
     });
   }
-
   for (const item of Array.isArray(c.pioraram) ? c.pioraram : []) {
     itens.push({
       item: String(item.item || ""),
@@ -254,14 +228,12 @@ function criarGraficoComparativo(
   const gw = W - ml - mr;
   const gh = H - mt - mb;
 
-  // Título
   ctx.fillStyle = "#111";
   ctx.font = "bold 11px Arial";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillText("Comparativo entre exames", W / 2, 6);
 
-  // Grid e labels Y
   const yLabels = ["Baixo", "Normal", "Alto"];
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -269,14 +241,12 @@ function criarGraficoComparativo(
   for (let i = 0; i < 3; i++) {
     const val = i + 1;
     const yPos = mt + gh - ((val - 1) / 2) * gh;
-
     ctx.strokeStyle = "#e5e7eb";
     ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.moveTo(ml, yPos);
     ctx.lineTo(ml + gw, yPos);
     ctx.stroke();
-
     ctx.fillStyle = "#888";
     ctx.font = "8px Arial";
     ctx.fillText(yLabels[i], ml - 5, yPos);
@@ -285,7 +255,6 @@ function criarGraficoComparativo(
   const n = limitados.length;
   const step = n > 1 ? gw / (n - 1) : 0;
 
-  // Linha "Antes" (tracejada cinza)
   ctx.strokeStyle = "#9ca3af";
   ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
@@ -295,17 +264,12 @@ function criarGraficoComparativo(
     const d = limitados[i];
     const xPos = ml + i * step;
     const yPos = mt + gh - ((d.antes - 1) / 2) * gh;
-    if (primeiro) {
-      ctx.moveTo(xPos, yPos);
-      primeiro = false;
-    } else {
-      ctx.lineTo(xPos, yPos);
-    }
+    if (primeiro) { ctx.moveTo(xPos, yPos); primeiro = false; }
+    else ctx.lineTo(xPos, yPos);
   }
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Linha "Depois" (sólida azul)
   ctx.strokeStyle = "#3b82f6";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -314,42 +278,31 @@ function criarGraficoComparativo(
     const d = limitados[i];
     const xPos = ml + i * step;
     const yPos = mt + gh - ((d.depois - 1) / 2) * gh;
-    if (primeiro) {
-      ctx.moveTo(xPos, yPos);
-      primeiro = false;
-    } else {
-      ctx.lineTo(xPos, yPos);
-    }
+    if (primeiro) { ctx.moveTo(xPos, yPos); primeiro = false; }
+    else ctx.lineTo(xPos, yPos);
   }
   ctx.stroke();
 
-  // Pontos coloridos por evolução
   for (let i = 0; i < n; i++) {
     const d = limitados[i];
     const xPos = ml + i * step;
     const yPos = mt + gh - ((d.depois - 1) / 2) * gh;
-
     const cor =
       d.evolucao === "melhora"
         ? "#16a34a"
         : d.evolucao === "piora"
           ? "#dc2626"
           : "#6b7280";
-
-    // Halo branco
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(xPos, yPos, 5, 0, Math.PI * 2);
     ctx.fill();
-
-    // Ponto colorido
     ctx.fillStyle = cor;
     ctx.beginPath();
     ctx.arc(xPos, yPos, 3.5, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Labels X (rotacionados)
   ctx.fillStyle = "#444";
   ctx.font = "7px Arial";
   ctx.textAlign = "left";
@@ -357,7 +310,6 @@ function criarGraficoComparativo(
     const xPos = ml + i * step;
     let label = limitados[i].item;
     if (label.length > 18) label = label.substring(0, 16) + "…";
-
     ctx.save();
     ctx.translate(xPos, mt + gh + 8);
     ctx.rotate(-Math.PI / 5);
@@ -365,7 +317,6 @@ function criarGraficoComparativo(
     ctx.restore();
   }
 
-  // Legenda
   const legY = mt + gh + 38;
   ctx.font = "8px Arial";
   ctx.textAlign = "left";
@@ -395,7 +346,6 @@ function criarGraficoComparativo(
       ctx.arc(lx + 6, legY, 3, 0, Math.PI * 2);
       ctx.fill();
     }
-
     ctx.fillStyle = "#444";
     ctx.fillText(leg.label, lx + 16, legY);
     lx += ctx.measureText(leg.label).width + 28;
@@ -405,7 +355,7 @@ function criarGraficoComparativo(
 }
 
 // ============================================================
-// BLOCOS HTML
+// BLOCOS HTML (só texto — sem imagens)
 // ============================================================
 
 function criarBlocoHTML(html: string): HTMLDivElement {
@@ -435,76 +385,46 @@ async function renderizarBlocoParaCanvas(
 }
 
 // ============================================================
-// EXTRAI DADOS
+// EXTRAIR DADOS
 // ============================================================
 
 function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
-
   const c = comparacao as Record<string, unknown>;
   const secoes: {
     titulo: string;
     cor: string;
     itens: any[];
   }[] = [
-      {
-        titulo: "🟢 Melhoraram",
-        cor: "#16a34a",
-        itens: Array.isArray(c.melhoraram) ? c.melhoraram : [],
-      },
-      {
-        titulo: "🔴 Pioraram",
-        cor: "#dc2626",
-        itens: Array.isArray(c.pioraram) ? c.pioraram : [],
-      },
-      {
-        titulo: "🟡 Novos Problemas",
-        cor: "#ca8a04",
-        itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [],
-      },
-      {
-        titulo: "⚪ Normalizados",
-        cor: "#6b7280",
-        itens: Array.isArray(c.normalizados) ? c.normalizados : [],
-      },
-    ];
-
+    { titulo: "🟢 Melhoraram", cor: "#16a34a", itens: Array.isArray(c.melhoraram) ? c.melhoraram : [] },
+    { titulo: "🔴 Pioraram", cor: "#dc2626", itens: Array.isArray(c.pioraram) ? c.pioraram : [] },
+    { titulo: "🟡 Novos Problemas", cor: "#ca8a04", itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [] },
+    { titulo: "⚪ Normalizados", cor: "#6b7280", itens: Array.isArray(c.normalizados) ? c.normalizados : [] },
+  ];
   const total = secoes.reduce((s, sec) => s + sec.itens.length, 0);
   if (total === 0) return "";
-
   const partes: string[] = [
     `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:10px">Evolução entre exames (${total} mudanças)</div>`,
   ];
-
   for (const secao of secoes) {
     if (secao.itens.length === 0) continue;
-    const linhas = secao.itens
-      .slice(0, 10)
-      .map((item: any) => `
+    const linhas = secao.itens.slice(0, 10).map((item: any) => `
       <div style="margin-bottom:4px">
         <b>${escapeHtml(item.item || "—")}</b>
-        <span style="color:${secao.cor}"> ${escapeHtml(
-        item.evolucao || ""
-      )}</span>
+        <span style="color:${secao.cor}"> ${escapeHtml(item.evolucao || "")}</span>
         <span style="font-size:10px;opacity:0.7">
-          ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois
-          ? escapeHtml(String(item.depois))
-          : "—"}
+          ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois ? escapeHtml(String(item.depois)) : "—"}
           ${item.variacao !== undefined ? ` | Δ${item.variacao}` : ""}
         </span>
       </div>
     `).join("");
-
     partes.push(`
       <div style="margin-bottom:10px">
-        <div style="font-weight:700;color:${secao.cor};margin-bottom:4px">
-          ${secao.titulo} (${secao.itens.length})
-        </div>
+        <div style="font-weight:700;color:${secao.cor};margin-bottom:4px">${secao.titulo} (${secao.itens.length})</div>
         ${linhas}
       </div>
     `);
   }
-
   return partes.join("");
 }
 
@@ -522,7 +442,6 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   const linhas = Array.from(doc.querySelectorAll("tr"));
   const resultado: ItemExtraido[] = [];
   let sistemaAtual = "";
-
   for (const tr of linhas) {
     const tds = tr.querySelectorAll("td");
     if (tds.length < 4) continue;
@@ -540,71 +459,61 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
       conselho: tds[4]?.textContent?.trim() || "",
     });
   }
-
   return resultado;
 }
 
+function extrairRelatorioOriginalHTML(
+  meta: Record<string, unknown>,
+  _row: any
+): string | undefined {
+  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
+    const val = (meta as any).relatorio_original_html;
+    if (typeof val === "string" && val.length > 0) return val;
+  }
+  return undefined;
+}
+
 // ============================================================
-// GERAR BLOCOS DE CONTEÚDO (dividindo texto longo ANTES de renderizar)
+// GERAR BLOCOS DE CONTEÚDO (texto dividido antes de renderizar)
 // ============================================================
 
 function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
   const blocos: { html: string }[] = [];
 
-  // INTERPRETAÇÃO (pode ser longa → dividir em pedaços)
   if (data.interpretacao) {
     const pedacos = dividirTexto(data.interpretacao, MAX_CHARS_POR_BLOCO);
     for (let i = 0; i < pedacos.length; i++) {
-      const titulo =
-        i === 0
-          ? "Interpretação"
-          : "Interpretação (continuação)";
+      const titulo = i === 0 ? "Interpretação" : "Interpretação (continuação)";
       blocos.push({
         html: `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px">${titulo}</div>
-               <div style="white-space:pre-wrap;color:#222;line-height:17px">${escapeHtml(
-          pedacos[i]
-        )}</div>`,
+               <div style="white-space:pre-wrap;color:#222;line-height:17px">${escapeHtml(pedacos[i])}</div>`,
       });
     }
   }
 
-  // COMPARATIVO TEXTUAL
   const compHTML = extrairComparativoHTML(data.comparacao);
   if (compHTML) {
     blocos.push({ html: compHTML });
   }
 
-  // PONTOS CRÍTICOS
   if (data.pontos_criticos && data.pontos_criticos.length > 0) {
     const lista = data.pontos_criticos
       .slice(0, 15)
-      .map(
-        (p) =>
-          `<li style="margin-bottom:3px;color:#222">${escapeHtml(p)}</li>`
-      )
+      .map((p) => `<li style="margin-bottom:3px;color:#222">${escapeHtml(p)}</li>`)
       .join("");
     blocos.push({
-      html: `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px">Pontos críticos</div>
-             <ul style="padding-left:18px;margin:0">${lista}</ul>`,
+      html: `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px">Pontos críticos</div><ul style="padding-left:18px;margin:0">${lista}</ul>`,
     });
   }
 
-  // PLANO TERAPÊUTICO
   if (data.plano_terapeutico?.terapias?.length) {
     const terapiasHTML = data.plano_terapeutico.terapias
       .map((t) => `
       <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
         <div style="font-weight:700;color:#111">${escapeHtml(t.nome)}</div>
-        <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(
-        t.frequencia || ""
-      )}</div>
+        <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(t.frequencia || "")}</div>
         <div style="color:#333">${escapeHtml(t.descricao || "")}</div>
-        ${t.justificativa
-          ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(
-            t.justificativa
-          )}</div>`
-          : ""
-        }
+        ${t.justificativa ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(t.justificativa)}</div>` : ""}
       </div>
     `)
       .join("");
@@ -613,7 +522,6 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
     });
   }
 
-  // MAPA TÉCNICO
   if (data.relatorio_original_html) {
     const itens = extrairRelatorioOriginal(data.relatorio_original_html);
     if (itens.length > 0) {
@@ -622,10 +530,7 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
         .map((i) => `
         <div style="margin-bottom:5px">
           <b>${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}</b><br/>
-          <span style="font-size:10px;color:#555">
-            Normal: ${escapeHtml(i.normal || "—")} |
-            Medido: ${escapeHtml(i.valor || "—")}
-          </span>
+          <span style="font-size:10px;color:#555">Normal: ${escapeHtml(i.normal || "—")} | Medido: ${escapeHtml(i.valor || "—")}</span>
         </div>
       `)
         .join("");
@@ -635,20 +540,15 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
     }
   }
 
-  // FREQUÊNCIA LUNAR + JUSTIFICATIVA
   const extras: string[] = [];
   if (data.frequencia_lunara) {
     extras.push(
-      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Frequência Lunara</div><div style="color:#333;margin-bottom:12px">${escapeHtml(
-        data.frequencia_lunara
-      )}</div>`
+      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Frequência Lunara</div><div style="color:#333;margin-bottom:12px">${escapeHtml(data.frequencia_lunara)}</div>`
     );
   }
   if (data.justificativa) {
     extras.push(
-      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Justificativa terapêutica</div><div style="color:#333">${escapeHtml(
-        data.justificativa
-      )}</div>`
+      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Justificativa terapêutica</div><div style="color:#333">${escapeHtml(data.justificativa)}</div>`
     );
   }
   if (extras.length) {
@@ -669,18 +569,21 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   const pageH = pdf.internal.pageSize.getHeight();
 
   const MARGIN_X = 20;
-  const CABECALHO_IMG_H = 48;
   const GAP = 10;
   const RODAPE_Y = pageH - 30;
-  const maxY = RODAPE_Y - CABECALHO_IMG_H - GAP;
+  const CABECALHO_H = 54;
+  const maxY = RODAPE_Y - CABECALHO_H - GAP;
 
-  // 1. Pré-renderizar cabeçalho (async — carrega logos)
-  const cabecalhoCanvas = await criarCabecalhoCanvas(data, pageW);
+  // 1. Carregar logos como data URLs (sem html2canvas)
+  const [logoBiosyncData, logoLunaraData] = await Promise.all([
+    imagemParaDataURL(LOGO_BIOSYNC_SRC),
+    imagemParaDataURL(LOGO_LUNARA_SRC),
+  ]);
 
-  // 2. Pré-renderizar gráfico
-  const graficoCanvas = criarGraficoComparativo(data.comparacao);
+  // 2. Pré-renderizar gráfico (canvas puro, sem imagens — seguro)
+  const graficoCanvas = criarGraficoComparativoCanvas(data.comparacao);
 
-  // 3. Gerar blocos de conteúdo (texto longo já dividido)
+  // 3. Gerar blocos de conteúdo (só texto — seguro para html2canvas)
   const blocosHTML = gerarBlocosConteudo(data);
 
   // 4. Renderizar blocos como canvas
@@ -691,18 +594,11 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   );
 
   // 5. Estado
-  let currentY = CABECALHO_IMG_H + GAP;
+  let currentY = CABECALHO_H;
   let paginaAtual = 0;
 
   function adicionarCabecalho() {
-    pdf.addImage(
-      cabecalhoCanvas.toDataURL("image/png"),
-      "PNG",
-      MARGIN_X,
-      8,
-      pageW - MARGIN_X * 2,
-      CABECALHO_IMG_H
-    );
+    adicionarCabecalhoNoPDF(pdf, data, logoBiosyncData, logoLunaraData);
   }
 
   function adicionarRodape() {
@@ -723,7 +619,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     pdf.addPage();
     paginaAtual++;
     adicionarCabecalho();
-    currentY = CABECALHO_IMG_H + GAP;
+    currentY = CABECALHO_H;
   }
 
   function adicionarCanvasComPaginacao(canvas: HTMLCanvasElement) {
@@ -749,7 +645,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   // 6. Montar PDF
 
   adicionarCabecalho();
-  currentY = CABECALHO_IMG_H + GAP;
 
   if (graficoCanvas) {
     adicionarCanvasComPaginacao(graficoCanvas);
