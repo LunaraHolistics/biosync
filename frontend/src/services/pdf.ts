@@ -4,6 +4,7 @@ import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 const PDF_CANVAS_SCALE_DEFAULT = 2;
 const LIMITE_ITENS_RELATORIO = 40;
+const MAX_CHARS_POR_BLOCO = 3200; // CORREÇÃO 1: Limite seguro de texto para não estourar a página
 
 export type RelatorioData = {
   clientName: string;
@@ -49,6 +50,24 @@ function escapeHtml(text: string): string {
     .replaceAll(">", "&gt;");
 }
 
+// CORREÇÃO 1: Função para dividir textos longos antes de virarem imagem
+function dividirTexto(texto: string, maxChars: number): string[] {
+  if (texto.length <= maxChars) return [texto];
+  const pedacos: string[] = [];
+  let resto = texto;
+  while (resto.length > 0) {
+    if (resto.length <= maxChars) {
+      pedacos.push(resto);
+      break;
+    }
+    let corte = resto.lastIndexOf("\n", maxChars);
+    if (corte <= maxChars * 0.3) corte = maxChars;
+    pedacos.push(resto.substring(0, corte));
+    resto = resto.substring(corte).trimStart();
+  }
+  return pedacos;
+}
+
 function criarBlocoHTML(html: string): HTMLDivElement {
   const el = document.createElement("div");
   el.style.width = "694px";
@@ -72,6 +91,8 @@ async function renderizarBlocoParaCanvas(el: HTMLElement, scale: number) {
   });
 }
 
+// CORREÇÃO 2: Limpada a lógica complexa de "fatiar imagem" que cortava o texto
+// Agora ele apenas joga o bloco para a próxima página se não couber
 function adicionarBlocoAoPDF(
   pdf: jsPDF,
   canvas: HTMLCanvasElement,
@@ -80,67 +101,27 @@ function adicionarBlocoAoPDF(
   pageHeight: number
 ): number {
   const marginX = 20;
-  const marginBotton = 30;
+  const marginBotton = 40; // Aumentado de 30 para 40 para dar margem de segurança no rodapé
   const maxY = pageHeight - marginBotton;
 
   const imgData = canvas.toDataURL("image/png");
   const imgWidth = pageWidth - marginX * 2;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
+  // Se couber inteiro na página atual
   if (currentY + imgHeight <= maxY) {
     pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
     return currentY + imgHeight + 8;
   }
 
-  if (currentY + imgHeight * 0.3 > maxY) {
+  // Se não couber, mas já temos pelo menos 20% da imagem visível, 
+  // significa que a página está no fim. Pula para a próxima.
+  if (currentY + (imgHeight * 0.2) > maxY) {
     pdf.addPage();
     currentY = 20;
   }
 
-  if (imgHeight > maxY - currentY) {
-    const canvasDisponivel = maxY - currentY;
-    const imgHeightReal = canvas.height * (canvasDisponivel / imgHeight);
-
-    const canvasTopo = document.createElement("canvas");
-    canvasTopo.width = canvas.width;
-    canvasTopo.height = imgHeightReal;
-    const ctxTopo = canvasTopo.getContext("2d");
-    if (ctxTopo) {
-      ctxTopo.fillStyle = "#ffffff";
-      ctxTopo.fillRect(0, 0, canvasTopo.width, canvasTopo.height);
-      ctxTopo.drawImage(
-        canvas,
-        0, 0,
-        canvas.width, imgHeightReal,
-        0, 0,
-        canvasTopo.width, imgHeightReal
-      );
-    }
-    pdf.addImage(canvasTopo.toDataURL("image/png"), "PNG", marginX, currentY, imgWidth, canvasDisponivel);
-
-    const alturaRestante = imgHeight - canvasDisponivel;
-    const imgHeightReal2 = canvas.height * (alturaRestante / imgHeight);
-    const canvasBase = document.createElement("canvas");
-    canvasBase.width = canvas.width;
-    canvasBase.height = imgHeightReal2;
-    const ctxBase = canvasBase.getContext("2d");
-    if (ctxBase) {
-      ctxBase.fillStyle = "#ffffff";
-      ctxBase.fillRect(0, 0, canvasBase.width, canvasBase.height);
-      ctxBase.drawImage(
-        canvas,
-        0, imgHeightReal,
-        canvas.width, imgHeightReal2,
-        0, 0,
-        canvasBase.width, imgHeightReal2
-      );
-    }
-
-    pdf.addPage();
-    pdf.addImage(canvasBase.toDataURL("image/png"), "PNG", marginX, 20, imgWidth, alturaRestante);
-    return 20 + alturaRestante + 8;
-  }
-
+  // Adiciona na página atual (que agora é a nova página, se houve pulo)
   pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
   return currentY + imgHeight + 8;
 }
@@ -245,13 +226,18 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     `)
   );
 
+  // CORREÇÃO 3: Dividir a interpretação em vários blocos menores antes de virar HTML
   if (data.interpretacao) {
-    blocks.push(
-      criarBlocoHTML(`
-        <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:8px">Interpretação</div>
-        <div style="white-space:pre-wrap;color:#222">${escapeHtml(data.interpretacao)}</div>
-      `)
-    );
+    const pedacos = dividirTexto(data.interpretacao, MAX_CHARS_POR_BLOCO);
+    for (let i = 0; i < pedacos.length; i++) {
+      const titulo = i === 0 ? "Interpretação" : "Interpretação (continuação)";
+      blocks.push(
+        criarBlocoHTML(`
+          <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:8px">${titulo}</div>
+          <div style="white-space:pre-wrap;color:#222">${escapeHtml(pedacos[i])}</div>
+        `)
+      );
+    }
   }
 
   const comparativoHTML = extrairComparativoHTML(data.comparacao);
