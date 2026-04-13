@@ -1,4 +1,3 @@
-// src/services/db.ts
 import { createClient } from "@supabase/supabase-js";
 import {
   ExameSchema,
@@ -26,17 +25,14 @@ export type ExameRow = {
   created_at: string;
   updated_at?: string;
 
-  // Campos JSON flexíveis (aceitam objeto, array ou null)
   resultado_json?: Record<string, unknown> | unknown[] | null;
   indice_biosync?: Record<string, unknown> | null;
   analise_ia?: Record<string, any>;
 
-  // Campos opcionais
   protocolo?: string | null;
   pontos_criticos?: string[];
   status?: string;
 
-  // Métricas de comparativo
   total_pioraram?: number;
   total_melhoraram?: number;
 };
@@ -333,78 +329,6 @@ export async function atualizarAnalise(
 
   if (error) throw new Error(error.message);
   return data;
-}
-
-// ==============================
-// MOTOR INTELIGENTE
-// ==============================
-
-type AnaliseInteligente = {
-  interpretacao: string;
-  pontos_criticos: string[];
-  detalhes: BaseAnaliseSaudeRow[];
-  terapias_recomendadas: TerapiaRow[];
-  comparativo?: any;
-};
-
-export function gerarAnaliseInteligente(
-  exame: ExameRow,
-  base: BaseAnaliseSaudeRow[],
-  terapias: TerapiaRow[]
-): AnaliseInteligente {
-  const pontos =
-    (exame.analise_ia as any)?.pontos_criticos ??
-    exame.pontos_criticos ??
-    [];
-
-  const detalhes = base.filter((item) =>
-    pontos.some((p: string) => {
-      const texto = p.toLowerCase();
-
-      return (
-        item.item.toLowerCase().includes(texto) ||
-        (item.palavras_chave || []).some((k) =>
-          texto.includes(k.toLowerCase())
-        )
-      );
-    })
-  );
-
-  const interpretacao =
-    detalhes.length > 0
-      ? detalhes.map((d) => d.descricao_tecnica).join("\n\n")
-      : "Base clínica insuficiente para interpretação detalhada.";
-
-  const setoresAfetados = new Set<string>();
-
-  detalhes.forEach((d) => {
-    (d.setores || []).forEach((s) =>
-      setoresAfetados.add(s.toLowerCase())
-    );
-  });
-
-  const terapiasFiltradas = terapias.filter((t) => {
-    const tags = (t.tags || []).map((x) => x.toLowerCase());
-    const setores = (t.setores_alvo || []).map((x) =>
-      x.toLowerCase()
-    );
-    return (
-      tags.some((tag) => setoresAfetados.has(tag)) ||
-      setores.some((s) => setoresAfetados.has(s))
-    );
-  });
-
-  terapiasFiltradas.sort(
-    (a, b) => (a.prioridade ?? 999) - (b.prioridade ?? 999)
-  );
-
-  return {
-    interpretacao,
-    pontos_criticos: pontos,
-    detalhes,
-    terapias_recomendadas: terapiasFiltradas.slice(0, 5),
-    comparativo: (exame.analise_ia as any)?.comparativo,
-  };
 }
 
 // ==============================

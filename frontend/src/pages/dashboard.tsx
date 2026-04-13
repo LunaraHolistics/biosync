@@ -9,7 +9,14 @@ import {
   type BaseAnaliseSaudeRow,
 } from "../services/db";
 
-import { gerarComparativoAutomatico } from "../utils/gerarComparativo";
+import {
+  gerarAnaliseCompleta,
+  gerarComparativoInteligente,
+  calcularScoreGeral,
+  extrairItensAlterados,
+  type AnaliseCompleta,
+} from "../lib/motorSemantico";
+
 import ComparativoExamesView from "../components/ComparativoExames";
 import GraficoEvolucao from "../components/GraficoEvolucao";
 
@@ -21,6 +28,11 @@ export default function Dashboard() {
     useState<ExameRow | null>(null);
   const [mostrarGrafico, setMostrarGrafico] =
     useState(false);
+
+  // Cache de análises por exame.id
+  const [cacheAnalise, setCacheAnalise] = useState<
+    Record<string, AnaliseCompleta>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -46,53 +58,22 @@ export default function Dashboard() {
     };
   }, []);
 
-  // 🔥 ANALISE INTELIGENTE
-  function gerarAnaliseInteligente(exame: ExameRow) {
-    const pontos =
-      exame.pontos_criticos ??
-      (exame.analise_ia as any)?.pontos_criticos ??
-      [];
+  // 🔥 ANÁLISE INTELIGENTE COM CACHE
+  function obterAnalise(exame: ExameRow): AnaliseCompleta {
+    if (cacheAnalise[exame.id]) return cacheAnalise[exame.id];
 
-    const detalhes = pontos.map((ponto: string) => {
-      const match = baseAnalise.find((b) =>
-        ponto.toLowerCase().includes(b.item.toLowerCase())
-      );
-
-      return {
-        item: ponto,
-        descricao: match?.descricao_tecnica,
-        impacto: match?.impacto,
-        setores: match?.setores ?? [],
-      };
-    });
-
-    const terapiasSugeridas = terapias.filter((t) =>
-      detalhes.some((d: any) =>
-        d.setores?.some((s: string) =>
-          t.tags?.includes(s)
-        )
-      )
+    const analise = gerarAnaliseCompleta(
+      exame,
+      baseAnalise,
+      terapias
     );
 
-    return {
-      interpretacao:
-        detalhes
-          .map((d: any) => d.descricao)
-          .filter(Boolean)
-          .join("\n\n") || "Sem interpretação",
+    setCacheAnalise((prev) => ({
+      ...prev,
+      [exame.id]: analise,
+    }));
 
-      pontos_criticos: pontos,
-
-      terapias: terapiasSugeridas.slice(0, 3),
-
-      comparativo:
-        (exame.analise_ia as any)?.comparativo ?? {
-          melhoraram: [],
-          pioraram: [],
-          novos_problemas: [],
-          normalizados: [],
-        },
-    };
+    return analise;
   }
 
   function formatarPaciente(texto: string) {
@@ -101,23 +82,16 @@ export default function Dashboard() {
       .replace(/Idade:/g, "\nIdade: ")
       .replace(/Figura:/g, "\nFigura: ")
       .replace(
-        /Período do teste:/g,
+        /Per[ií]odo do teste:/g,
         "\nPeríodo do teste: "
       );
   }
 
   function calcularScore(exame: ExameRow) {
-    const pontos =
-      (exame.analise_ia as any)?.pontos_criticos ??
-      exame.pontos_criticos ??
-      [];
-
-    const qtd = pontos.length;
-
-    if (qtd === 0) return { score: 90, status: "Ótimo" };
-    if (qtd <= 2) return { score: 75, status: "Bom" };
-    if (qtd <= 4) return { score: 55, status: "Atenção" };
-    return { score: 30, status: "Crítico" };
+    const itens = extrairItensAlterados(
+      exame.resultado_json
+    );
+    return calcularScoreGeral(itens);
   }
 
   function calcularTendencia(exame: ExameRow) {
@@ -150,36 +124,60 @@ export default function Dashboard() {
 
   function gerarPDF(exame: ExameRow) {
     const doc = new jsPDF();
-    const analise = gerarAnaliseInteligente(exame);
+    const analise = obterAnalise(exame);
 
     let y = 10;
 
     doc.setFontSize(14);
-    doc.text(`Paciente: ${exame.nome_paciente}`, 10, y);
+    doc.text(
+      `Paciente: ${analise.paciente.nome}`,
+      10,
+      y
+    );
     y += 10;
 
     doc.text(`Data: ${exame.data_exame}`, 10, y);
+    y += 10;
+
+    doc.text(
+      `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}`,
+      10,
+      y
+    );
     y += 10;
 
     doc.setFontSize(12);
     doc.text("Interpretação:", 10, y);
     y += 8;
 
-    doc.text(analise.interpretacao, 10, y, {
-      maxWidth: 180,
+    const linhas = doc.splitTextToSize(
+      analise.interpretacao,
+      180
+    );
+    doc.text(linhas, 10, y);
+    y += linhas.length * 5 + 10;
+
+    doc.text("Pontos Críticos:", 10, y);
+    y += 8;
+
+    analise.pontosCriticos.forEach((p) => {
+      const txt = doc.splitTextToSize(`• ${p}`, 175);
+      doc.text(txt, 10, y);
+      y += txt.length * 5 + 2;
     });
 
-    y += 20;
-
-    doc.text("Terapias:", 10, y);
+    y += 5;
+    doc.text("Terapias Sugeridas:", 10, y);
     y += 8;
 
     analise.terapias.forEach((t) => {
-      doc.text(`- ${t.nome}`, 10, y);
+      doc.text(`• ${t.nome}`, 10, y);
       y += 6;
     });
 
-    doc.save(`relatorio-${exame.nome_paciente}.pdf`);
+    doc.save(
+      `relatorio-${analise.paciente.nome.replace(/\s/g, "_")}.pdf`
+    );
   }
 
   return (
@@ -257,7 +255,9 @@ export default function Dashboard() {
                       ? "#84cc16"
                       : status === "Atenção"
                         ? "#facc15"
-                        : "#ef4444";
+                        : status === "Cuidado"
+                          ? "#f97316"
+                          : "#ef4444";
 
                 return (
                   <div
@@ -339,7 +339,12 @@ export default function Dashboard() {
                       </div>
 
                       {tendencia && (
-                        <div style={{ fontSize: 12, opacity: 0.8 }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.8,
+                          }}
+                        >
                           Tendência: {tendencia}
                         </div>
                       )}
@@ -360,7 +365,9 @@ export default function Dashboard() {
                           Ver Análise
                         </button>
 
-                        <button onClick={() => gerarPDF(exame)}>
+                        <button
+                          onClick={() => gerarPDF(exame)}
+                        >
                           PDF
                         </button>
                       </div>
@@ -375,9 +382,11 @@ export default function Dashboard() {
 
       {/* 🔥 MODAL */}
       {selecionado && (() => {
-        const analise = gerarAnaliseInteligente(selecionado);
+        const analise = obterAnalise(selecionado);
 
-        const nomeBase = String(selecionado.nome_paciente || "")
+        const nomeBase = String(
+          selecionado.nome_paciente || ""
+        )
           .split("Sexo")[0]
           .trim();
 
@@ -394,16 +403,9 @@ export default function Dashboard() {
               new Date(b.data_exame).getTime()
           );
 
-        // 🔥 NOVO: COMPARATIVO AUTOMÁTICO
+        // 🔥 COMPARATIVO INTELIGENTE (não usa mais analise_ia)
         const comparativo =
-          examesPaciente.length > 1
-            ? gerarComparativoAutomatico(examesPaciente)
-            : {
-              melhoraram: [],
-              pioraram: [],
-              novos_problemas: [],
-              normalizados: [],
-            };
+          gerarComparativoInteligente(examesPaciente);
 
         return (
           <div
@@ -415,24 +417,126 @@ export default function Dashboard() {
               borderRadius: 8,
             }}
           >
-            <h3>Detalhes</h3>
+            <h3>
+              Detalhes —{" "}
+              {analise.paciente.nome}
+            </h3>
 
-            <p><b>Interpretação:</b></p>
-            <p>{analise.interpretacao}</p>
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                marginBottom: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  background: "#1e293b",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                }}
+              >
+                Idade: {analise.paciente.idade || "—"}
+              </span>
+              <span
+                style={{
+                  background: "#1e293b",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                }}
+              >
+                Itens alterados:{" "}
+                {analise.itensAlterados.length}
+              </span>
+              <span
+                style={{
+                  background: "#1e293b",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                }}
+              >
+                Matches clínicos:{" "}
+                {analise.matches.length}
+              </span>
+            </div>
 
-            <p><b>Pontos Críticos:</b></p>
+            <p>
+              <b>Interpretação:</b>
+            </p>
+            <p
+              style={{
+                whiteSpace: "pre-line",
+                lineHeight: "20px",
+                opacity: 0.9,
+              }}
+            >
+              {analise.interpretacao}
+            </p>
+
+            <p>
+              <b>Pontos Críticos:</b>
+            </p>
             <ul>
-              {analise.pontos_criticos.map((p: string, i: number) => (
-                <li key={i}>{p}</li>
-              ))}
+              {analise.pontosCriticos.map(
+                (p: string, i: number) => (
+                  <li key={i}>{p}</li>
+                )
+              )}
             </ul>
 
-            <p><b>Terapias:</b></p>
+            <p>
+              <b>Terapias Sugeridas:</b>
+            </p>
             <ul>
-              {analise.terapias.map((t: TerapiaRow) => (
-                <li key={t.id}>{t.nome}</li>
-              ))}
+              {analise.terapias.map(
+                (t: TerapiaRow) => (
+                  <li key={t.id}>
+                    <strong>{t.nome}</strong>
+                    {" — "}
+                    <span style={{ opacity: 0.7 }}>
+                      {t.categoria}
+                      {t.descricao
+                        ? `: ${t.descricao.substring(0, 80)}...`
+                        : ""}
+                    </span>
+                  </li>
+                )
+              )}
             </ul>
+
+            {analise.setoresAfetados.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <b>Setores afetados:</b>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    marginTop: 6,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {analise.setoresAfetados.map(
+                    (s: string) => (
+                      <span
+                        key={s}
+                        style={{
+                          background: "#334155",
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          fontSize: 12,
+                        }}
+                      >
+                        {s}
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() =>
@@ -444,13 +548,15 @@ export default function Dashboard() {
                 : "Ver evolução"}
             </button>
 
-            {mostrarGrafico && examesPaciente.length > 1 && (
-              <div style={{ marginTop: 20 }}>
-                <GraficoEvolucao exames={examesPaciente} />
-              </div>
-            )}
+            {mostrarGrafico &&
+              examesPaciente.length > 1 && (
+                <div style={{ marginTop: 20 }}>
+                  <GraficoEvolucao
+                    exames={examesPaciente}
+                  />
+                </div>
+              )}
 
-            {/* 🔥 NOVO COMPONENTE */}
             <ComparativoExamesView data={comparativo} />
           </div>
         );
