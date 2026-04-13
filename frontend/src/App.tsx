@@ -27,15 +27,6 @@ import {
 // TIPOS LOCAIS
 // ==============================
 
-type ItemProcessado = {
-  sistema: string;
-  item: string;
-  valor: number;
-  min: number;
-  max: number;
-  status: "baixo" | "normal" | "alto";
-};
-
 type DiagnosticoPdf = {
   problemas: {
     sistema: string;
@@ -102,115 +93,19 @@ function toComparacao(value: unknown): any {
   };
 }
 
-function toItemProcessadoArray(value: unknown): ItemProcessado[] {
-  if (!Array.isArray(value)) return [];
-
-  return value.filter((x): x is ItemProcessado => {
-    if (!x || typeof x !== "object") return false;
-
-    const item = x as Record<string, unknown>;
-
-    return (
-      typeof item.sistema === "string" &&
-      typeof item.item === "string" &&
-      typeof item.valor === "number" &&
-      typeof item.min === "number" &&
-      typeof item.max === "number" &&
-      (item.status === "baixo" ||
-        item.status === "normal" ||
-        item.status === "alto")
-    );
-  });
-}
-
-function compararExames(
-  atual: ItemProcessado[],
-  anterior: ItemProcessado[]
-): any {
-  const criarChave = (sistema: string, item: string) =>
-    `${sistema}::${item}`;
-
-  const anteriorPorChave = new Map<string, ItemProcessado>();
-  const atualPorChave = new Map<string, ItemProcessado>();
-
-  for (const item of anterior) {
-    anteriorPorChave.set(criarChave(item.sistema, item.item), item);
-  }
-
-  for (const item of atual) {
-    atualPorChave.set(criarChave(item.sistema, item.item), item);
-  }
-
-  const melhoraram: any[] = [];
-  const pioraram: any[] = [];
-  const novos_problemas: any[] = [];
-  const normalizados: any[] = [];
-
-  for (const [chave, itemAtual] of atualPorChave.entries()) {
-    const itemAnterior = anteriorPorChave.get(chave);
-
-    if (!itemAnterior) {
-      novos_problemas.push({
-        sistema: itemAtual.sistema,
-        item: itemAtual.item,
-        antes: null,
-        depois: itemAtual.status,
-        evolucao: "novo",
-      });
-      continue;
-    }
-
-    const antes = itemAnterior.status;
-    const depois = itemAtual.status;
-
-    if ((antes === "baixo" || antes === "alto") && depois === "normal") {
-      melhoraram.push({
-        sistema: itemAtual.sistema,
-        item: itemAtual.item,
-        antes,
-        depois,
-        evolucao: "melhora",
-      });
-      continue;
-    }
-
-    if (antes === "normal" && (depois === "baixo" || depois === "alto")) {
-      pioraram.push({
-        sistema: itemAtual.sistema,
-        item: itemAtual.item,
-        antes,
-        depois,
-        evolucao: "piora",
-      });
-      continue;
-    }
-  }
-
-  for (const [chave, itemAnterior] of anteriorPorChave.entries()) {
-    if (!atualPorChave.has(chave)) {
-      normalizados.push({
-        sistema: itemAnterior.sistema,
-        item: itemAnterior.item,
-        antes: itemAnterior.status,
-        depois: null,
-        evolucao: "normalizado",
-      });
-    }
-  }
-
-  return {
-    melhoraram,
-    pioraram,
-    novos_problemas,
-    normalizados,
-  };
-}
-
 function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): string {
   if (t === "semanal") return "Semanal";
   if (t === "quinzenal") return "Quinzenal";
   return "Mensal";
 }
+
+// Fallback vazio para o comparativo
+const COMPARATIVO_VAZIO = {
+  melhoraram: [],
+  pioraram: [],
+  novos_problemas: [],
+  normalizados: [],
+};
 
 // ==============================
 // SEÇÃO PLANO TERAPÊUTICO (mantida)
@@ -268,10 +163,8 @@ function exameRowToAiData(
   base: BaseAnaliseSaudeRow[],
   terapias: TerapiaRow[]
 ): AiStructuredData {
-  // 1. Rodar motor novo
   const analise = gerarAnaliseCompleta(row, base, terapias);
 
-  // 2. Converter terapias do motor para formato do plano
   const terapiasFormatadas = analise.terapias.map((t) => ({
     nome: t.nome,
     frequencia: t.frequencia_recomendada || "Conforme necessidade",
@@ -281,7 +174,6 @@ function exameRowToAiData(
       : t.indicacoes || "",
   }));
 
-  // 3. Manter frequencia_lunara e justificativa do legado (se existir)
   const ia = row.analise_ia;
   const frequencia_lunara =
     typeof ia === "object" && ia && "frequencia_lunara" in ia
@@ -383,7 +275,6 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // 🔥 NOVO: dados para o motor
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
@@ -402,7 +293,6 @@ function App() {
     return Array.from(map.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [todosExames]);
 
-  // 🔥 NOVO: obter análise com cache
   function obterAnalise(row: ExameRow): AnaliseCompleta {
     if (cacheAnalise[row.id]) return cacheAnalise[row.id];
     const analise = gerarAnaliseCompleta(row, baseAnalise, terapias);
@@ -410,12 +300,10 @@ function App() {
     return analise;
   }
 
-  // 🔥 ATUALIZADO: agora usa o motor novo
   const analiseSelecionadaData = analiseSelecionada
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias)
     : null;
 
-  // 🔥 ATUALIZADO: comparativo inteligente
   const comparativoExamesData = useMemo(() => {
     if (examesPaciente.length < 2) return null;
 
@@ -496,7 +384,6 @@ function App() {
     }
   }
 
-  // 🔥 NOVO: carregar base + terapias junto com exames
   useEffect(() => {
     (async () => {
       setHistoryError(null);
@@ -588,7 +475,6 @@ function App() {
     }
   }
 
-  // 🔥 Dados do motor para exibir no painel de detalhes
   const analiseMotor = analiseSelecionada
     ? obterAnalise(analiseSelecionada)
     : null;
@@ -699,7 +585,7 @@ function App() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <ComparativoExamesView data={comparativoExamesData} />
+              <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
               <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
                 <section
                   style={{
@@ -723,7 +609,6 @@ function App() {
                           ? a.data_exame || a.created_at
                           : date.toLocaleString();
 
-                        // 🔥 Score do motor no card
                         const scoreMotor = obterAnalise(a);
                         const corScore =
                           scoreMotor.scoreGeral >= 85
@@ -759,7 +644,6 @@ function App() {
                             <div style={{ fontWeight: 700, marginBottom: 4 }}>
                               {label}
                             </div>
-                            {/* 🔥 Score do motor no card */}
                             <div style={{ fontSize: 12, color: corScore, fontWeight: 600, marginBottom: 8 }}>
                               {scoreMotor.statusScore} — Score {scoreMotor.scoreGeral}/100
                               {" "}({scoreMotor.itensAlterados.length} alterados)
@@ -848,7 +732,6 @@ function App() {
 
                       <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
 
-                      {/* 🔥 NOVO: Setores afetados */}
                       {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
                         <div>
                           <div style={{ fontWeight: 900, marginBottom: 6 }}>
@@ -872,7 +755,6 @@ function App() {
                         </div>
                       )}
 
-                      {/* 🔥 NOVO: Matches clínicos */}
                       {analiseMotor && analiseMotor.matches.length > 0 && (
                         <div>
                           <div style={{ fontWeight: 900, marginBottom: 6 }}>
@@ -904,9 +786,7 @@ function App() {
                         </div>
                       )}
 
-                      {comparativoExamesData && (
-                        <ComparativoExamesView data={toComparacao(comparativoExamesData)} />
-                      )}
+                      <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
 
                       <div className="lunara">
                         <div className="sectionTitle" style={{ marginBottom: 8 }}>
@@ -993,7 +873,6 @@ function App() {
         </main>
       </div>
 
-      {/* 🔥 MODAL — agora com dados do motor novo */}
       {modalOpen ? (
         <div
           role="dialog"
@@ -1038,7 +917,6 @@ function App() {
                     analiseSelecionada?.created_at ??
                     ""}
                 </div>
-                {/* 🔥 Score do motor no header do modal */}
                 {analiseMotor && (
                   <div style={{ fontSize: 13, color: "#38bdf8", marginTop: 2 }}>
                     Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore} |{" "}
@@ -1106,7 +984,6 @@ function App() {
 
                 <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
 
-                {/* 🔥 NOVO: Setores afetados no modal */}
                 {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
                   <div>
                     <div style={{ fontWeight: 900, marginBottom: 6 }}>
