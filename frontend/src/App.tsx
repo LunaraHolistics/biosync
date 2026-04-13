@@ -315,17 +315,17 @@ function App() {
 
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
-        analiseSelecionada,
-        pacienteSelecionado || clientName.trim() || "Cliente",
-        analiseSelecionadaData ?? {
-          interpretacao: "",
-          pontos_criticos: [],
-          plano_terapeutico: { tipo: "mensal", terapias: [] },
-          frequencia_lunara: "",
-          justificativa: "",
-        },
-        comparativoExamesData
-      )
+      analiseSelecionada,
+      pacienteSelecionado || clientName.trim() || "Cliente",
+      analiseSelecionadaData ?? {
+        interpretacao: "",
+        pontos_criticos: [],
+        plano_terapeutico: { tipo: "mensal", terapias: [] },
+        frequencia_lunara: "",
+        justificativa: "",
+      },
+      comparativoExamesData
+    )
     : null;
 
   useEffect(() => {
@@ -505,7 +505,9 @@ function App() {
             <div style={{ opacity: 0.8 }}>Selecione um cliente à esquerda para ver os exames.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
+              <div style={{ minHeight: 340 }}>
+                <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
                 <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14 }}>
                   <div style={{ fontWeight: 800, marginBottom: 10 }}>Exames — {pacienteSelecionado}</div>
@@ -524,9 +526,9 @@ function App() {
                         const corScore =
                           scoreMotor.scoreGeral >= 85 ? "#22c55e"
                             : scoreMotor.scoreGeral >= 70 ? "#84cc16"
-                            : scoreMotor.scoreGeral >= 50 ? "#facc15"
-                            : scoreMotor.scoreGeral >= 30 ? "#f97316"
-                            : "#ef4444";
+                              : scoreMotor.scoreGeral >= 50 ? "#facc15"
+                                : scoreMotor.scoreGeral >= 30 ? "#f97316"
+                                  : "#ef4444";
 
                         return (
                           <div

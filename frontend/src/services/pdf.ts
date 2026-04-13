@@ -1,6 +1,6 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import type { PlanoTerapeutico } from "../types/planoTerapeutico";
+import type { PlanoTerapeutico } from "../types/plano_terapeutico";
 
 // ============================================================
 // CONFIGURAÇÕES
@@ -9,9 +9,6 @@ import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 const PDF_CANVAS_SCALE = 2;
 const LIMITE_ITENS_RELATORIO = 40;
 const MAX_CHARS_POR_BLOCO = 4200;
-
-const LOGO_BIOSYNC_SRC = "/favicon.png";
-const LOGO_LUNARA_SRC = "/logo.jpeg";
 
 export type RelatorioData = {
   clientName: string;
@@ -30,13 +27,14 @@ export type RelatorioData = {
         performance?: string;
         hipertrofia?: string;
         emagrecimento?: string;
-        recuperacao?: string;
+        recuperacao?:   string;
         humor?: string;
       };
     }[];
   };
 
   plano_terapeutico?: PlanoTerapeutico;
+
   frequencia_lunara: string;
   justificativa: string;
   comparacao?: unknown;
@@ -78,7 +76,7 @@ function dividirTexto(texto: string, maxChars: number): string[] {
 }
 
 // ============================================================
-// CARREGAR IMAGEM COMO DATA URL (sem CORS / iframe)
+// LOGOS → data URL (sem iframe)
 // ============================================================
 
 function imagemParaDataURL(src: string): Promise<string> {
@@ -94,7 +92,6 @@ function imagemParaDataURL(src: string): Promise<string> {
       resolve(c.toDataURL("image/png"));
     };
     img.onerror = () => {
-      // Fallback: placeholder cinza
       const c = document.createElement("canvas");
       c.width = 76;
       c.height = 76;
@@ -125,32 +122,24 @@ function adicionarCabecalhoNoPDF(
   const pageW = pdf.internal.pageSize.getWidth();
   const MARGIN_X = 20;
   const logoSize = 38;
-
   const cabecalhoH = 48;
   const y = 10;
 
-  // Fundo da faixa do cabeçalho
   pdf.setFillColor(255, 255, 255);
   pdf.rect(MARGIN_X, y, pageW - MARGIN_X * 2, cabecalhoH);
   pdf.fill();
 
-  // Linha separadora
   pdf.setDrawColor(229, 231, 235);
   pdf.setLineWidth(0.5);
   pdf.line(MARGIN_X, y + cabecalhoH, pageW - MARGIN_X, y + cabecalhoH);
 
-  // Logo BioSync (esquerda)
   pdf.addImage(logoBiosyncData, "PNG", MARGIN_X + 4, y + 4, logoSize, logoSize);
-
-  // Logo Lunara (direita)
   pdf.addImage(logoLunaraData, "PNG", pageW - MARGIN_X - 4 - logoSize, y + 4, logoSize, logoSize);
 
-  // Título central
   pdf.setFont("helvetica", "bold", 14);
   pdf.setTextColor(17, 17, 17);
   pdf.text("Relatório Terapêutico Integrativo", pageW / 2, y + 18, { align: "center" });
 
-  // Subtítulo
   pdf.setFont("helvetica", "normal", 9);
   pdf.setTextColor(85, 85, 85);
   pdf.text(
@@ -164,7 +153,7 @@ function adicionarCabecalhoNoPDF(
 }
 
 // ============================================================
-// GRÁFICO DE COMPARAÇÃO (canvas nativo)
+// GRÁFICO DE COMPARAÇÃO (canvas nativo, sem html2canvas)
 // ============================================================
 
 function statusToNum(status: string | null | undefined): number {
@@ -188,7 +177,9 @@ function criarGraficoComparativoCanvas(
     evolucao: string;
   }[] = [];
 
-  for (const item of Array.isArray(c.melhoraram) ? c.melhoraram : []) {
+  for (const item of Array.isArray(c.melhoraram)
+    ? c.melhoraram
+    : []) {
     itens.push({
       item: String(item.item || ""),
       antes: statusToNum(item.antes),
@@ -264,8 +255,12 @@ function criarGraficoComparativoCanvas(
     const d = limitados[i];
     const xPos = ml + i * step;
     const yPos = mt + gh - ((d.antes - 1) / 2) * gh;
-    if (primeiro) { ctx.moveTo(xPos, yPos); primeiro = false; }
-    else ctx.lineTo(xPos, yPos);
+    if (primeiro) {
+      ctx.moveTo(xPos, yPos);
+      primeiro = false;
+    } else {
+      ctx.lineTo(xPos, yPos);
+    }
   }
   ctx.stroke();
   ctx.setLineDash([]);
@@ -274,12 +269,16 @@ function criarGraficoComparativoCanvas(
   ctx.lineWidth = 2;
   ctx.beginPath();
   primeiro = true;
-  for (let i = 0; i < n; i++) {
+  for (let  i = 0; i < n; i++) {
     const d = limitados[i];
     const xPos = ml + i * step;
     const yPos = mt + gh - ((d.depois - 1) / 2) * gh;
-    if (primeiro) { ctx.moveTo(xPos, yPos); primeiro = false; }
-    else ctx.lineTo(xPos, yPos);
+    if (primeiro) {
+      ctx.moveTo(xPos, yPos);
+      primeiro = false;
+    } else {
+      ctx.lineTo(xPos, yPos);
+    }
   }
   ctx.stroke();
 
@@ -293,10 +292,12 @@ function criarGraficoComparativoCanvas(
         : d.evolucao === "piora"
           ? "#dc2626"
           : "#6b7280";
+
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(xPos, yPos, 5, 0, Math.PI * 2);
     ctx.fill();
+
     ctx.fillStyle = cor;
     ctx.beginPath();
     ctx.arc(xPos, yPos, 3.5, 0, Math.PI * 2);
@@ -310,6 +311,7 @@ function criarGraficoComparativoCanvas(
     const xPos = ml + i * step;
     let label = limitados[i].item;
     if (label.length > 18) label = label.substring(0, 16) + "…";
+
     ctx.save();
     ctx.translate(xPos, mt + gh + 8);
     ctx.rotate(-Math.PI / 5);
@@ -346,6 +348,7 @@ function criarGraficoComparativoCanvas(
       ctx.arc(lx + 6, legY, 3, 0, Math.PI * 2);
       ctx.fill();
     }
+
     ctx.fillStyle = "#444";
     ctx.fillText(leg.label, lx + 16, legY);
     lx += ctx.measureText(leg.label).width + 28;
@@ -381,6 +384,8 @@ async function renderizarBlocoParaCanvas(
     useCORS: true,
     backgroundColor: "#ffffff",
     logging: false,
+    removeContainer: true,
+    allowTaint: true,
   });
 }
 
@@ -390,34 +395,62 @@ async function renderizarBlocoParaCanvas(
 
 function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
+
   const c = comparacao as Record<string, unknown>;
   const secoes: {
     titulo: string;
     cor: string;
     itens: any[];
   }[] = [
-    { titulo: "🟢 Melhoraram", cor: "#16a34a", itens: Array.isArray(c.melhoraram) ? c.melhoraram : [] },
-    { titulo: "🔴 Pioraram", cor: "#dc2626", itens: Array.isArray(c.pioraram) ? c.pioraram : [] },
-    { titulo: "🟡 Novos Problemas", cor: "#ca8a04", itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [] },
-    { titulo: "⚪ Normalizados", cor: "#6b7280", itens: Array.isArray(c.normalizados) ? c.normalizados : [] },
+    {
+      titulo: "🟢 Melhoraram",
+      cor: "#16a34a",
+      itens: Array.isArray(c.melhoraram) ? c.melhoraram : [],
+    },
+    {
+      titulo: "🔴 Pioraram",
+      cor: "#dc2626",
+      itens: Array.isArray(c.pioraram) ? c.pioraram : [],
+    },
+    {
+      titulo: "🟡 Novos Problemas",
+      cor: "#ca8a04",
+      itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [],
+    },
+    {
+      titulo: "⚪ Normalizados",
+      cor: "#6b7280",
+      itens: Array.isArray(c.normalizados) ? c.normalizados : [],
+    },
   ];
+
   const total = secoes.reduce((s, sec) => s + sec.itens.length, 0);
   if (total === 0) return "";
+
   const partes: string[] = [
     `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:10px">Evolução entre exames (${total} mudanças)</div>`,
   ];
+
   for (const secao of secoes) {
     if (secao.itens.length === 0) continue;
-    const linhas = secao.itens.slice(0, 10).map((item: any) => `
+    const linhas = secao.itens
+      .slice(0, 10)
+      .map((item: any) => `
       <div style="margin-bottom:4px">
         <b>${escapeHtml(item.item || "—")}</b>
-        <span style="color:${secao.cor}"> ${escapeHtml(item.evolucao || "")}</span>
+        <span style="color:${secao.cor}"> ${escapeHtml(
+          item.evolucao || ""
+        )}</span>
         <span style="font-size:10px;opacity:0.7">
-          ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois ? escapeHtml(String(item.depois)) : "—"}
+          ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois
+            ? escapeHtml(String(item.depois))
+            : "—"}
           ${item.variacao !== undefined ? ` | Δ${item.variacao}` : ""}
         </span>
       </div>
-    `).join("");
+    `)
+      .join("");
+
     partes.push(`
       <div style="margin-bottom:10px">
         <div style="font-weight:700;color:${secao.cor};margin-bottom:4px">${secao.titulo} (${secao.itens.length})</div>
@@ -425,6 +458,7 @@ function extrairComparativoHTML(comparacao: unknown): string {
       </div>
     `);
   }
+
   return partes.join("");
 }
 
@@ -442,6 +476,7 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   const linhas = Array.from(doc.querySelectorAll("tr"));
   const resultado: ItemExtraido[] = [];
   let sistemaAtual = "";
+
   for (const tr of linhas) {
     const tds = tr.querySelectorAll("td");
     if (tds.length < 4) continue;
@@ -459,7 +494,23 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
       conselho: tds[4]?.textContent?.trim() || "",
     });
   }
+
   return resultado;
+}
+
+function extrairRelatorioOriginalHTML(
+  meta: Record<string, unknown>,
+  _row: any
+): string | undefined {
+  if (
+    meta &&
+    typeof meta === "object" &&
+    "relatorio_original_html" in meta
+  ) {
+    const val = (meta as any).relatorio_original_html;
+    if (typeof val === "string" && val.length > 0) return val;
+  }
+  return undefined;
 }
 
 // ============================================================
@@ -472,10 +523,13 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
   if (data.interpretacao) {
     const pedacos = dividirTexto(data.interpretacao, MAX_CHARS_POR_BLOCO);
     for (let i = 0; i < pedacos.length; i++) {
-      const titulo = i === 0 ? "Interpretação" : "Interpretação (continuação)";
+      const titulo =
+        i === 0 ? "Interpretação" : "Interpretação (continuação)";
       blocos.push({
         html: `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px">${titulo}</div>
-               <div style="white-space:pre-wrap;color:#222;line-height:17px">${escapeHtml(pedacos[i])}</div>`,
+               <div style="white-space:pre-wrap;color:#222;line-height:17px">${escapeHtml(
+                 pedacos[i]
+               )}</div>`,
       });
     }
   }
@@ -488,7 +542,9 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
   if (data.pontos_criticos && data.pontos_criticos.length > 0) {
     const lista = data.pontos_criticos
       .slice(0, 15)
-      .map((p) => `<li style="margin-bottom:3px;color:#222">${escapeHtml(p)}</li>`)
+      .map((p) =>
+        `<li style="margin-bottom:3px;color:#222">${escapeHtml(p)}</li>`
+      )
       .join("");
     blocos.push({
       html: `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px">Pontos críticos</div><ul style="padding-left:18px;margin:0">${lista}</ul>`,
@@ -500,9 +556,17 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
       .map((t) => `
       <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
         <div style="font-weight:700;color:#111">${escapeHtml(t.nome)}</div>
-        <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(t.frequencia || "")}</div>
+        <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(
+          t.frequencia || ""
+        )}</div>
         <div style="color:#333">${escapeHtml(t.descricao || "")}</div>
-        ${t.justificativa ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(t.justificativa)}</div>` : ""}
+        ${
+          t.justificativa
+            ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(
+                t.justificativa
+              )}</div>`
+            : ""
+        }
       </div>
     `)
       .join("");
@@ -519,7 +583,9 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
         .map((i) => `
         <div style="margin-bottom:5px">
           <b>${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}</b><br/>
-          <span style="font-size:10px;color:#555">Normal: ${escapeHtml(i.normal || "—")} | Medido: ${escapeHtml(i.valor || "—")}</span>
+          <span style="font-size:10px;color:#555">Normal: ${escapeHtml(
+            i.normal || "—"
+          )} | Medido: ${escapeHtml(i.valor || "—")}</span>
         </div>
       `)
         .join("");
@@ -532,12 +598,16 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
   const extras: string[] = [];
   if (data.frequencia_lunara) {
     extras.push(
-      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Frequência Lunara</div><div style="color:#333;margin-bottom:12px">${escapeHtml(data.frequencia_lunara)}</div>`
+      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Frequência Lunara</div><div style="color:#333;margin-bottom:12px">${escapeHtml(
+        data.frequencia_lunara
+      )}</div>`
     );
   }
   if (data.justificativa) {
     extras.push(
-      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Justificativa terapêutica</div><div style="color:#333">${escapeHtml(data.justificativa)}</div>`
+      `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px">Justificativa terapêutica</div><div style="color:#333">${escapeHtml(
+        data.justificativa
+      )}</div>`
     );
   }
   if (extras.length) {
@@ -552,7 +622,7 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
 // ============================================================
 
 export async function gerarRelatorioPDF(data: RelatorioData) {
-  const pdf = new jsPDF({ unit: "pt", format: "a4" });
+  const pdf = jsPDF({ unit: "pt", format: "a4" });
 
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
@@ -563,26 +633,26 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   const CABECALHO_H = 54;
   const maxY = RODAPE_Y - CABECALHO_H - GAP;
 
-  // 1. Carregar logos como data URLs (sem html2canvas)
+  // 1. Carregar logos como data URLs
   const [logoBiosyncData, logoLunaraData] = await Promise.all([
-    imagemParaDataURL(LOGO_BIOSYNC_SRC),
-    imagemParaDataURL(LOGO_LUNARA_SRC),
+    imagemParaDataURL("/favicon.png"),
+    imagemParaDataURL("/logo.jpeg"),
   ]);
 
-  // 2. Pré-renderizar gráfico (canvas puro, sem imagens — seguro)
+  // 2. Pré-renderizar gráfico (canvas puro, sem html2canvas)
   const graficoCanvas = criarGraficoComparativoCanvas(data.comparacao);
 
-  // 3. Gerar blocos de conteúdo (só texto — seguro para html2canvas)
+  // 3. Gerar blocos de conteúdo (só texto)
   const blocosHTML = gerarBlocosConteudo(data);
 
-  // 4. Renderizar blocos como canvas
+  // 4. Renderizar blocos como canvas (com removeContainer + allowTaint)
   const blocosCanvas = await Promise.all(
     blocosHTML.map((b) =>
       renderizarBlocoParaCanvas(criarBlocoHTML(b.html), PDF_CANVAS_SCALE)
     )
   );
 
-  // 5. Estado
+  // 5. Estado da página
   let currentY = CABECALHO_H;
   let paginaAtual = 0;
 
