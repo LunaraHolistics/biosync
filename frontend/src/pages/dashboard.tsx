@@ -14,6 +14,9 @@ import {
   gerarComparativoInteligente,
   calcularScoreGeral,
   extrairItensAlterados,
+  decodificarMojibake,
+  normalizarTexto,
+  parsearPaciente,
   type AnaliseCompleta,
 } from "../lib/motorSemantico";
 
@@ -76,15 +79,22 @@ export default function Dashboard() {
     return analise;
   }
 
-  function formatarPaciente(texto: string) {
-    return texto
+  // 🔥 EXTRAIR NOME LIMPO (robusto contra mojibake e variações)
+  function extrairNomeLimpo(nomePaciente: string): string {
+    const decodificado = decodificarMojibake(nomePaciente);
+    const normalizado = normalizarTexto(decodificado);
+    const nome = normalizado.split("sexo")[0].trim();
+    return nome;
+  }
+
+  // 🔥 FORMATAR INFORMAÇÕES DO PACIENTE (com decodificação)
+  function formatarPaciente(texto: string): string {
+    const limpo = decodificarMojibake(texto);
+    return limpo
       .replace(/Sexo:/g, "\nSexo: ")
       .replace(/Idade:/g, "\nIdade: ")
       .replace(/Figura:/g, "\nFigura: ")
-      .replace(
-        /Per[ií]odo do teste:/g,
-        "\nPeríodo do teste: "
-      );
+      .replace(/Per[iíÃ­]odo do teste:/g, "\nPeríodo do teste: ");
   }
 
   function calcularScore(exame: ExameRow) {
@@ -108,12 +118,15 @@ export default function Dashboard() {
     return "Estável";
   }
 
+  // 🔥 AGRUPAMENTO ROBUSTO (normaliza antes de agrupar)
   const examesPorPaciente = useMemo(() => {
     const grupos: Record<string, ExameRow[]> = {};
 
     exames.forEach((exame) => {
       const raw = exame.nome_paciente || "Sem nome";
-      const nome = String(raw).split("Sexo")[0].trim();
+      const nome = extrairNomeLimpo(raw);
+
+      if (!nome) return;
 
       if (!grupos[nome]) grupos[nome] = [];
       grupos[nome].push(exame);
@@ -192,8 +205,8 @@ export default function Dashboard() {
               new Date(a.data_exame).getTime()
           );
 
-          const infoCompleta =
-            lista[0]?.nome_paciente || "";
+          const infoCompleta = lista[0]?.nome_paciente || "";
+          const paciente = parsearPaciente(infoCompleta);
 
           return (
             <div
@@ -206,7 +219,7 @@ export default function Dashboard() {
                 border: "1px solid #1e293b",
               }}
             >
-              {/* HEADER ORIGINAL PRESERVADO */}
+              {/* 🔥 HEADER MELHORADO — dados separados */}
               <div style={{ marginBottom: 12 }}>
                 <div
                   style={{
@@ -215,23 +228,66 @@ export default function Dashboard() {
                     fontSize: 16,
                   }}
                 >
-                  {nomePaciente}
+                  {paciente.nome || nomePaciente}
                 </div>
 
                 <div
                   style={{
-                    fontSize: 13,
-                    opacity: 0.8,
-                    marginTop: 4,
-                    lineHeight: "18px",
+                    display: "flex",
+                    gap: 12,
+                    marginTop: 6,
+                    flexWrap: "wrap",
                   }}
                 >
-                  {formatarPaciente(infoCompleta)
-                    .split("\n")
-                    .slice(1)
-                    .map((linha, i) => (
-                      <div key={i}>{linha}</div>
-                    ))}
+                  {paciente.sexo && (
+                    <span
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.8,
+                        background: "#1e293b",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      {paciente.sexo}
+                    </span>
+                  )}
+                  {paciente.idade && (
+                    <span
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.8,
+                        background: "#1e293b",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      {paciente.idade} anos
+                    </span>
+                  )}
+                  {paciente.figura && (
+                    <span
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.8,
+                        background: "#1e293b",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      {paciente.figura}
+                    </span>
+                  )}
+                  {paciente.periodoTeste && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.6,
+                      }}
+                    >
+                      Teste: {paciente.periodoTeste}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -267,7 +323,7 @@ export default function Dashboard() {
                       marginTop: 16,
                     }}
                   >
-                    {/* timeline ORIGINAL */}
+                    {/* timeline */}
                     <div
                       style={{
                         display: "flex",
@@ -300,7 +356,7 @@ export default function Dashboard() {
                       )}
                     </div>
 
-                    {/* card ORIGINAL */}
+                    {/* card */}
                     <div
                       style={{
                         background: "#1e293b",
@@ -384,18 +440,16 @@ export default function Dashboard() {
       {selecionado && (() => {
         const analise = obterAnalise(selecionado);
 
-        const nomeBase = String(
+        const nomeBase = extrairNomeLimpo(
           selecionado.nome_paciente || ""
-        )
-          .split("Sexo")[0]
-          .trim();
+        );
 
         const examesPaciente = exames
           .filter(
             (e) =>
-              String(e.nome_paciente || "")
-                .split("Sexo")[0]
-                .trim() === nomeBase
+              extrairNomeLimpo(
+                e.nome_paciente || ""
+              ) === nomeBase
           )
           .sort(
             (a, b) =>
@@ -403,7 +457,6 @@ export default function Dashboard() {
               new Date(b.data_exame).getTime()
           );
 
-        // 🔥 COMPARATIVO INTELIGENTE (não usa mais analise_ia)
         const comparativo =
           gerarComparativoInteligente(examesPaciente);
 
@@ -418,8 +471,7 @@ export default function Dashboard() {
             }}
           >
             <h3>
-              Detalhes —{" "}
-              {analise.paciente.nome}
+              Detalhes — {analise.paciente.nome}
             </h3>
 
             <div
