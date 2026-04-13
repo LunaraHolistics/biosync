@@ -87,16 +87,6 @@ export default function Dashboard() {
     return nome;
   }
 
-  // 🔥 FORMATAR INFORMAÇÕES DO PACIENTE (com decodificação)
-  function formatarPaciente(texto: string): string {
-    const limpo = decodificarMojibake(texto);
-    return limpo
-      .replace(/Sexo:/g, "\nSexo: ")
-      .replace(/Idade:/g, "\nIdade: ")
-      .replace(/Figura:/g, "\nFigura: ")
-      .replace(/Per[iíÃ­]odo do teste:/g, "\nPeríodo do teste: ");
-  }
-
   function calcularScore(exame: ExameRow) {
     const itens = extrairItensAlterados(
       exame.resultado_json
@@ -219,7 +209,7 @@ export default function Dashboard() {
                 border: "1px solid #1e293b",
               }}
             >
-              {/* 🔥 HEADER MELHORADO — dados separados */}
+              {/* 🔥 HEADER COM BADGES SEPARADOS */}
               <div style={{ marginBottom: 12 }}>
                 <div
                   style={{
