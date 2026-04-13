@@ -1,7 +1,6 @@
 // ============================================================
-// MOTOR SEMÂNTICO BIOSYNC
+// MOTOR SEMÂNTICO BIOSYNC v2
 // Arquivo: Frontend/src/lib/motorSemantico.ts
-// Responsável: Análise inteligente sem dependência de analise_ia
 // ============================================================
 
 import type {
@@ -92,30 +91,12 @@ export function decodificarMojibake(texto: string): string {
 // ==============================
 
 const ACCENT_MAP: Record<string, string> = {
-  á: "a",
-  à: "a",
-  ã: "a",
-  â: "a",
-  ä: "a",
-  é: "e",
-  è: "e",
-  ê: "e",
-  ë: "e",
-  í: "i",
-  ì: "i",
-  î: "i",
-  ï: "i",
-  ó: "o",
-  ò: "o",
-  õ: "o",
-  ô: "o",
-  ö: "o",
-  ú: "u",
-  ù: "u",
-  û: "u",
-  ü: "u",
-  ç: "c",
-  ñ: "n",
+  á: "a", à: "a", ã: "a", â: "a", ä: "a",
+  é: "e", è: "e", ê: "e", ë: "e",
+  í: "i", ì: "i", î: "i", ï: "i",
+  ó: "o", ò: "o", õ: "o", ô: "o", ö: "o",
+  ú: "u", ù: "u", û: "u", ü: "u",
+  ç: "c", ñ: "n",
 };
 
 function removerAcentos(texto: string): string {
@@ -200,15 +181,19 @@ function classificarGravidade(resultado: string): {
 }
 
 // ==============================
-// 5. EXTRATOR DE ITENS ALTERADOS
+// 5. EXTRATOR DE ITENS ALTERADOS (CORRIGIDO)
 // ==============================
 
+// 🔥 Agora decodifica mojibake ANTES de classificar
 function ehNormal(resultado: string): boolean {
-  const lower = resultado.toLowerCase().trim();
+  const decodificado = decodificarMojibake(resultado);
+  const lower = decodificado.toLowerCase().trim();
+
   return (
     lower === "normal(-)" ||
     lower === "normal" ||
-    lower === "escopo de saúde"
+    lower === "escopo de saúde" ||
+    lower === "escopo de saude"
   );
 }
 
@@ -239,10 +224,16 @@ export function extrairItensAlterados(
     const resultados = bloco.resultados ?? [];
     for (const r of resultados) {
       if (!r.item || !r.resultado) continue;
-      if (ehNormal(r.resultado)) continue;
+
+      // 🔥 Decodifica ANTES de verificar se é normal
+      const resultadoDecodificado = decodificarMojibake(
+        String(r.resultado)
+      );
+
+      if (ehNormal(resultadoDecodificado)) continue;
 
       const { gravidade, score: scoreGravidade } =
-        classificarGravidade(r.resultado);
+        classificarGravidade(resultadoDecodificado);
       const itemDecodificado = decodificarMojibake(
         String(r.item)
       );
@@ -254,9 +245,7 @@ export function extrairItensAlterados(
         ),
         valor: String(r.valor ?? ""),
         intervalo: String(r.intervalo ?? ""),
-        resultadoOriginal: decodificarMojibake(
-          String(r.resultado)
-        ),
+        resultadoOriginal: resultadoDecodificado,
         gravidade,
         scoreGravidade,
       });
@@ -307,13 +296,13 @@ function buscarMatches(
   const baseNormalizada = base.map((b) => ({
     ...b,
     itemNorm: normalizarTexto(
-      decodificarMojibake(b.item)
+      decodificarMojibake(b.item ?? "")
     ),
     descNorm: normalizarTexto(
-      decodificarMojibake(b.descricao_tecnica)
+      decodificarMojibake(b.descricao_tecnica ?? "")
     ),
     impactoNorm: normalizarTexto(
-      decodificarMojibake(b.impacto ?? "")
+      decodificarMojibave(b.impacto ?? "")
     ),
   }));
 
@@ -322,6 +311,8 @@ function buscarMatches(
     let melhorScore = 0;
 
     for (const b of baseNormalizada) {
+      if (!b.itemNorm) continue;
+
       const scoreItem = calcularSimilaridade(
         item.itemNormalizado,
         b.itemNorm
@@ -337,21 +328,7 @@ function buscarMatches(
         ? 60
         : 0;
 
-      const scoreImpacto = item.itemNormalizado
-        .split(" ")
-        .some(
-          (palavra) =>
-            palavra.length > 3 &&
-            b.impactoNorm.includes(palavra)
-        )
-        ? 40
-        : 0;
-
-      const scoreFinal = Math.max(
-        scoreItem,
-        scoreDesc,
-        scoreImpacto
-      );
+      const scoreFinal = Math.max(scoreItem, scoreDesc);
 
       if (
         scoreFinal > melhorScore &&
@@ -361,11 +338,11 @@ function buscarMatches(
         melhorMatch = {
           itemExame: item.item,
           itemBase: b.item,
-          categoria: b.categoria,
-          descricaoTecnica: b.descricao_tecnica,
-          impacto: b.impacto ?? "",
+          categoria: b.categoria || "Outros",
+          descricaoTecnica: b.descricao_tecnica || "",
+          impacto: b.impacto || "",
           setores: (b.setores ?? []).map((s) =>
-            s.toLowerCase()
+            normalizarTexto(s)
           ),
           scoreConfianca: scoreFinal,
           gravidade: item.gravidade,
@@ -384,22 +361,8 @@ function buscarMatches(
 }
 
 // ==============================
-// 7. GERADOR DE INTERPRETAÇÃO
+// 7. GERADOR DE INTERPRETAÇÃO (REORGANIZADO)
 // ==============================
-
-function agruparPorCategoria(
-  matches: MatchClinico[]
-): Record<string, MatchClinico[]> {
-  const grupos: Record<string, MatchClinico[]> = {};
-
-  for (const m of matches) {
-    const cat = m.categoria || "Outros";
-    if (!grupos[cat]) grupos[cat] = [];
-    grupos[cat].push(m);
-  }
-
-  return grupos;
-}
 
 function gerarInterpretacao(
   matches: MatchClinico[],
@@ -412,9 +375,36 @@ function gerarInterpretacao(
     return "Exame dentro dos parâmetros de normalidade. Nenhum desvio significativo identificado.";
   }
 
-  const grupos = agruparPorCategoria(matches);
+  // 🔥 Agrupar por categoria REAL (não jogar tudo em "Outros")
+  const grupos: Record<string, MatchClinico[]> = {};
+  const outros: MatchClinico[] = [];
+
+  for (const m of matches) {
+    const cat = m.categoria;
+    if (!cat || cat === "Outros" || cat === "outros") {
+      outros.push(m);
+    } else {
+      if (!grupos[cat]) grupos[cat] = [];
+      grupos[cat].push(m);
+    }
+  }
+
   const secoes: string[] = [];
 
+  // Resumo inicial
+  const totalItens = itensAlterados.length;
+  const criticos = itensAlterados.filter(
+    (i) => i.scoreGravidade >= 3
+  ).length;
+  const leves = totalItens - criticos;
+
+  if (totalItens > 0) {
+    secoes.push(
+      `Foram identificados ${totalItens} itens alterados (${criticos} de maior relevância e ${leves} de menor relevância).`
+    );
+  }
+
+  // 🔥 Cada categoria vir um bloco separado e conciso
   for (const [categoria, itens] of Object.entries(
     grupos
   )) {
@@ -429,61 +419,84 @@ function gerarInterpretacao(
         i.gravidade === "reducao"
     );
 
-    let texto = `**${categoria}**\n`;
+    let texto = `${categoria.toUpperCase()}\n`;
 
     if (criticos.length > 0) {
-      texto += `Alerta: ${criticos
+      texto += `• Alerta: ${criticos
+        .slice(0, 5)
         .map((c) => c.itemBase)
-        .join(", ")}. `;
-      texto += criticos
-        .map(
-          (c) => c.impacto || c.descricaoTecnica
-        )
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      texto += "\n";
+        .join(", ")}`;
+
+      if (criticos.length > 5) {
+        texto += ` e mais ${criticos.length - 5}`;
+      }
+      texto += ".\n";
     }
 
     if (leves.length > 0) {
-      texto += `Observar: ${leves
+      texto += `• Observar: ${leves
+        .slice(0, 5)
         .map((l) => l.itemBase)
-        .join(", ")}. `;
+        .join(", ")}`;
+
+      if (leves.length > 5) {
+        texto += ` e mais ${leves.length - 5}`;
+      }
+      texto += ".\n";
     }
 
     secoes.push(texto);
   }
 
+  // "Outros" de forma resumida
+  if (outros.length > 0) {
+    const criticosOutros = outros.filter(
+      (i) =>
+        i.gravidade === "moderada" ||
+        i.gravidade === "critica"
+    );
+
+    if (criticosOutros.length > 0) {
+      secoes.push(
+        `OUTROS SISTEMAS\n• Itens relevantes: ${criticosOutros
+          .slice(0, 8)
+          .map((o) => o.itemBase)
+          .join(", ")}.`
+      );
+    }
+  }
+
+  // Itens sem match
   const semMatch = itensAlterados.filter(
     (ia) =>
-      !matches.some(
-        (m) => m.itemExame === ia.item
-      )
+      !matches.some((m) => m.itemExame === ia.item)
   );
 
   if (semMatch.length > 0) {
-    secoes.push(
-      `**Itens alterados sem correlação na base clínica**\n${semMatch
-        .map(
-          (s) =>
-            `${s.item} (${s.resultadoOriginal})`
-        )
-        .join(", ")}.`
+    const criticosSem = semMatch.filter(
+      (s) => s.scoreGravidade >= 3
     );
+    const levesSem = semMatch.filter(
+      (s) => s.scoreGravidade < 3
+    );
+
+    let txt = "ITENS SEM CORRELAÇÃO NA BASE CLÍNICA\n";
+    if (criticosSem.length > 0) {
+      txt += `• Relevante: ${criticosSem
+        .slice(0, 6)
+        .map((s) => s.item)
+        .join(", ")}.`;
+    }
+    if (levesSem.length > 0) {
+      txt += `\n• Leves: ${levesSem
+        .slice(0, 6)
+        .map((s) => s.item)
+        .join(", ")}.`;
+    }
+    secoes.push(txt);
   }
 
-  const totalItens = itensAlterados.length;
-  const criticos = itensAlterados.filter(
-    (i) => i.scoreGravidade >= 3
-  ).length;
-  const leves = totalItens - criticos;
-
-  const resumo =
-    totalItens > 0
-      ? `Foram identificados ${totalItens} itens alterados (${criticos} de maior relevância e ${leves} de menor relevância).\n\n`
-      : "";
-
-  return resumo + secoes.join("\n\n");
+  return secoes.join("\n\n");
 }
 
 // ==============================
@@ -496,18 +509,24 @@ function gerarPontosCriticos(
 ): string[] {
   const pontos: string[] = [];
 
-  const comImpacto = matches.filter(
-    (m) => m.impacto
-  );
+  // Priorizar matches com impacto
+  const comImpacto = matches
+    .filter((m) => m.impacto)
+    .sort((a, b) => {
+      const pa = a.gravidade === "moderada" || a.gravidade === "critica" ? 1 : 0;
+      const pb = b.gravidade === "moderada" || b.gravidade === "critica" ? 1 : 0;
+      return pb - pa;
+    });
+
   for (const m of comImpacto.slice(0, 8)) {
     pontos.push(`${m.itemBase}: ${m.impacto}`);
   }
 
+  // Itens sem match
   const semMatch = itensAlterados.filter(
     (ia) =>
-      !matches.some(
-        (m) => m.itemExame === ia.item
-      )
+      !matches.some((m) => m.itemExame === ia.item) &&
+      ia.scoreGravidade >= 2
   );
   for (const s of semMatch.slice(0, 4)) {
     pontos.push(
@@ -519,13 +538,14 @@ function gerarPontosCriticos(
 }
 
 // ==============================
-// 9. SUGESTOR DE TERAPIAS
+// 9. SUGESTOR DE TERAPIAS (CORRIGIDO)
 // ==============================
 
 function sugerirTerapias(
   matches: MatchClinico[],
   terapias: TerapiaRow[]
 ): TerapiaSugerida[] {
+  // 🔥 Coletar TODOS os setores dos itens alterados (não só dos matches)
   const setoresComPeso = new Map<string, number>();
 
   for (const m of matches) {
@@ -536,11 +556,18 @@ function sugerirTerapias(
           ? 3
           : 1;
     for (const s of m.setores) {
-      setoresComPeso.set(
+      if (s) setoresComPeso.set(
         s,
         (setoresComPeso.get(s) ?? 0) + peso
       );
     }
+  }
+
+  // 🔥 Se não achou nada pelos matches, usar setores genéricos
+  if (setoresComPeso.size === 0) {
+    setoresComPeso.set("fisico", 2);
+    setoresComPeso.set("mental", 1);
+    setoresComPeso.set("emocional", 1);
   }
 
   const resultados: TerapiaSugerida[] = [];
@@ -548,13 +575,15 @@ function sugerirTerapias(
   for (const terapia of terapias) {
     if (!terapia.ativo) continue;
 
-    const tagsNorm = (terapia.tags ?? []).map((t) =>
-      normalizarTexto(t)
+    // 🔥 Normalizar tudo para comparação
+    const tagsNorm = new Set(
+      (terapia.tags ?? []).map((t) => normalizarTexto(t))
     );
-    const setoresNorm = (
-      terapia.setores_alvo ?? []
-    ).map((s) => normalizarTexto(s));
+    const setoresNorm = new Set(
+      (terapia.setores_alvo ?? []).map((s) => normalizarTexto(s))
+    );
 
+    // Combinar tags + setores como alvos
     const alvos = new Set([...tagsNorm, ...setoresNorm]);
 
     let scoreTotal = 0;
@@ -563,20 +592,24 @@ function sugerirTerapias(
     for (const [setor, peso] of setoresComPeso.entries()) {
       const setorNorm = normalizarTexto(setor);
 
+      // Match exato
       if (alvos.has(setorNorm)) {
         scoreTotal += peso;
         motivos.push(setor);
+        continue;
       }
 
+      // Match parcial (substring)
       for (const alvo of alvos) {
         if (
-          alvo.includes(setorNorm) ||
-          setorNorm.includes(alvo)
+          alvo.length > 3 &&
+          (alvo.includes(setorNorm) || setorNorm.includes(alvo))
         ) {
           if (!motivos.includes(setor)) {
             scoreTotal += Math.round(peso * 0.7);
             motivos.push(setor);
           }
+          break;
         }
       }
     }
@@ -588,6 +621,19 @@ function sugerirTerapias(
         motivos: [...new Set(motivos)],
       });
     }
+  }
+
+  // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
+  if (resultados.length === 0) {
+    return terapias
+      .filter((t) => t.ativo)
+      .sort((a, b) => (a.prioridade ?? 99) - (b.prioridade ?? 99))
+      .slice(0, 5)
+      .map((t) => ({
+        ...t,
+        scoreRelevancia: 1,
+        motivos: ["recomendação geral"],
+      }));
   }
 
   return resultados
@@ -760,11 +806,19 @@ export type ComparativoInteligente = {
   normalizados: ItemComparativo[];
 };
 
+const COMPARATIVO_VAZIO: ComparativoInteligente = {
+  melhoraram: [],
+  pioraram: [],
+  novos_problemas: [],
+  normalizados: [],
+};
+
 function classificarStatus(
   resultado: string
 ): "baixo" | "normal" | "alto" | null {
-  const lower = resultado.toLowerCase();
-  if (ehNormal(resultado)) return "normal";
+  const decodificado = decodificarMojibake(resultado);
+  const lower = decodificado.toLowerCase();
+  if (ehNormal(decodificado)) return "normal";
   if (lower.includes("redu")) return "baixo";
   if (lower.includes("anormal")) return "alto";
   return null;
@@ -773,14 +827,14 @@ function classificarStatus(
 export function gerarComparativoInteligente(
   exames: ExameRow[]
 ): ComparativoInteligente {
+  if (exames.length < 2) return COMPARATIVO_VAZIO;
+
   const resultado: ComparativoInteligente = {
     melhoraram: [],
     pioraram: [],
     novos_problemas: [],
     normalizados: [],
   };
-
-  if (exames.length < 2) return resultado;
 
   const anterior = exames[exames.length - 2];
   const atual = exames[exames.length - 1];
@@ -802,6 +856,7 @@ export function gerarComparativoInteligente(
     mapaDepois.set(id.itemNormalizado, id);
   }
 
+  // Normalizados: estava alterado antes, não está mais
   for (const [key, itemAntes] of mapaAntes) {
     if (!mapaDepois.has(key)) {
       resultado.normalizados.push({

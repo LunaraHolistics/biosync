@@ -38,7 +38,7 @@ type DiagnosticoPdf = {
 };
 
 // ==============================
-// HELPERS LEGADOS (mantidos para PDF)
+// HELPERS LEGADOS
 // ==============================
 
 function resultadoMeta(row: ExameRow): Record<string, unknown> {
@@ -50,17 +50,13 @@ function resultadoMeta(row: ExameRow): Record<string, unknown> {
 
 function toDiagnostico(value: unknown): DiagnosticoPdf | undefined {
   if (!value || typeof value !== "object") return undefined;
-
   const obj = value as { problemas?: unknown };
-
   if (!Array.isArray(obj.problemas)) return undefined;
 
   const problemas = obj.problemas.filter(
     (p): p is DiagnosticoPdf["problemas"][number] => {
       if (!p || typeof p !== "object") return false;
-
       const item = p as Record<string, unknown>;
-
       return (
         typeof item.sistema === "string" &&
         typeof item.item === "string" &&
@@ -75,16 +71,9 @@ function toDiagnostico(value: unknown): DiagnosticoPdf | undefined {
 
 function toComparacao(value: unknown): any {
   if (!value || typeof value !== "object") {
-    return {
-      melhoraram: [],
-      pioraram: [],
-      novos_problemas: [],
-      normalizados: [],
-    };
+    return { melhoraram: [], pioraram: [], novos_problemas: [], normalizados: [] };
   }
-
   const obj = value as Record<string, unknown>;
-
   return {
     melhoraram: Array.isArray(obj.melhoraram) ? obj.melhoraram : [],
     pioraram: Array.isArray(obj.pioraram) ? obj.pioraram : [],
@@ -99,7 +88,6 @@ function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): strin
   return "Mensal";
 }
 
-// Fallback vazio para o comparativo
 const COMPARATIVO_VAZIO = {
   melhoraram: [],
   pioraram: [],
@@ -108,60 +96,100 @@ const COMPARATIVO_VAZIO = {
 };
 
 // ==============================
-// SEÇÃO PLANO TERAPÊUTICO (mantida)
+// SEÇÃO PLANO TERAPÊUTICO
 // ==============================
 
-function SecaoPlanoTerapeutico({ data }: { data: AiStructuredData }) {
+function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel }: {
+  data: AiStructuredData;
+  editavel?: string;
+  onChangeEditavel?: (v: string) => void;
+}) {
   const p = data.plano_terapeutico;
-  if (!p?.terapias?.length) {
+
+  if (!p?.terapias?.length && !editavel) {
     return (
       <div>
         <div style={{ fontWeight: 900, marginBottom: 6 }}>PLANO TERAPÊUTICO</div>
-        <div style={{ opacity: 0.8 }}>Nenhuma terapia sugerida neste exame.</div>
+        <div style={{ opacity: 0.8 }}>Nenhuma terapia sugerida automaticamente.</div>
       </div>
     );
   }
+
   return (
     <div>
       <div style={{ fontWeight: 900, marginBottom: 6 }}>PLANO TERAPÊUTICO</div>
-      <div style={{ marginBottom: 10, fontSize: 14 }}>
-        <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {p.terapias.map((item, i: number) => (
-          <div
-            key={i}
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              padding: 10,
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
-            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
-              <b>Frequência:</b> {item.frequencia || "—"}
-            </div>
-            <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
-              {item.descricao || "—"}
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>
-              <b>Justificativa:</b> {item.justificativa || "—"}
-            </div>
+
+      {p.terapias.length > 0 && (
+        <>
+          <div style={{ marginBottom: 10, fontSize: 14 }}>
+            <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
           </div>
-        ))}
-      </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {p.terapias.map((item, i: number) => (
+              <div
+                key={i}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  padding: 10,
+                }}
+              >
+                <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
+                <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
+                  <b>Frequência:</b> {item.frequencia || "—"}
+                </div>
+                <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
+                  {item.descricao || "—"}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>
+                  <b>Justificativa:</b> {item.justificativa || "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* 🔥 Campo editável para terapias manuais */}
+      {onChangeEditavel && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
+            Adicionar/Editar terapias manualmente (será incluído no PDF):
+          </div>
+          <textarea
+            value={editavel}
+            onChange={(e) => onChangeEditavel(e.target.value)}
+            placeholder="Ex: Acupuntura — Semanal — Para dor e inflamação crônica...
+Ozonioterapia — Quinzenal — Para oxigenação tecidual..."
+            style={{
+              width: "100%",
+              minHeight: 100,
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "transparent",
+              color: "inherit",
+              fontSize: 13,
+              lineHeight: "18px",
+              resize: "vertical",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 // ==============================
-// 🔥 CONVERSÃO: Motor Novo → AiStructuredData
+// CONVERSÃO: Motor Novo → AiStructuredData
 // ==============================
 
 function exameRowToAiData(
   row: ExameRow,
   base: BaseAnaliseSaudeRow[],
-  terapias: TerapiaRow[]
+  terapias: TerapiaRow[],
+  terapiasManuais?: string
 ): AiStructuredData {
   const analise = gerarAnaliseCompleta(row, base, terapias);
 
@@ -170,19 +198,31 @@ function exameRowToAiData(
     frequencia: t.frequencia_recomendada || "Conforme necessidade",
     descricao: t.descricao || t.indicacoes || "",
     justificativa: t.motivos?.length
-      ? `Setores correlacionados: ${t.motivos.join(", ")}. ${t.indicacoes || ""}`
+      ? `Setores: ${t.motivos.join(", ")}. ${t.indicacoes || ""}`
       : t.indicacoes || "",
   }));
+
+  // 🔥 Converter terapias manuais do textarea
+  if (terapiasManuais && terapiasManuais.trim()) {
+    const linhas = terapiasManuais
+      .split("\n")
+      .filter((l) => l.trim().length > 0);
+
+    for (const linha of linhas) {
+      const partes = linha.split("—").map((s) => s.trim());
+      terapiasFormatadas.push({
+        nome: partes[0] || "Terapia",
+        frequencia: partes[1] || "",
+        descricao: partes.slice(2).join(" — ") || "",
+        justificativa: "Adicionada manualmente pelo profissional.",
+      });
+    }
+  }
 
   const ia = row.analise_ia;
   const frequencia_lunara =
     typeof ia === "object" && ia && "frequencia_lunara" in ia
       ? String((ia as any).frequencia_lunara || "")
-      : "";
-
-  const justificativaLegado =
-    typeof ia === "object" && ia && "justificativa" in ia
-      ? String((ia as any).justificativa || "")
       : "";
 
   return {
@@ -193,26 +233,15 @@ function exameRowToAiData(
       terapias: terapiasFormatadas,
     },
     frequencia_lunara: frequencia_lunara,
-    justificativa: justificativaLegado || `Score geral: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores afetados: ${analise.setoresAfetados.join(", ") || "nenhum"}.`,
+    justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ") || "nenhum"}.`,
   };
 }
 
 function exameTemConteudoParaPdf(row: ExameRow): boolean {
+  if (row.resultado_json) return true;
   if (row.pontos_criticos && row.pontos_criticos.length > 0) return true;
-
-  const meta = resultadoMeta(row);
-  const plano = parsePlanoTerapeutico(meta.plano_terapeutico);
-
-  if (plano && plano.terapias.length > 0) return true;
-
-  if (row.analise_ia == null) return false;
-
-  if (typeof row.analise_ia === "object") return true;
-
-  return (
-    typeof row.analise_ia === "string" &&
-    String(row.analise_ia).trim().length > 0
-  );
+  if (row.analise_ia != null) return true;
+  return false;
 }
 
 function getRelatorioOriginal(
@@ -221,9 +250,7 @@ function getRelatorioOriginal(
 ): string | undefined {
   if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
     const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string" && val.length > 0) {
-      return val;
-    }
+    if (typeof val === "string" && val.length > 0) return val;
   }
   return undefined;
 }
@@ -239,19 +266,13 @@ function buildRelatorioData(
   return {
     clientName: paciente || "Cliente",
     createdAt: new Date(row.data_exame || row.created_at),
-
     interpretacao: data.interpretacao || "",
     pontos_criticos: data.pontos_criticos ?? [],
-
     plano_terapeutico: data.plano_terapeutico,
-
     frequencia_lunara: data.frequencia_lunara || "",
     justificativa: data.justificativa || "",
-
     diagnostico: toDiagnostico(meta.diagnostico),
-
     comparacao,
-
     relatorio_original_html: getRelatorioOriginal(meta, row),
   };
 }
@@ -279,6 +300,9 @@ function App() {
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
 
+  // 🔥 NOVO: campo editável de terapias
+  const [terapiasEditavel, setTerapiasEditavel] = useState("");
+
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
@@ -300,21 +324,20 @@ function App() {
     return analise;
   }
 
-  const analiseSelecionadaData = analiseSelecionada
-    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias)
-    : null;
-
   const comparativoExamesData = useMemo(() => {
     if (examesPaciente.length < 2) return null;
-
     const ordenados = [...examesPaciente].sort(
       (a, b) =>
         new Date(b.data_exame || b.created_at).getTime() -
         new Date(a.data_exame || a.created_at).getTime()
     );
-
     return gerarComparativoInteligente(ordenados);
   }, [examesPaciente]);
+
+  // 🔥 Dados com terapias manuais incluídas
+  const analiseSelecionadaData = analiseSelecionada
+    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
+    : null;
 
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
@@ -327,17 +350,13 @@ function App() {
           frequencia_lunara: "",
           justificativa: "",
         },
-        toComparacao(comparativoExamesData)
+        comparativoExamesData
       )
     : null;
 
   const relatorioData =
     analiseSelecionada && analiseSelecionadaData
-      ? buildRelatorioData(
-          analiseSelecionada,
-          clientName || "Cliente",
-          analiseSelecionadaData
-        )
+      ? buildRelatorioData(analiseSelecionada, clientName || "Cliente", analiseSelecionadaData)
       : null;
 
   useEffect(() => {
@@ -357,13 +376,11 @@ function App() {
 
   async function buscarUltimaAnalise() {
     setError(null);
-
     const nome = clientName.trim();
     if (!nome) {
       setError("Informe o nome do paciente.");
       return;
     }
-
     setLoading(true);
     try {
       const list = await listarExamesPorPaciente(nome);
@@ -371,11 +388,11 @@ function App() {
         setError("Nenhuma análise encontrada para este paciente.");
         return;
       }
-
       const ultimo = list[0];
       setPacienteSelecionado(nome);
       setAnaliseSelecionada(ultimo);
       setExamesPaciente(list);
+      setTerapiasEditavel("");
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -409,7 +426,6 @@ function App() {
           contarExames(),
           contarExamesMesAtual(),
         ]);
-
         setDashboard({ totalExames, examesMesAtual });
       } catch { }
     })();
@@ -419,12 +435,9 @@ function App() {
     (async () => {
       const q = buscaPacientes.trim();
       if (!q) {
-        try {
-          await recarregarTodosExames();
-        } catch { }
+        try { await recarregarTodosExames(); } catch { }
         return;
       }
-
       try {
         const list = await buscarExamesPorNome(q);
         setTodosExames(list);
@@ -434,42 +447,30 @@ function App() {
 
   useEffect(() => {
     if (!existingAnalysisId) return;
-
     const node = analysisRefs.current[existingAnalysisId];
-    if (node) {
-      node.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-
-    const timeout = window.setTimeout(() => {
-      setExistingAnalysisId(null);
-    }, 3000);
-
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeout = window.setTimeout(() => setExistingAnalysisId(null), 3000);
     return () => window.clearTimeout(timeout);
   }, [existingAnalysisId, examesPaciente]);
 
   async function onSelecionarPaciente(nome: string) {
     setPacienteSelecionado(nome);
     setClientName(nome);
-
     setAnaliseSelecionada(null);
     setExamesPaciente([]);
     setHistoryError(null);
     setHistoryLoading(true);
-
+    setTerapiasEditavel("");
     try {
       const list = await listarExamesPorPaciente(nome);
-
       const listOrdenada = [...list].sort(
         (a, b) =>
           new Date(b.data_exame || b.created_at).getTime() -
           new Date(a.data_exame || a.created_at).getTime()
       );
-
       setExamesPaciente(listOrdenada);
     } catch (e: unknown) {
-      setHistoryError(
-        e instanceof Error ? e.message : "Erro ao carregar exames."
-      );
+      setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
     } finally {
       setHistoryLoading(false);
     }
@@ -481,42 +482,21 @@ function App() {
 
   return (
     <>
-      <div
-        style={{
-          display: "flex",
-          minHeight: "100vh",
-          width: "100%",
-        }}
-      >
-        <aside
-          style={{
-            width: 300,
-            borderRight: "1px solid var(--border)",
-            padding: 16,
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>
-            Clientes
-          </div>
+      <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
+        <aside style={{ width: 300, borderRight: "1px solid var(--border)", padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>Clientes</div>
           <input
             value={buscaPacientes}
             onChange={(e) => setBuscaPacientes(e.target.value)}
             placeholder="Buscar por nome..."
             style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "inherit",
-              marginBottom: 10,
-              boxSizing: "border-box",
+              width: "100%", padding: 10, borderRadius: 8,
+              border: "1px solid var(--border)", background: "transparent",
+              color: "inherit", marginBottom: 10, boxSizing: "border-box",
             }}
           />
           {historyError ? (
-            <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>
-              {historyError}
-            </div>
+            <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 10 }}>{historyError}</div>
           ) : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {nomesPacientes.map((nome) => (
@@ -524,14 +504,10 @@ function App() {
                 key={nome}
                 onClick={() => onSelecionarPaciente(nome)}
                 style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: 10,
+                  textAlign: "left", padding: "10px 12px", borderRadius: 10,
                   border: "1px solid var(--border)",
-                  background:
-                    pacienteSelecionado === nome ? "var(--accent-bg)" : "transparent",
-                  color: "inherit",
-                  cursor: "pointer",
+                  background: pacienteSelecionado === nome ? "var(--accent-bg)" : "transparent",
+                  color: "inherit", cursor: "pointer",
                 }}
               >
                 <div style={{ fontWeight: 700 }}>{nome}</div>
@@ -541,62 +517,29 @@ function App() {
         </aside>
 
         <main style={{ flex: 1, padding: 18 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 12,
-              marginBottom: 20,
-            }}
-          >
-            {(
-              [
-                ["Total de exames", dashboard.totalExames],
-                ["Exames no mês", dashboard.examesMesAtual],
-                ["Pacientes (lista atual)", nomesPacientes.length],
-              ] as const
-            ).map(([label, value]) => (
-              <div
-                key={label}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 12,
-                  padding: 14,
-                  background: "rgba(255,255,255,0.02)",
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
-                  {label}
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>
-                  {value}
-                </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+            {([
+              ["Total de exames", dashboard.totalExames],
+              ["Exames no mês", dashboard.examesMesAtual],
+              ["Pacientes", nomesPacientes.length],
+            ] as const).map(([label, value]) => (
+              <div key={label} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, background: "rgba(255,255,255,0.02)" }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>{label}</div>
+                <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>{value}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>
-            Histórico de análises
-          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>Histórico de análises</div>
 
           {!pacienteSelecionado ? (
-            <div style={{ opacity: 0.8 }}>
-              Selecione um cliente à esquerda para ver os exames.
-            </div>
+            <div style={{ opacity: 0.8 }}>Selecione um cliente à esquerda para ver os exames.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
               <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
-                <section
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                    Exames — {pacienteSelecionado}
-                  </div>
+                <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 10 }}>Exames — {pacienteSelecionado}</div>
                   {historyLoading ? (
                     <div style={{ opacity: 0.8 }}>Carregando...</div>
                   ) : examesPaciente.length === 0 ? (
@@ -608,72 +551,40 @@ function App() {
                         const label = Number.isNaN(date.getTime())
                           ? a.data_exame || a.created_at
                           : date.toLocaleString();
-
                         const scoreMotor = obterAnalise(a);
                         const corScore =
-                          scoreMotor.scoreGeral >= 85
-                            ? "#22c55e"
-                            : scoreMotor.scoreGeral >= 70
-                              ? "#84cc16"
-                              : scoreMotor.scoreGeral >= 50
-                                ? "#facc15"
-                                : scoreMotor.scoreGeral >= 30
-                                  ? "#f97316"
-                                  : "#ef4444";
+                          scoreMotor.scoreGeral >= 85 ? "#22c55e"
+                            : scoreMotor.scoreGeral >= 70 ? "#84cc16"
+                            : scoreMotor.scoreGeral >= 50 ? "#facc15"
+                            : scoreMotor.scoreGeral >= 30 ? "#f97316"
+                            : "#ef4444";
 
                         return (
                           <div
                             key={a.id}
-                            ref={(el) => {
-                              analysisRefs.current[a.id] = el;
-                            }}
+                            ref={(el) => { analysisRefs.current[a.id] = el; }}
                             className={existingAnalysisId === a.id ? "analysis-pulse" : undefined}
                             style={{
-                              border:
-                                existingAnalysisId === a.id
-                                  ? "2px solid #f59e0b"
-                                  : "1px solid var(--border)",
-                              borderRadius: 10,
-                              padding: 10,
-                              background:
-                                existingAnalysisId === a.id
-                                  ? "rgba(245, 158, 11, 0.08)"
-                                  : "transparent",
+                              border: existingAnalysisId === a.id ? "2px solid #f59e0b" : "1px solid var(--border)",
+                              borderRadius: 10, padding: 10,
+                              background: existingAnalysisId === a.id ? "rgba(245, 158, 11, 0.08)" : "transparent",
                             }}
                           >
-                            <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                              {label}
-                            </div>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
                             <div style={{ fontSize: 12, color: corScore, fontWeight: 600, marginBottom: 8 }}>
-                              {scoreMotor.statusScore} — Score {scoreMotor.scoreGeral}/100
-                              {" "}({scoreMotor.itensAlterados.length} alterados)
+                              {scoreMotor.statusScore} — {scoreMotor.scoreGeral}/100 ({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button
-                                className="counter"
-                                onClick={() => {
-                                  setAnaliseSelecionada(a);
-                                  setModalOpen(true);
-                                }}
-                                style={{ marginBottom: 0 }}
-                              >
+                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setModalOpen(true); }} style={{ marginBottom: 0 }}>
                                 Ver
                               </button>
-
                               <button
                                 className="counter"
                                 onClick={() => {
-                                  setAnaliseSelecionada(a);
-                                  const data = exameRowToAiData(a, baseAnalise, terapias);
-                                  const relatorio = buildRelatorioData(
-                                    a,
-                                    pacienteSelecionado || "Cliente",
-                                    data
-                                  );
-                                  gerarRelatorioPDF(relatorio);
+                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData));
                                 }}
                                 style={{ marginBottom: 0 }}
-                                disabled={!exameTemConteudoParaPdf(a)}
                               >
                                 Baixar PDF
                               </button>
@@ -685,102 +596,42 @@ function App() {
                   )}
                 </section>
 
-                <section
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    padding: 14,
-                    minHeight: 220,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, marginBottom: 10 }}>
-                    Detalhes da análise
-                  </div>
+                <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, minHeight: 220 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 10 }}>Detalhes da análise</div>
                   {!analiseSelecionada ? (
-                    <div style={{ opacity: 0.8 }}>
-                      Selecione um exame e clique em "Ver".
-                    </div>
+                    <div style={{ opacity: 0.8 }}>Selecione um exame e clique em "Ver".</div>
                   ) : !analiseSelecionadaData ? (
-                    <div style={{ opacity: 0.8 }}>
-                      Não foi possível interpretar o resultado salvo deste exame.
-                    </div>
+                    <div style={{ opacity: 0.8 }}>Não foi possível interpretar este exame.</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          INTERPRETAÇÃO
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>INTERPRETAÇÃO</div>
+                        <div style={{ whiteSpace: "pre-wrap", lineHeight: "20px" }}>
                           {analiseSelecionadaData.interpretacao || "—"}
                         </div>
                       </div>
 
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          PONTOS CRÍTICOS
-                        </div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>PONTOS CRÍTICOS</div>
                         <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                            analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
-                              <li key={i}>{p}</li>
-                            ))
-                          ) : (
-                            <li>—</li>
-                          )}
+                          {(analiseSelecionadaData.pontos_criticos ?? []).length
+                            ? analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => <li key={i}>{p}</li>)
+                            : <li>—</li>}
                         </ul>
                       </div>
 
-                      <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+                      <SecaoPlanoTerapeutico
+                        data={analiseSelecionadaData}
+                        editavel={terapiasEditavel}
+                        onChangeEditavel={setTerapiasEditavel}
+                      />
 
                       {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
                         <div>
-                          <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                            SETORES AFETADOS
-                          </div>
+                          <div style={{ fontWeight: 900, marginBottom: 6 }}>SETORES AFETADOS</div>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {analiseMotor.setoresAfetados.map((s: string) => (
-                              <span
-                                key={s}
-                                style={{
-                                  background: "var(--border, #1e293b)",
-                                  padding: "3px 10px",
-                                  borderRadius: 6,
-                                  fontSize: 13,
-                                }}
-                              >
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {analiseMotor && analiseMotor.matches.length > 0 && (
-                        <div>
-                          <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                            MATCHES CLÍNICOS ({analiseMotor.matches.length})
-                          </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 300, overflow: "auto" }}>
-                            {analiseMotor.matches.slice(0, 10).map((m, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  border: "1px solid var(--border)",
-                                  borderRadius: 8,
-                                  padding: 8,
-                                  fontSize: 13,
-                                }}
-                              >
-                                <div style={{ fontWeight: 700 }}>
-                                  {m.itemBase}
-                                  <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 11 }}>
-                                    confiança: {m.scoreConfianca}%
-                                  </span>
-                                </div>
-                                <div style={{ opacity: 0.8, marginTop: 2 }}>
-                                  {m.categoria} — {m.impacto}
-                                </div>
-                              </div>
+                              <span key={s} style={{ background: "var(--border, #1e293b)", padding: "3px 10px", borderRadius: 6, fontSize: 13 }}>{s}</span>
                             ))}
                           </div>
                         </div>
@@ -789,21 +640,15 @@ function App() {
                       <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
 
                       <div className="lunara">
-                        <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                          Frequência Lunara
-                        </div>
+                        <div className="sectionTitle" style={{ marginBottom: 8 }}>Frequência Lunara</div>
                         <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
                           {analiseSelecionadaData.frequencia_lunara || "—"}
                         </div>
                       </div>
 
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                          JUSTIFICATIVA TERAPÊUTICA
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>
-                          {analiseSelecionadaData.justificativa || "—"}
-                        </div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>JUSTIFICATIVA TERAPÊUTICA</div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{analiseSelecionadaData.justificativa || "—"}</div>
                       </div>
 
                       {relatorioDataHistorico ? (
@@ -820,109 +665,52 @@ function App() {
 
           <div style={{ height: 20 }} />
 
-          <section
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: 14,
-              maxWidth: 760,
-            }}
-          >
+          <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, maxWidth: 760 }}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Nova análise (PDF)</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                placeholder="Nome do paciente (nome_paciente / PDF)"
-                style={{
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  background: "transparent",
-                  color: "inherit",
-                }}
+                placeholder="Nome do paciente"
+                style={{ padding: 10, borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "inherit" }}
               />
-              <button
-                className="counter"
-                onClick={buscarUltimaAnalise}
-                disabled={loading}
-              >
+              <button className="counter" onClick={buscarUltimaAnalise} disabled={loading}>
                 {loading ? "Carregando..." : "Gerar Última Análise"}
               </button>
-
-              {error ? (
-                <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div>
-              ) : null}
-
-              {analiseSelecionadaData ? (
-                <div style={{ marginTop: 8 }}>
-                  <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
-                </div>
-              ) : null}
-
-              {relatorioData ? (
-                <button
-                  className="counter"
-                  onClick={() => gerarRelatorioPDF(relatorioData)}
-                >
-                  Gerar Relatório PDF
-                </button>
-              ) : null}
+              {error ? <div style={{ color: "#ef4444", fontSize: 14 }}>{error}</div> : null}
             </div>
           </section>
         </main>
       </div>
 
+      {/* 🔥 MODAL */}
       {modalOpen ? (
         <div
           role="dialog"
           aria-modal="true"
           onClick={() => setModalOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.55)",
-            display: "grid",
-            placeItems: "center",
-            padding: 16,
-            zIndex: 50,
-          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "grid", placeItems: "center", padding: 16, zIndex: 50 }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "min(920px, 96vw)",
-              maxHeight: "92vh",
-              overflow: "auto",
-              background: "rgba(17, 24, 39, 0.98)",
-              border: "1px solid var(--border)",
-              borderRadius: 14,
-              padding: 16,
-              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+              width: "min(920px, 96vw)", maxHeight: "92vh", overflow: "auto",
+              background: "rgba(17, 24, 39, 0.98)", border: "1px solid var(--border)",
+              borderRadius: 14, padding: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 10,
-                marginBottom: 12,
-              }}
-            >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div>
                 <div style={{ fontWeight: 900 }}>
                   {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
-                  {analiseSelecionada?.data_exame ??
-                    analiseSelecionada?.created_at ??
-                    ""}
+                  {analiseSelecionada?.data_exame ?? analiseSelecionada?.created_at ?? ""}
                 </div>
                 {analiseMotor && (
                   <div style={{ fontSize: 13, color: "#38bdf8", marginTop: 2 }}>
                     Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore} |{" "}
-                    {analiseMotor.itensAlterados.length} itens alterados |{" "}
-                    {analiseMotor.matches.length} matches clínicos |{" "}
-                    {analiseMotor.terapias.length} terapias sugeridas
+                    {analiseMotor.itensAlterados.length} alterados |{" "}
+                    {analiseMotor.matches.length} matches |{" "}
+                    {analiseMotor.terapias.length} terapias
                   </div>
                 )}
               </div>
@@ -930,78 +718,53 @@ function App() {
                 <button
                   className="counter"
                   onClick={() => {
-                    if (relatorioDataHistorico)
-                      gerarRelatorioPDF(relatorioDataHistorico);
+                    if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
                   }}
                   disabled={!relatorioDataHistorico}
                   style={{ marginBottom: 0 }}
                 >
                   Gerar PDF
                 </button>
-                <button
-                  className="counter"
-                  onClick={() => setModalOpen(false)}
-                  style={{ marginBottom: 0 }}
-                >
+                <button className="counter" onClick={() => setModalOpen(false)} style={{ marginBottom: 0 }}>
                   Fechar
                 </button>
               </div>
             </div>
 
             {!analiseSelecionada ? (
-              <div style={{ opacity: 0.85 }}>
-                Nenhum exame selecionado.
-              </div>
+              <div style={{ opacity: 0.85 }}>Nenhum exame selecionado.</div>
             ) : !analiseSelecionadaData ? (
-              <div style={{ opacity: 0.85 }}>
-                Não foi possível interpretar o resultado salvo deste exame.
-              </div>
+              <div style={{ opacity: 0.85 }}>Não foi possível interpretar este exame.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    INTERPRETAÇÃO
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>INTERPRETAÇÃO</div>
+                  <div style={{ whiteSpace: "pre-wrap", lineHeight: "20px" }}>
                     {analiseSelecionadaData.interpretacao || "—"}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    PONTOS CRÍTICOS
-                  </div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>PONTOS CRÍTICOS</div>
                   <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {(analiseSelecionadaData.pontos_criticos ?? []).length ? (
-                      analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => (
-                        <li key={i}>{p}</li>
-                      ))
-                    ) : (
-                      <li>—</li>
-                    )}
+                    {(analiseSelecionadaData.pontos_criticos ?? []).length
+                      ? analiseSelecionadaData.pontos_criticos.map((p: string, i: number) => <li key={i}>{p}</li>)
+                      : <li>—</li>}
                   </ul>
                 </div>
 
-                <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+                <SecaoPlanoTerapeutico
+                  data={analiseSelecionadaData}
+                  editavel={terapiasEditavel}
+                  onChangeEditavel={setTerapiasEditavel}
+                />
 
                 {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
                   <div>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                      SETORES AFETADOS
-                    </div>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>SETORES AFETADOS</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {analiseMotor.setoresAfetados.map((s: string) => (
-                        <span
-                          key={s}
-                          style={{
-                            background: "rgba(56, 189, 248, 0.15)",
-                            border: "1px solid rgba(56, 189, 248, 0.3)",
-                            padding: "3px 10px",
-                            borderRadius: 6,
-                            fontSize: 13,
-                            color: "#38bdf8",
-                          }}
-                        >
+                        <span key={s} style={{ background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", padding: "3px 10px", borderRadius: 6, fontSize: 13, color: "#38bdf8" }}>
                           {s}
                         </span>
                       ))}
@@ -1010,26 +773,15 @@ function App() {
                 )}
 
                 <div className="lunara">
-                  <div className="sectionTitle" style={{ marginBottom: 8 }}>
-                    Frequência Lunara
-                  </div>
-                  <div
-                    style={{
-                      whiteSpace: "pre-wrap",
-                      color: "var(--text-h)",
-                    }}
-                  >
+                  <div className="sectionTitle" style={{ marginBottom: 8 }}>Frequência Lunara</div>
+                  <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
                     {analiseSelecionadaData.frequencia_lunara || "—"}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                    JUSTIFICATIVA TERAPÊUTICA
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    {analiseSelecionadaData.justificativa || "—"}
-                  </div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>JUSTIFICATIVA TERAPÊUTICA</div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>{analiseSelecionadaData.justificativa || "—"}</div>
                 </div>
               </div>
             )}
