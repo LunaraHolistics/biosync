@@ -49,12 +49,6 @@ function escapeHtml(text: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/on\w+="[^"]*"/g, "");
-}
-
 function criarBlocoHTML(html: string): HTMLDivElement {
   const el = document.createElement("div");
   el.style.width = "694px";
@@ -93,26 +87,20 @@ function adicionarBlocoAoPDF(
   const imgWidth = pageWidth - marginX * 2;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-  // 🔥 Se o bloco cabe na página atual
   if (currentY + imgHeight <= maxY) {
     pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
     return currentY + imgHeight + 8;
   }
 
-  // 🔥 Se o bloco NÃO cabe inteiro
-  // Verifica se pelo menos metade cabe (evita página quase vazia)
   if (currentY + imgHeight * 0.3 > maxY) {
-    // Pula para próxima página
     pdf.addPage();
     currentY = 20;
   }
 
-  // Se ainda não cabe na nova página, corta em pedaços
   if (imgHeight > maxY - currentY) {
     const canvasDisponivel = maxY - currentY;
     const imgHeightReal = canvas.height * (canvasDisponivel / imgHeight);
 
-    // Cria canvas cortado para a primeira parte
     const canvasTopo = document.createElement("canvas");
     canvasTopo.width = canvas.width;
     canvasTopo.height = imgHeightReal;
@@ -130,7 +118,6 @@ function adicionarBlocoAoPDF(
     }
     pdf.addImage(canvasTopo.toDataURL("image/png"), "PNG", marginX, currentY, imgWidth, canvasDisponivel);
 
-    // Resto na próxima página
     const alturaRestante = imgHeight - canvasDisponivel;
     const imgHeightReal2 = canvas.height * (alturaRestante / imgHeight);
     const canvasBase = document.createElement("canvas");
@@ -154,7 +141,6 @@ function adicionarBlocoAoPDF(
     return 20 + alturaRestante + 8;
   }
 
-  // Cabe inteiro na nova página
   pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
   return currentY + imgHeight + 8;
 }
@@ -195,7 +181,6 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   return resultado;
 }
 
-// 🔥 Extrair dados do comparativo para o PDF
 function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
 
@@ -248,7 +233,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
 
   const blocks: HTMLElement[] = [];
 
-  // 🔥 HEADER
   blocks.push(
     criarBlocoHTML(`
       <div style="font-size:20px;font-weight:900;color:#111;margin-bottom:8px">
@@ -261,7 +245,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     `)
   );
 
-  // 🔥 INTERPRETAÇÃO
   if (data.interpretacao) {
     blocks.push(
       criarBlocoHTML(`
@@ -271,13 +254,11 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     );
   }
 
-  // 🔥 COMPARATIVO (NOVO)
   const comparativoHTML = extrairComparativoHTML(data.comparacao);
   if (comparativoHTML) {
     blocks.push(criarBlocoHTML(comparativoHTML));
   }
 
-  // 🔥 MAPA TÉCNICO (sem duplicação)
   if (data.relatorio_original_html) {
     const itens = extrairRelatorioOriginal(data.relatorio_original_html);
 
@@ -303,7 +284,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // 🔥 PONTOS CRÍTICOS
   if (data.pontos_criticos && data.pontos_criticos.length > 0) {
     const lista = data.pontos_criticos
       .slice(0, 15)
@@ -318,7 +298,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     );
   }
 
-  // 🔥 PLANO TERAPÊUTICO
   if (data.plano_terapeutico?.terapias?.length) {
     const terapias = data.plano_terapeutico.terapias.map((t) => `
       <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
@@ -337,7 +316,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     );
   }
 
-  // 🔥 FREQUÊNCIA LUNAR + JUSTIFICATIVA
   if (data.frequencia_lunara || data.justificativa) {
     blocks.push(
       criarBlocoHTML(`
@@ -353,7 +331,6 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     );
   }
 
-  // Montar container
   blocks.forEach((b) => container.appendChild(b));
   document.body.appendChild(container);
 

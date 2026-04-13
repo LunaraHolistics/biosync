@@ -2,7 +2,6 @@ import type { AiStructuredData } from "./services/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
-import { parsePlanoTerapeutico } from "./services/api";
 import ComparativoExamesView from "./components/ComparativoExames";
 import {
   listarExames,
@@ -67,19 +66,6 @@ function toDiagnostico(value: unknown): DiagnosticoPdf | undefined {
   );
 
   return { problemas };
-}
-
-function toComparacao(value: unknown): any {
-  if (!value || typeof value !== "object") {
-    return { melhoraram: [], pioraram: [], novos_problemas: [], normalizados: [] };
-  }
-  const obj = value as Record<string, unknown>;
-  return {
-    melhoraram: Array.isArray(obj.melhoraram) ? obj.melhoraram : [],
-    pioraram: Array.isArray(obj.pioraram) ? obj.pioraram : [],
-    novos_problemas: Array.isArray(obj.novos_problemas) ? obj.novos_problemas : [],
-    normalizados: Array.isArray(obj.normalizados) ? obj.normalizados : [],
-  };
 }
 
 function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): string {
@@ -150,7 +136,6 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel }: {
         </>
       )}
 
-      {/* 🔥 Campo editável para terapias manuais */}
       {onChangeEditavel && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
@@ -202,7 +187,6 @@ function exameRowToAiData(
       : t.indicacoes || "",
   }));
 
-  // 🔥 Converter terapias manuais do textarea
   if (terapiasManuais && terapiasManuais.trim()) {
     const linhas = terapiasManuais
       .split("\n")
@@ -235,13 +219,6 @@ function exameRowToAiData(
     frequencia_lunara: frequencia_lunara,
     justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ") || "nenhum"}.`,
   };
-}
-
-function exameTemConteudoParaPdf(row: ExameRow): boolean {
-  if (row.resultado_json) return true;
-  if (row.pontos_criticos && row.pontos_criticos.length > 0) return true;
-  if (row.analise_ia != null) return true;
-  return false;
 }
 
 function getRelatorioOriginal(
@@ -299,8 +276,6 @@ function App() {
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
-
-  // 🔥 NOVO: campo editável de terapias
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
 
   const [dashboard, setDashboard] = useState({
@@ -334,7 +309,6 @@ function App() {
     return gerarComparativoInteligente(ordenados);
   }, [examesPaciente]);
 
-  // 🔥 Dados com terapias manuais incluídas
   const analiseSelecionadaData = analiseSelecionada
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
     : null;
@@ -353,11 +327,6 @@ function App() {
         comparativoExamesData
       )
     : null;
-
-  const relatorioData =
-    analiseSelecionada && analiseSelecionadaData
-      ? buildRelatorioData(analiseSelecionada, clientName || "Cliente", analiseSelecionadaData)
-      : null;
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -683,7 +652,6 @@ function App() {
         </main>
       </div>
 
-      {/* 🔥 MODAL */}
       {modalOpen ? (
         <div
           role="dialog"
@@ -717,9 +685,7 @@ function App() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   className="counter"
-                  onClick={() => {
-                    if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico);
-                  }}
+                  onClick={() => { if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico); }}
                   disabled={!relatorioDataHistorico}
                   style={{ marginBottom: 0 }}
                 >

@@ -302,7 +302,7 @@ function buscarMatches(
       decodificarMojibake(b.descricao_tecnica ?? "")
     ),
     impactoNorm: normalizarTexto(
-      decodificarMojibave(b.impacto ?? "")
+      decodificarMojibake(b.impacto ?? "")
     ),
   }));
 
