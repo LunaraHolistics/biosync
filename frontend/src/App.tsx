@@ -10,8 +10,22 @@ import {
   contarExames,
   contarExamesMesAtual,
   listarExamesPorPaciente,
+  listarTerapias,
+  listarBaseAnaliseSaude,
   type ExameRow,
+  type TerapiaRow,
+  type BaseAnaliseSaudeRow,
 } from "./services/db";
+
+import {
+  gerarAnaliseCompleta,
+  gerarComparativoInteligente,
+  type AnaliseCompleta,
+} from "./lib/motorSemantico";
+
+// ==============================
+// TIPOS LOCAIS
+// ==============================
 
 type ItemProcessado = {
   sistema: string;
@@ -32,10 +46,14 @@ type DiagnosticoPdf = {
   }[];
 };
 
+// ==============================
+// HELPERS LEGADOS (mantidos para PDF)
+// ==============================
+
 function resultadoMeta(row: ExameRow): Record<string, unknown> {
   const r = row.resultado_json;
-  return r && typeof r === "object" && !Array.isArray(r) 
-    ? (r as Record<string, unknown>) 
+  return r && typeof r === "object" && !Array.isArray(r)
+    ? (r as Record<string, unknown>)
     : {};
 }
 
@@ -194,6 +212,10 @@ function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): strin
   return "Mensal";
 }
 
+// ==============================
+// SEÇÃO PLANO TERAPÊUTICO (mantida)
+// ==============================
+
 function SecaoPlanoTerapeutico({ data }: { data: AiStructuredData }) {
   const p = data.plano_terapeutico;
   if (!p?.terapias?.length) {
@@ -237,42 +259,49 @@ function SecaoPlanoTerapeutico({ data }: { data: AiStructuredData }) {
   );
 }
 
-function exameRowToAiData(row: ExameRow): AiStructuredData {
-  const meta = resultadoMeta(row);
+// ==============================
+// 🔥 CONVERSÃO: Motor Novo → AiStructuredData
+// ==============================
+
+function exameRowToAiData(
+  row: ExameRow,
+  base: BaseAnaliseSaudeRow[],
+  terapias: TerapiaRow[]
+): AiStructuredData {
+  // 1. Rodar motor novo
+  const analise = gerarAnaliseCompleta(row, base, terapias);
+
+  // 2. Converter terapias do motor para formato do plano
+  const terapiasFormatadas = analise.terapias.map((t) => ({
+    nome: t.nome,
+    frequencia: t.frequencia_recomendada || "Conforme necessidade",
+    descricao: t.descricao || t.indicacoes || "",
+    justificativa: t.motivos?.length
+      ? `Setores correlacionados: ${t.motivos.join(", ")}. ${t.indicacoes || ""}`
+      : t.indicacoes || "",
+  }));
+
+  // 3. Manter frequencia_lunara e justificativa do legado (se existir)
   const ia = row.analise_ia;
-
-  const interpretacao =
-    typeof ia === "object" && ia && "interpretacao" in ia
-      ? String((ia as any).interpretacao || "")
-      : "";
-
-  const pontos_criticos =
-    typeof ia === "object" && ia && "pontos_criticos" in ia
-      ? (ia as any).pontos_criticos ?? row.pontos_criticos ?? []
-      : row.pontos_criticos ?? [];
-
-  const plano_terapeutico = parsePlanoTerapeutico(
-    typeof ia === "object" && ia && "plano_terapeutico" in ia
-      ? (ia as any).plano_terapeutico
-      : meta.plano_terapeutico
-  );
-
   const frequencia_lunara =
     typeof ia === "object" && ia && "frequencia_lunara" in ia
       ? String((ia as any).frequencia_lunara || "")
       : "";
 
-  const justificativa =
+  const justificativaLegado =
     typeof ia === "object" && ia && "justificativa" in ia
       ? String((ia as any).justificativa || "")
       : "";
 
   return {
-    interpretacao,
-    pontos_criticos,
-    plano_terapeutico,
-    frequencia_lunara,
-    justificativa,
+    interpretacao: analise.interpretacao,
+    pontos_criticos: analise.pontosCriticos,
+    plano_terapeutico: {
+      tipo: "mensal" as const,
+      terapias: terapiasFormatadas,
+    },
+    frequencia_lunara: frequencia_lunara,
+    justificativa: justificativaLegado || `Score geral: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores afetados: ${analise.setoresAfetados.join(", ") || "nenhum"}.`,
   };
 }
 
@@ -294,18 +323,17 @@ function exameTemConteudoParaPdf(row: ExameRow): boolean {
   );
 }
 
-// 🔧 Função auxiliar para extrair o relatório original do metadata
 function getRelatorioOriginal(
   meta: Record<string, unknown>,
   _row: ExameRow
-): string | undefined {  // ← tipo de retorno
+): string | undefined {
   if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
     const val = (meta as any).relatorio_original_html;
     if (typeof val === "string" && val.length > 0) {
       return val;
     }
   }
-  return undefined; // ← essencial: undefined, NÃO null
+  return undefined;
 }
 
 function buildRelatorioData(
@@ -336,6 +364,10 @@ function buildRelatorioData(
   };
 }
 
+// ==============================
+// APP
+// ==============================
+
 function App() {
   const [clientName, setClientName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -351,6 +383,11 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
+  // 🔥 NOVO: dados para o motor
+  const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
+  const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
+  const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
+
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
@@ -365,11 +402,20 @@ function App() {
     return Array.from(map.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [todosExames]);
 
+  // 🔥 NOVO: obter análise com cache
+  function obterAnalise(row: ExameRow): AnaliseCompleta {
+    if (cacheAnalise[row.id]) return cacheAnalise[row.id];
+    const analise = gerarAnaliseCompleta(row, baseAnalise, terapias);
+    setCacheAnalise((prev) => ({ ...prev, [row.id]: analise }));
+    return analise;
+  }
+
+  // 🔥 ATUALIZADO: agora usa o motor novo
   const analiseSelecionadaData = analiseSelecionada
-    ? exameRowToAiData(analiseSelecionada)
+    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias)
     : null;
 
-  // 🔥 CORREÇÃO: vem antes do uso
+  // 🔥 ATUALIZADO: comparativo inteligente
   const comparativoExamesData = useMemo(() => {
     if (examesPaciente.length < 2) return null;
 
@@ -379,39 +425,31 @@ function App() {
         new Date(a.data_exame || a.created_at).getTime()
     );
 
-    const atualMeta = resultadoMeta(ordenados[0]);
-    const anteriorMeta = resultadoMeta(ordenados[1]);
-
-    const atual = toItemProcessadoArray(atualMeta?.dados_processados);
-    const anterior = toItemProcessadoArray(anteriorMeta?.dados_processados);
-
-    if (!atual.length || !anterior.length) return null;
-
-    return compararExames(atual, anterior);
+    return gerarComparativoInteligente(ordenados);
   }, [examesPaciente]);
 
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
-      analiseSelecionada,
-      pacienteSelecionado || clientName.trim() || "Cliente",
-      analiseSelecionadaData ?? {
-        interpretacao: "",
-        pontos_criticos: [],
-        plano_terapeutico: { tipo: "mensal", terapias: [] },
-        frequencia_lunara: "",
-        justificativa: "",
-      },
-      toComparacao(comparativoExamesData)
-    )
+        analiseSelecionada,
+        pacienteSelecionado || clientName.trim() || "Cliente",
+        analiseSelecionadaData ?? {
+          interpretacao: "",
+          pontos_criticos: [],
+          plano_terapeutico: { tipo: "mensal", terapias: [] },
+          frequencia_lunara: "",
+          justificativa: "",
+        },
+        toComparacao(comparativoExamesData)
+      )
     : null;
 
   const relatorioData =
     analiseSelecionada && analiseSelecionadaData
       ? buildRelatorioData(
-        analiseSelecionada,
-        clientName || "Cliente",
-        analiseSelecionadaData
-      )
+          analiseSelecionada,
+          clientName || "Cliente",
+          analiseSelecionadaData
+        )
       : null;
 
   useEffect(() => {
@@ -458,13 +496,21 @@ function App() {
     }
   }
 
+  // 🔥 NOVO: carregar base + terapias junto com exames
   useEffect(() => {
     (async () => {
       setHistoryError(null);
       try {
-        await recarregarTodosExames();
+        const [examesData, baseData, terapiasData] = await Promise.all([
+          listarExames(),
+          listarBaseAnaliseSaude(),
+          listarTerapias(),
+        ]);
+        setTodosExames(examesData);
+        setBaseAnalise(baseData);
+        setTerapias(terapiasData);
       } catch (e: unknown) {
-        setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
+        setHistoryError(e instanceof Error ? e.message : "Erro ao carregar dados.");
       }
     })();
   }, []);
@@ -541,6 +587,11 @@ function App() {
       setHistoryLoading(false);
     }
   }
+
+  // 🔥 Dados do motor para exibir no painel de detalhes
+  const analiseMotor = analiseSelecionada
+    ? obterAnalise(analiseSelecionada)
+    : null;
 
   return (
     <>
@@ -671,6 +722,20 @@ function App() {
                         const label = Number.isNaN(date.getTime())
                           ? a.data_exame || a.created_at
                           : date.toLocaleString();
+
+                        // 🔥 Score do motor no card
+                        const scoreMotor = obterAnalise(a);
+                        const corScore =
+                          scoreMotor.scoreGeral >= 85
+                            ? "#22c55e"
+                            : scoreMotor.scoreGeral >= 70
+                              ? "#84cc16"
+                              : scoreMotor.scoreGeral >= 50
+                                ? "#facc15"
+                                : scoreMotor.scoreGeral >= 30
+                                  ? "#f97316"
+                                  : "#ef4444";
+
                         return (
                           <div
                             key={a.id}
@@ -691,8 +756,13 @@ function App() {
                                   : "transparent",
                             }}
                           >
-                            <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>
                               {label}
+                            </div>
+                            {/* 🔥 Score do motor no card */}
+                            <div style={{ fontSize: 12, color: corScore, fontWeight: 600, marginBottom: 8 }}>
+                              {scoreMotor.statusScore} — Score {scoreMotor.scoreGeral}/100
+                              {" "}({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               <button
@@ -710,9 +780,7 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setAnaliseSelecionada(a);
-
-                                  const data = exameRowToAiData(a);
-
+                                  const data = exameRowToAiData(a, baseAnalise, terapias);
                                   const relatorio = buildRelatorioData(
                                     a,
                                     pacienteSelecionado || "Cliente",
@@ -746,7 +814,7 @@ function App() {
                   </div>
                   {!analiseSelecionada ? (
                     <div style={{ opacity: 0.8 }}>
-                      Selecione um exame e clique em “Ver”.
+                      Selecione um exame e clique em "Ver".
                     </div>
                   ) : !analiseSelecionadaData ? (
                     <div style={{ opacity: 0.8 }}>
@@ -779,9 +847,67 @@ function App() {
                       </div>
 
                       <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+
+                      {/* 🔥 NOVO: Setores afetados */}
+                      {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
+                        <div>
+                          <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                            SETORES AFETADOS
+                          </div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {analiseMotor.setoresAfetados.map((s: string) => (
+                              <span
+                                key={s}
+                                style={{
+                                  background: "var(--border, #1e293b)",
+                                  padding: "3px 10px",
+                                  borderRadius: 6,
+                                  fontSize: 13,
+                                }}
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 🔥 NOVO: Matches clínicos */}
+                      {analiseMotor && analiseMotor.matches.length > 0 && (
+                        <div>
+                          <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                            MATCHES CLÍNICOS ({analiseMotor.matches.length})
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 300, overflow: "auto" }}>
+                            {analiseMotor.matches.slice(0, 10).map((m, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 8,
+                                  padding: 8,
+                                  fontSize: 13,
+                                }}
+                              >
+                                <div style={{ fontWeight: 700 }}>
+                                  {m.itemBase}
+                                  <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 11 }}>
+                                    confiança: {m.scoreConfianca}%
+                                  </span>
+                                </div>
+                                <div style={{ opacity: 0.8, marginTop: 2 }}>
+                                  {m.categoria} — {m.impacto}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {comparativoExamesData && (
                         <ComparativoExamesView data={toComparacao(comparativoExamesData)} />
                       )}
+
                       <div className="lunara">
                         <div className="sectionTitle" style={{ marginBottom: 8 }}>
                           Frequência Lunara
@@ -867,6 +993,7 @@ function App() {
         </main>
       </div>
 
+      {/* 🔥 MODAL — agora com dados do motor novo */}
       {modalOpen ? (
         <div
           role="dialog"
@@ -904,11 +1031,22 @@ function App() {
                 marginBottom: 12,
               }}
             >
-              <div style={{ fontWeight: 900 }}>
-                {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
-                {analiseSelecionada?.data_exame ??
-                  analiseSelecionada?.created_at ??
-                  ""}
+              <div>
+                <div style={{ fontWeight: 900 }}>
+                  {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
+                  {analiseSelecionada?.data_exame ??
+                    analiseSelecionada?.created_at ??
+                    ""}
+                </div>
+                {/* 🔥 Score do motor no header do modal */}
+                {analiseMotor && (
+                  <div style={{ fontSize: 13, color: "#38bdf8", marginTop: 2 }}>
+                    Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore} |{" "}
+                    {analiseMotor.itensAlterados.length} itens alterados |{" "}
+                    {analiseMotor.matches.length} matches clínicos |{" "}
+                    {analiseMotor.terapias.length} terapias sugeridas
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
@@ -967,6 +1105,32 @@ function App() {
                 </div>
 
                 <SecaoPlanoTerapeutico data={analiseSelecionadaData} />
+
+                {/* 🔥 NOVO: Setores afetados no modal */}
+                {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
+                  <div>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                      SETORES AFETADOS
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {analiseMotor.setoresAfetados.map((s: string) => (
+                        <span
+                          key={s}
+                          style={{
+                            background: "rgba(56, 189, 248, 0.15)",
+                            border: "1px solid rgba(56, 189, 248, 0.3)",
+                            padding: "3px 10px",
+                            borderRadius: 6,
+                            fontSize: 13,
+                            color: "#38bdf8",
+                          }}
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="lunara">
                   <div className="sectionTitle" style={{ marginBottom: 8 }}>
