@@ -462,17 +462,6 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   return resultado;
 }
 
-function extrairRelatorioOriginal(
-  meta: Record<string, unknown>,
-  _row: any
-): string | undefined {
-  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
-    const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string" && val.length > 0) return val;
-  }
-  return undefined;
-}
-
 // ============================================================
 // GERAR BLOCOS DE CONTEÚDO (texto dividido antes de renderizar)
 // ============================================================
