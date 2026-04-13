@@ -462,7 +462,7 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   return resultado;
 }
 
-function extrairRelatorioOriginalHTML(
+function extrairRelatorioOriginal(
   meta: Record<string, unknown>,
   _row: any
 ): string | undefined {
