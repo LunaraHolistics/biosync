@@ -89,7 +89,7 @@ function dividirTexto(texto: string, maxChars: number): string[] {
 // ============================================================
 
 function carregarImagem(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
@@ -121,7 +121,7 @@ function carregarImagem(src: string): Promise<HTMLImageElement> {
 
 async function criarCabecalhoCanvas(
   data: RelatorioData,
-  larguraUtil: number
+  _larguraUtil: number
 ): Promise<HTMLCanvasElement> {
   const W = 694;
   const H = 60;
@@ -447,27 +447,27 @@ function extrairComparativoHTML(comparacao: unknown): string {
     cor: string;
     itens: any[];
   }[] = [
-    {
-      titulo: "🟢 Melhoraram",
-      cor: "#16a34a",
-      itens: Array.isArray(c.melhoraram) ? c.melhoraram : [],
-    },
-    {
-      titulo: "🔴 Pioraram",
-      cor: "#dc2626",
-      itens: Array.isArray(c.pioraram) ? c.pioraram : [],
-    },
-    {
-      titulo: "🟡 Novos Problemas",
-      cor: "#ca8a04",
-      itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [],
-    },
-    {
-      titulo: "⚪ Normalizados",
-      cor: "#6b7280",
-      itens: Array.isArray(c.normalizados) ? c.normalizados : [],
-    },
-  ];
+      {
+        titulo: "🟢 Melhoraram",
+        cor: "#16a34a",
+        itens: Array.isArray(c.melhoraram) ? c.melhoraram : [],
+      },
+      {
+        titulo: "🔴 Pioraram",
+        cor: "#dc2626",
+        itens: Array.isArray(c.pioraram) ? c.pioraram : [],
+      },
+      {
+        titulo: "🟡 Novos Problemas",
+        cor: "#ca8a04",
+        itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [],
+      },
+      {
+        titulo: "⚪ Normalizados",
+        cor: "#6b7280",
+        itens: Array.isArray(c.normalizados) ? c.normalizados : [],
+      },
+    ];
 
   const total = secoes.reduce((s, sec) => s + sec.itens.length, 0);
   if (total === 0) return "";
@@ -484,12 +484,12 @@ function extrairComparativoHTML(comparacao: unknown): string {
       <div style="margin-bottom:4px">
         <b>${escapeHtml(item.item || "—")}</b>
         <span style="color:${secao.cor}"> ${escapeHtml(
-          item.evolucao || ""
-        )}</span>
+        item.evolucao || ""
+      )}</span>
         <span style="font-size:10px;opacity:0.7">
           ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois
-            ? escapeHtml(String(item.depois))
-            : "—"}
+          ? escapeHtml(String(item.depois))
+          : "—"}
           ${item.variacao !== undefined ? ` | Δ${item.variacao}` : ""}
         </span>
       </div>
@@ -544,57 +544,6 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   return resultado;
 }
 
-function toDiagnostico(value: unknown):
-  | {
-      problemas: {
-        sistema: string;
-        item: string;
-        status: string;
-        impacto: string;
-        score?: number;
-      }[];
-    }
-  | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const obj = value as { problemas?: unknown };
-  if (!Array.isArray(obj.problemas)) return undefined;
-
-  const problemas = obj.problemas.filter(
-    (p): p is {
-      sistema: string;
-      item: string;
-      status: string;
-      impacto: string;
-    } => {
-      if (!p || typeof p !== "object") return false;
-      const item = p as Record<string, unknown>;
-      return (
-        typeof item.sistema === "string" &&
-        typeof item.item === "string" &&
-        typeof item.status === "string" &&
-        typeof item.impacto === "string"
-      );
-    }
-  );
-
-  return { problemas };
-}
-
-function getRelatorioOriginal(
-  meta: Record<string, unknown>,
-  _row: any
-): string | undefined {
-  if (
-    meta &&
-    typeof meta === "object" &&
-    "relatorio_original_html" in meta
-  ) {
-    const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string" && val.length > 0) return val;
-  }
-  return undefined;
-}
-
 // ============================================================
 // GERAR BLOCOS DE CONTEÚDO (dividindo texto longo ANTES de renderizar)
 // ============================================================
@@ -613,8 +562,8 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
       blocos.push({
         html: `<div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px">${titulo}</div>
                <div style="white-space:pre-wrap;color:#222;line-height:17px">${escapeHtml(
-                 pedacos[i]
-               )}</div>`,
+          pedacos[i]
+        )}</div>`,
       });
     }
   }
@@ -647,15 +596,14 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
       <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
         <div style="font-weight:700;color:#111">${escapeHtml(t.nome)}</div>
         <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(
-          t.frequencia || ""
-        )}</div>
+        t.frequencia || ""
+      )}</div>
         <div style="color:#333">${escapeHtml(t.descricao || "")}</div>
-        ${
-          t.justificativa
-            ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(
-                t.justificativa
-              )}</div>`
-            : ""
+        ${t.justificativa
+          ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(
+            t.justificativa
+          )}</div>`
+          : ""
         }
       </div>
     `)
