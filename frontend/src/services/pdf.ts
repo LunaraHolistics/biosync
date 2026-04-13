@@ -78,20 +78,6 @@ function dividirTexto(texto: string, maxChars: number): string[] {
   return pedacos;
 }
 
-// Helper para limpar HTML e transformar em texto puro legível
-function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "  • ")
-    .replace(/<[^>]*>?/gm, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .trim();
-}
-
 // ============================================================
 // CABEÇALHO PADRÃO (Nativo sem imagens)
 // ============================================================
