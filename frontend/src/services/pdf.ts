@@ -1,5 +1,5 @@
-// @ts-expect-error
 import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 // ============================================================
 // TIPOS LOCAIS (inline — sem dependência externa)
@@ -340,7 +340,7 @@ function criarGraficoComparativoCanvas(
     { cor: "#9ca3af", tracejado: true, label: "Antes" },
     { cor: "#3b82f6", tracejado: false, label: "Depois" },
     { cor: "#16a34a", tracejado: false, label: "Melhorou" },
-    { color: "#dc2626", tracejado: false, label: "Piorou" },
+    { cor: "#dc2626", tracejado: false, label: "Piorou" },
   ];
 
   let lx = ml;
