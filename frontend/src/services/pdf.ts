@@ -1,6 +1,19 @@
-import html2canvas from "html2canvas";
+// @ts-expect-error
 import { jsPDF } from "jspdf";
-import type { PlanoTerapeutico } from "../types/plano_terapeutico";
+
+// ============================================================
+// TIPOS LOCAIS (inline — sem dependência externa)
+// ============================================================
+
+type PlanoTerapeutico = {
+  tipo: "semanal" | "quinzenal" | "mensal";
+  terapias: {
+    nome: string;
+    frequencia: string;
+    descricao: string;
+    justificativa: string;
+  }[];
+};
 
 // ============================================================
 // CONFIGURAÇÕES
@@ -27,14 +40,13 @@ export type RelatorioData = {
         performance?: string;
         hipertrofia?: string;
         emagrecimento?: string;
-        recuperacao?:   string;
+        recuperacao?: string;
         humor?: string;
       };
     }[];
   };
 
   plano_terapeutico?: PlanoTerapeutico;
-
   frequencia_lunara: string;
   justificativa: string;
   comparacao?: unknown;
@@ -76,7 +88,7 @@ function dividirTexto(texto: string, maxChars: number): string[] {
 }
 
 // ============================================================
-// LOGOS → data URL (sem iframe)
+// LOGOS → data URL (sem iframe, sem CORS)
 // ============================================================
 
 function imagemParaDataURL(src: string): Promise<string> {
@@ -110,7 +122,7 @@ function imagemParaDataURL(src: string): Promise<string> {
 }
 
 // ============================================================
-// CABEÇALHO DIRETO NO PDF (sem html2canvas)
+// CABEÇALHO DIRETO NO PDF
 // ============================================================
 
 function adicionarCabecalhoNoPDF(
@@ -269,7 +281,7 @@ function criarGraficoComparativoCanvas(
   ctx.lineWidth = 2;
   ctx.beginPath();
   primeiro = true;
-  for (let  i = 0; i < n; i++) {
+  for (let i = 0; i < n; i++) {
     const d = limitados[i];
     const xPos = ml + i * step;
     const yPos = mt + gh - ((d.depois - 1) / 2) * gh;
@@ -328,7 +340,7 @@ function criarGraficoComparativoCanvas(
     { cor: "#9ca3af", tracejado: true, label: "Antes" },
     { cor: "#3b82f6", tracejado: false, label: "Depois" },
     { cor: "#16a34a", tracejado: false, label: "Melhorou" },
-    { cor: "#dc2626", tracejado: false, label: "Piorou" },
+    { color: "#dc2626", tracejado: false, label: "Piorou" },
   ];
 
   let lx = ml;
@@ -348,7 +360,6 @@ function criarGraficoComparativoCanvas(
       ctx.arc(lx + 6, legY, 3, 0, Math.PI * 2);
       ctx.fill();
     }
-
     ctx.fillStyle = "#444";
     ctx.fillText(leg.label, lx + 16, legY);
     lx += ctx.measureText(leg.label).width + 28;
@@ -418,7 +429,7 @@ function extrairComparativoHTML(comparacao: unknown): string {
       itens: Array.isArray(c.novos_problemas) ? c.novos_problemas : [],
     },
     {
-      titulo: "⚪ Normalizados",
+      titulo: "⓪ Normalizados",
       cor: "#6b7280",
       itens: Array.isArray(c.normalizados) ? c.normalizados : [],
     },
@@ -442,9 +453,7 @@ function extrairComparativoHTML(comparacao: unknown): string {
           item.evolucao || ""
         )}</span>
         <span style="font-size:10px;opacity:0.7">
-          ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois
-            ? escapeHtml(String(item.depois))
-            : "—"}
+          ${item.antes ? escapeHtml(String(item.antes)) : "—"} → ${item.depois ? escapeHtml(String(item.depois)) : "—"}
           ${item.variacao !== undefined ? ` | Δ${item.variacao}` : ""}
         </span>
       </div>
@@ -498,21 +507,6 @@ function extrairRelatorioOriginal(html: string): ItemExtraido[] {
   return resultado;
 }
 
-function extrairRelatorioOriginalHTML(
-  meta: Record<string, unknown>,
-  _row: any
-): string | undefined {
-  if (
-    meta &&
-    typeof meta === "object" &&
-    "relatorio_original_html" in meta
-  ) {
-    const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string" && val.length > 0) return val;
-  }
-  return undefined;
-}
-
 // ============================================================
 // GERAR BLOCOS DE CONTEÚDO (texto dividido antes de renderizar)
 // ============================================================
@@ -553,7 +547,12 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
 
   if (data.plano_terapeutico?.terapias?.length) {
     const terapiasHTML = data.plano_terapeutico.terapias
-      .map((t) => `
+      .map((t: {
+        nome: string;
+        frequencia: string;
+        descricao: string;
+        justificativa: string;
+      }) => `
       <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
         <div style="font-weight:700;color:#111">${escapeHtml(t.nome)}</div>
         <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(
@@ -580,7 +579,7 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
     if (itens.length > 0) {
       const mapaHTML = itens
         .slice(0, LIMITE_ITENS_RELATORIO)
-        .map((i) => `
+        .map((i: ItemExtraido) => `
         <div style="margin-bottom:5px">
           <b>${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}</b><br/>
           <span style="font-size:10px;color:#555">Normal: ${escapeHtml(
@@ -622,10 +621,12 @@ function gerarBlocosConteudo(data: RelatorioData): { html: string }[] {
 // ============================================================
 
 export async function gerarRelatorioPDF(data: RelatorioData) {
-  const pdf = jsPDF({ unit: "pt", format: "a4" });
+  const jsPDFClass: any = jsPDF;
+
+  const pdf = new jsPDFClass({ unit: "pt", format: "a4" });
 
   const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
+  const pageH = pdf.length;
 
   const MARGIN_X = 20;
   const GAP = 10;
@@ -639,16 +640,19 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     imagemParaDataURL("/logo.jpeg"),
   ]);
 
-  // 2. Pré-renderizar gráfico (canvas puro, sem html2canvas)
+  // 2. Pré-renderizar gráfico (canvas puro)
   const graficoCanvas = criarGraficoComparativoCanvas(data.comparacao);
 
   // 3. Gerar blocos de conteúdo (só texto)
   const blocosHTML = gerarBlocosConteudo(data);
 
-  // 4. Renderizar blocos como canvas (com removeContainer + allowTaint)
+  // 4. Renderizar blocos como canvas
   const blocosCanvas = await Promise.all(
-    blocosHTML.map((b) =>
-      renderizarBlocoParaCanvas(criarBlocoHTML(b.html), PDF_CANVAS_SCALE)
+    blocosHTML.map((b: { html: string }) =>
+      renderizarBlocoParaCanvas(
+        criarBlocoHTML(b.html),
+        PDF_CANVAS_SCALE
+      )
     )
   );
 
