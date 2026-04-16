@@ -657,77 +657,58 @@ function gerarResumoCategorias(
 }
 
 // ==============================
-// 🔥 FUNÇÃO PRINCIPAL
+// 🔥 FUNÇÃO PRINCIPAL (CURADA E TIPADA 100%)
 // ==============================
-
 export function gerarAnaliseCompleta(
   exame: ExameRow,
   base: BaseAnaliseSaudeRow[],
   terapias: TerapiaRow[]
 ): AnaliseCompleta {
+  const paciente = parsearPaciente(exame.nome_paciente);
+  const itensAlterados = extrairItensAlterados(exame.resultado_json);
+  const matches = buscarMatches(itensAlterados, base);
 
-  const paciente = parsearPaciente(
-    exame.nome_paciente
-  );
+  // 🔥 SETORES AFETADOS CORRIGIDOS (Tipagem Explícita para evitar o erro TS2345)
+  const contagemSetores = new Map<string, number>();
+  
+  matches.forEach((m) => {
+    if (Array.isArray(m.setores)) {
+      m.setores.forEach((s) => {
+        if (s) {
+          contagemSetores.set(s, (contagemSetores.get(s) || 0) + 1);
+        }
+      });
+    }
+  });
 
-  const itensAlterados = extrairItensAlterados(
-    exame.resultado_json
-  );
+  const setoresAfetados: string[] = Array.from(contagemSetores.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([setor]) => setor);
 
-  const matches = buscarMatches(
-    itensAlterados,
-    base
-  );
+  // 🔥 INTERPRETAÇÃO AGORA USA OS SETORES REAIS
+  const interpretacao = gerarInterpretacao(matches, setoresAfetados);
 
-  const interpretacao = gerarInterpretacao(
-    matches,
-    itensAlterados
-  );
+  // 🔥 PONTOS CRÍTICOS
+  const pontosCriticos = gerarPontosCriticos(matches, itensAlterados);
 
-  const pontosCriticos = gerarPontosCriticos(
-    matches,
-    itensAlterados
-  );
+  // 🔥 TERAPIAS
+  let terapiasSugeridas = sugerirTerapias(matches, terapias);
 
-  // 🔥 SUGESTÃO DE TERAPIAS BASEADA EM DADOS REAIS
-  let terapiasSugeridas = sugerirTerapias(
-    matches,
-    terapias
-  );
-
-  // 🔥 REGRA CLÍNICA 1: SEM ALTERAÇÕES → NÃO SUGERIR TERAPIA
   if (itensAlterados.length === 0) {
     terapiasSugeridas = terapias
-      .filter(t => t.ativo)
+      .filter((t) => t.ativo)
       .sort((a, b) => (a.prioridade ?? 99) - (b.prioridade ?? 99))
       .slice(0, 2)
-      .map(t => ({
+      .map((t) => ({
         ...t,
         scoreRelevancia: 1,
-        motivos: ["manutenção preventiva"]
+        motivos: ["manutenção preventiva"],
       }));
   }
 
-  // 🔥 REGRA CLÍNICA 2: PRIORIZAÇÃO REAL (critico > moderado > leve)
-  terapiasSugeridas = terapiasSugeridas.sort((a, b) => {
-    const pesoA = a.scoreRelevancia + (10 - (a.prioridade ?? 10));
-    const pesoB = b.scoreRelevancia + (10 - (b.prioridade ?? 10));
-    return pesoB - pesoA;
-  });
-
-  const { score: scoreGeral, status: statusScore } =
-    calcularScoreGeral(itensAlterados);
-
-  // 🔥 setores com fallback inteligente
-  const setoresAfetados = [
-    ...new Set([
-      ...matches.flatMap((m) => m.setores),
-      ...itensAlterados.map((i) => i.itemNormalizado)
-    ]),
-  ];
-
-  const resumoCategorias =
-    gerarResumoCategorias(matches);
+  const { score: scoreGeral, status: statusScore } = calcularScoreGeral(itensAlterados);
+  const resumoCategorias = gerarResumoCategorias(matches);
 
   return {
     paciente,
