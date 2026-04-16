@@ -82,13 +82,29 @@ const COMPARATIVO_VAZIO = {
 };
 
 // ==============================
-// SEÇÃO PLANO TERAPÊUTICO
+// HELPER NOVO: FILTRAR TERAPIAS OCULTAS NO PDF
+// ==============================
+function getDataParaPdf(data: AiStructuredData, ocultas: Set<string>): AiStructuredData {
+  if (ocultas.size === 0) return data;
+  return {
+    ...data,
+    plano_terapeutico: {
+      ...data.plano_terapeutico,
+      terapias: data.plano_terapeutico.terapias.filter((_, i) => !ocultas.has(String(i))),
+    },
+  };
+}
+
+// ==============================
+// SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX)
 // ==============================
 
-function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel }: {
+function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
   data: AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
+  ocultas?: Set<string>;
+  onToggleOculta?: (idx: string) => void;
 }) {
   const p = data.plano_terapeutico;
 
@@ -103,7 +119,10 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel }: {
 
   return (
     <div>
-      <div style={{ fontWeight: 900, marginBottom: 6 }}>PLANO TERAPÊUTICO</div>
+      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between" }}> 
+        <span>PLANO TERAPÊUTICO</span>
+        {ocultas && ocultas.size > 0 && <span style={{fontSize: 11, color: "#f59e0b", fontWeight: 400}}>{ocultas.size} terapia(s) ocultada(s) do PDF</span>}
+      </div>
 
       {p.terapias.length > 0 && (
         <>
@@ -111,27 +130,46 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel }: {
             <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {p.terapias.map((item, i: number) => (
-              <div
-                key={i}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 10,
-                  padding: 10,
-                }}
-              >
-                <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
-                <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
-                  <b>Frequência:</b> {item.frequencia || "—"}
+            {p.terapias.map((item, i: number) => {
+              const idx = String(i);
+              if (ocultas?.has(idx)) return null;
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    border: "1px solid var(--border)",
+                    borderRadius: 10,
+                    padding: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 2 }}>
+                    <input 
+                      type="checkbox" 
+                      checked={false}
+                      onChange={() => onToggleOculta?.(idx)}
+                      style={{ cursor: "pointer", accentColor: "#ef4444", width: 16, height: 16 }}
+                      title="Clique para ocultar esta terapia do PDF"
+                    />
+                    <span style={{ fontSize: 8, opacity: 0.5, marginTop: 2 }}>Ocultar</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
+                    <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
+                      <b>Frequência:</b> {item.frequencia || "—"}
+                    </div>
+                    <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
+                      {item.descricao || "—"}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      <b>Justificativa:</b> {item.justificativa || "—"}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
-                  {item.descricao || "—"}
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>
-                  <b>Justificativa:</b> {item.justificativa || "—"}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -180,7 +218,7 @@ function exameRowToAiData(
 
   const terapiasFormatadas = analise.terapias.map((t) => ({
     nome: t.nome,
-    frequencia: t.frequencia_recomendada || "Conforme necessidade",
+    frequencia: (t as any).frequencia || t.frequencia_recomendada || "Conforme necessidade",
     descricao: t.descricao || t.indicacoes || "",
     justificativa: t.motivos?.length
       ? `Setores: ${t.motivos.join(", ")}. ${t.indicacoes || ""}`
@@ -203,11 +241,8 @@ function exameRowToAiData(
     }
   }
 
-  const ia = row.analise_ia;
-  const frequencia_lunara =
-    typeof ia === "object" && ia && "frequencia_lunara" in ia
-      ? String((ia as any).frequencia_lunara || "")
-      : "";
+  // 🔥 CORREÇÃO FINAL DO TRAÇO: Puxa do Motor que calculou o Solfeggio, e não do banco vazio!
+  const frequencia_lunara = analise.frequencia_lunara || "";
 
   return {
     interpretacao: analise.interpretacao,
@@ -277,6 +312,9 @@ function App() {
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
+  
+  // 🔥 NOVO ESTADO: GUARDAR QUAIS TERAPIAS FORAM OCULTADAS PELO CHECKBOX
+  const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
 
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
@@ -362,6 +400,7 @@ function App() {
       setAnaliseSelecionada(ultimo);
       setExamesPaciente(list);
       setTerapiasEditavel("");
+      setTerapiasOcultas(new Set()); // Limpa ocultações
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -430,6 +469,7 @@ function App() {
     setHistoryError(null);
     setHistoryLoading(true);
     setTerapiasEditavel("");
+    setTerapiasOcultas(new Set()); // Limpa ocultações
     try {
       const list = await listarExamesPorPaciente(nome);
       const listOrdenada = [...list].sort(
@@ -546,7 +586,7 @@ function App() {
                               {scoreMotor.statusScore} — {scoreMotor.scoreGeral}/100 ({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setModalOpen(true); }} style={{ marginBottom: 0 }}>
+                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setTerapiasOcultas(new Set()); setModalOpen(true); }} style={{ marginBottom: 0 }}>
                                 Ver
                               </button>
                               <button
@@ -595,6 +635,12 @@ function App() {
                         data={analiseSelecionadaData}
                         editavel={terapiasEditavel}
                         onChangeEditavel={setTerapiasEditavel}
+                        ocultas={terapiasOcultas}
+                        onToggleOculta={(idx) => setTerapiasOcultas(prev => {
+                          const novo = new Set(prev);
+                          if (novo.has(idx)) novo.delete(idx); else novo.add(idx);
+                          return novo;
+                        })}
                       />
 
                       {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
@@ -611,9 +657,9 @@ function App() {
                       <ComparativoExamesView data={comparativoExamesData ?? COMPARATIVO_VAZIO} />
 
                       <div className="lunara">
-                        <div className="sectionTitle" style={{ marginBottom: 8 }}>Frequência Lunara</div>
+                        <div className="sectionTitle" style={{ marginBottom: 8 }}>Frequência Solfeggio para Sessão</div>
                         <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
-                          {analiseSelecionadaData.frequencia_lunara || "—"}
+                          🎵 {analiseSelecionadaData.frequencia_lunara || "—"}
                         </div>
                       </div>
 
@@ -623,7 +669,7 @@ function App() {
                       </div>
 
                       {relatorioDataHistorico ? (
-                        <button className="counter" onClick={() => gerarRelatorioPDF(relatorioDataHistorico)}>
+                        <button className="counter" onClick={() => gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas))}>
                           Baixar PDF
                         </button>
                       ) : null}
@@ -687,7 +733,7 @@ function App() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   className="counter"
-                  onClick={() => { if (relatorioDataHistorico) gerarRelatorioPDF(relatorioDataHistorico); }}
+                  onClick={() => { if (relatorioDataHistorico) gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas)); }}
                   disabled={!relatorioDataHistorico}
                   style={{ marginBottom: 0 }}
                 >
@@ -725,6 +771,12 @@ function App() {
                   data={analiseSelecionadaData}
                   editavel={terapiasEditavel}
                   onChangeEditavel={setTerapiasEditavel}
+                  ocultas={terapiasOcultas}
+                  onToggleOculta={(idx) => setTerapiasOcultas(prev => {
+                    const novo = new Set(prev);
+                    if (novo.has(idx)) novo.delete(idx); else novo.add(idx);
+                    return novo;
+                  })}
                 />
 
                 {analiseMotor && analiseMotor.setoresAfetados.length > 0 && (
@@ -741,9 +793,9 @@ function App() {
                 )}
 
                 <div className="lunara">
-                  <div className="sectionTitle" style={{ marginBottom: 8 }}>Frequência Lunara</div>
+                  <div className="sectionTitle" style={{ marginBottom: 8 }}>Frequência Solfeggio para Sessão</div>
                   <div style={{ whiteSpace: "pre-wrap", color: "var(--text-h)" }}>
-                    {analiseSelecionadaData.frequencia_lunara || "—"}
+                    🎵 {analiseSelecionadaData.frequencia_lunara || "—"}
                   </div>
                 </div>
 
