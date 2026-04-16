@@ -202,14 +202,46 @@ export function extrairItensAlterados(
 ): ItemAlterado[] {
   if (!resultadoJson) return [];
 
+  const itens: ItemAlterado[] = [];
+
+  // 🔥 SUPORTE AO FORMATO DO CONTENT.JS
+  if (resultadoJson.problemas) {
+    for (const p of resultadoJson.problemas) {
+      if (!p.item || !p.status) continue;
+
+      const resultadoDecodificado = decodificarMojibake(
+        String(p.status)
+      );
+
+      if (ehNormal(resultadoDecodificado)) continue;
+
+      const { gravidade, score } =
+        classificarGravidade(resultadoDecodificado);
+
+      const itemDecodificado = decodificarMojibake(
+        String(p.item)
+      );
+
+      itens.push({
+        item: itemDecodificado,
+        itemNormalizado: normalizarTexto(itemDecodificado),
+        valor: String(p.valor ?? ""),
+        intervalo: "",
+        resultadoOriginal: resultadoDecodificado,
+        gravidade,
+        scoreGravidade: score,
+      });
+    }
+
+    return itens;
+  }
+
+  // 🔥 FORMATO ORIGINAL (mantido)
   let analises: any[] = [];
 
   if (Array.isArray(resultadoJson)) {
     for (const item of resultadoJson) {
-      if (
-        item?.analises &&
-        Array.isArray(item.analises)
-      ) {
+      if (item?.analises && Array.isArray(item.analises)) {
         analises = item.analises;
         break;
       }
@@ -218,14 +250,12 @@ export function extrairItensAlterados(
     analises = resultadoJson.analises ?? [];
   }
 
-  const itens: ItemAlterado[] = [];
-
   for (const bloco of analises) {
     const resultados = bloco.resultados ?? [];
+
     for (const r of resultados) {
       if (!r.item || !r.resultado) continue;
 
-      // 🔥 Decodifica ANTES de verificar se é normal
       const resultadoDecodificado = decodificarMojibake(
         String(r.resultado)
       );
@@ -234,15 +264,14 @@ export function extrairItensAlterados(
 
       const { gravidade, score: scoreGravidade } =
         classificarGravidade(resultadoDecodificado);
+
       const itemDecodificado = decodificarMojibake(
         String(r.item)
       );
 
       itens.push({
         item: itemDecodificado,
-        itemNormalizado: normalizarTexto(
-          itemDecodificado
-        ),
+        itemNormalizado: normalizarTexto(itemDecodificado),
         valor: String(r.valor ?? ""),
         intervalo: String(r.intervalo ?? ""),
         resultadoOriginal: resultadoDecodificado,
@@ -622,216 +651,224 @@ function sugerirTerapias(
     }
   }
 
-    // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
-    // 🚫 Sem correspondência real → sem terapias corretivas
-    if (resultados.length === 0) {
-      return [];
-    }
-  
-    return resultados.sort(
-      (a, b) => b.scoreRelevancia - a.scoreRelevancia
-    );
-  }
-  
-  // ==============================
-  // 10. SCORE GERAL
-  // ==============================
-  
-  export function calcularScoreGeral(
-    itensAlterados: ItemAlterado[]
-  ): { score: number; status: string } {
-    if (itensAlterados.length === 0)
-      return { score: 95, status: "Ótimo" };
-
-    let penalidade = 0;
-
-    for (const item of itensAlterados) {
-      switch (item.gravidade) {
-        case "critica":
-          penalidade += 8;
-          break;
-        case "moderada":
-          penalidade += 4;
-          break;
-        case "leve":
-          penalidade += 1.5;
-          break;
-        case "reducao":
-          penalidade += 1;
-          break;
-      }
-    }
-
-    const score = Math.max(
-      5,
-      Math.round(100 - penalidade)
-    );
-
-    let status: string;
-    if (score >= 85) status = "Ótimo";
-    else if (score >= 70) status = "Bom";
-    else if (score >= 50) status = "Atenção";
-    else if (score >= 30) status = "Cuidado";
-    else status = "Crítico";
-
-    return { score, status };
+  // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
+  // 🚫 Sem correspondência real → sem terapias corretivas
+  if (resultados.length === 0) {
+    return [];
   }
 
-  // ==============================
-  // 11. RESUMO POR CATEGORIA
-  // ==============================
+  return resultados.sort(
+    (a, b) => b.scoreRelevancia - a.scoreRelevancia
+  );
+}
 
-  function gerarResumoCategorias(
-    matches: MatchClinico[]
-  ): Record<
+// ==============================
+// 10. SCORE GERAL
+// ==============================
+
+export function calcularScoreGeral(
+  itensAlterados: ItemAlterado[]
+): { score: number; status: string } {
+  if (itensAlterados.length === 0)
+    return { score: 95, status: "Ótimo" };
+
+  let penalidade = 0;
+
+  for (const item of itensAlterados) {
+    switch (item.gravidade) {
+      case "critica":
+        penalidade += 8;
+        break;
+      case "moderada":
+        penalidade += 4;
+        break;
+      case "leve":
+        penalidade += 1.5;
+        break;
+      case "reducao":
+        penalidade += 1;
+        break;
+    }
+  }
+
+  const score = Math.max(
+    5,
+    Math.round(100 - penalidade)
+  );
+
+  let status: string;
+  if (score >= 85) status = "Ótimo";
+  else if (score >= 70) status = "Bom";
+  else if (score >= 50) status = "Atenção";
+  else if (score >= 30) status = "Cuidado";
+  else status = "Crítico";
+
+  return { score, status };
+}
+
+// ==============================
+// 11. RESUMO POR CATEGORIA
+// ==============================
+
+function gerarResumoCategorias(
+  matches: MatchClinico[]
+): Record<
+  string,
+  { total: number; criticos: number }
+> {
+  const resumo: Record<
     string,
     { total: number; criticos: number }
-  > {
-    const resumo: Record<
-      string,
-      { total: number; criticos: number }
-    > = {};
-  
-    for (const m of matches) {
-      const cat = m.categoria || "Outros";
-      if (!resumo[cat])
-        resumo[cat] = { total: 0, criticos: 0 };
-      resumo[cat].total++;
-      if (
-        m.gravidade === "moderada" ||
-        m.gravidade === "critica"
-      ) {
-        resumo[cat].criticos++;
-      }
+  > = {};
+
+  for (const m of matches) {
+    const cat = m.categoria || "Outros";
+    if (!resumo[cat])
+      resumo[cat] = { total: 0, criticos: 0 };
+    resumo[cat].total++;
+    if (
+      m.gravidade === "moderada" ||
+      m.gravidade === "critica"
+    ) {
+      resumo[cat].criticos++;
     }
-  
-    return resumo;
-  }
-  
-  // ==============================
-  // 🔥 FUNÇÃO PRINCIPAL
-  // ==============================
-  
-  export function gerarAnaliseCompleta(
-    exame: ExameRow,
-    base: BaseAnaliseSaudeRow[],
-    terapias: TerapiaRow[]
-  ): AnaliseCompleta {
-
-    const paciente = parsearPaciente(
-      exame.nome_paciente
-    );
-
-    const itensAlterados = extrairItensAlterados(
-      exame.resultado_json
-    );
-
-    const matches = buscarMatches(
-      itensAlterados,
-      base
-    );
-
-    const interpretacao = gerarInterpretacao(
-      matches,
-      itensAlterados
-    );
-
-    const pontosCriticos = gerarPontosCriticos(
-      matches,
-      itensAlterados
-    );
-
-    // 🔥 SUGESTÃO DE TERAPIAS BASEADA EM DADOS REAIS
-    let terapiasSugeridas = sugerirTerapias(
-      matches,
-      terapias
-    );
-
-    // 🔥 REGRA CLÍNICA 1: SEM ALTERAÇÕES → NÃO SUGERIR TERAPIA
-    if (itensAlterados.length === 0) {
-      terapiasSugeridas = [];
-    }
-
-    // 🔥 REGRA CLÍNICA 2: PRIORIZAÇÃO REAL (critico > moderado > leve)
-    terapiasSugeridas = terapiasSugeridas.sort((a, b) => {
-      const pesoA = a.scoreRelevancia + (10 - (a.prioridade ?? 10));
-      const pesoB = b.scoreRelevancia + (10 - (b.prioridade ?? 10));
-      return pesoB - pesoA;
-    });
-
-    const { score: scoreGeral, status: statusScore } =
-      calcularScoreGeral(itensAlterados);
-
-    // 🔥 setores com fallback inteligente
-    const setoresAfetados = [
-      ...new Set([
-        ...matches.flatMap((m) => m.setores),
-        ...itensAlterados.map((i) => i.itemNormalizado)
-      ]),
-    ];
-
-    const resumoCategorias =
-      gerarResumoCategorias(matches);
-
-    return {
-      paciente,
-      itensAlterados,
-      matches,
-      interpretacao,
-      pontosCriticos,
-      terapias: terapiasSugeridas,
-      scoreGeral,
-      statusScore,
-      setoresAfetados,
-      resumoCategorias,
-    };
   }
 
-  // ==============================
-  // COMPARATIVO INTELIGENTE
-  // ==============================
+  return resumo;
+}
 
-  export type ItemComparativo = {
-    sistema: string;
-    item: string;
-    antes: "baixo" | "normal" | "alto" | null;
-    depois: "baixo" | "normal" | "alto" | null;
-    valor_antes?: number;
-    valor_depois?: number;
-    variacao?: number;
-    evolucao:
-    | "melhora"
-    | "piora"
-    | "novo"
-    | "normalizado";
-  };
+// ==============================
+// 🔥 FUNÇÃO PRINCIPAL
+// ==============================
 
-  export type ComparativoInteligente = {
-    melhoraram: ItemComparativo[];
-    pioraram: ItemComparativo[];
-    novos_problemas: ItemComparativo[];
-    normalizados: ItemComparativo[];
-  };
+export function gerarAnaliseCompleta(
+  exame: ExameRow,
+  base: BaseAnaliseSaudeRow[],
+  terapias: TerapiaRow[]
+): AnaliseCompleta {
 
-  const COMPARATIVO_VAZIO: ComparativoInteligente = {
-    melhoraram: [],
-    pioraram: [],
-    novos_problemas: [],
-    normalizados: [],
-  };
+  const paciente = parsearPaciente(
+    exame.nome_paciente
+  );
 
-  function classificarStatus(
-    resultado: string
-  ): "baixo" | "normal" | "alto" | null {
-    const decodificado = decodificarMojibake(resultado);
-    const lower = decodificado.toLowerCase();
-    if (ehNormal(decodificado)) return "normal";
-    if (lower.includes("redu")) return "baixo";
-    if (lower.includes("anormal")) return "alto";
-    return null;
+  const itensAlterados = extrairItensAlterados(
+    exame.resultado_json
+  );
+
+  const matches = buscarMatches(
+    itensAlterados,
+    base
+  );
+
+  const interpretacao = gerarInterpretacao(
+    matches,
+    itensAlterados
+  );
+
+  const pontosCriticos = gerarPontosCriticos(
+    matches,
+    itensAlterados
+  );
+
+  // 🔥 SUGESTÃO DE TERAPIAS BASEADA EM DADOS REAIS
+  let terapiasSugeridas = sugerirTerapias(
+    matches,
+    terapias
+  );
+
+  // 🔥 REGRA CLÍNICA 1: SEM ALTERAÇÕES → NÃO SUGERIR TERAPIA
+  if (itensAlterados.length === 0) {
+    terapiasSugeridas = terapias
+      .filter(t => t.ativo)
+      .sort((a, b) => (a.prioridade ?? 99) - (b.prioridade ?? 99))
+      .slice(0, 2)
+      .map(t => ({
+        ...t,
+        scoreRelevancia: 1,
+        motivos: ["manutenção preventiva"]
+      }));
   }
 
-  export function gerarComparativoInteligente(
+  // 🔥 REGRA CLÍNICA 2: PRIORIZAÇÃO REAL (critico > moderado > leve)
+  terapiasSugeridas = terapiasSugeridas.sort((a, b) => {
+    const pesoA = a.scoreRelevancia + (10 - (a.prioridade ?? 10));
+    const pesoB = b.scoreRelevancia + (10 - (b.prioridade ?? 10));
+    return pesoB - pesoA;
+  });
+
+  const { score: scoreGeral, status: statusScore } =
+    calcularScoreGeral(itensAlterados);
+
+  // 🔥 setores com fallback inteligente
+  const setoresAfetados = [
+    ...new Set([
+      ...matches.flatMap((m) => m.setores),
+      ...itensAlterados.map((i) => i.itemNormalizado)
+    ]),
+  ];
+
+  const resumoCategorias =
+    gerarResumoCategorias(matches);
+
+  return {
+    paciente,
+    itensAlterados,
+    matches,
+    interpretacao,
+    pontosCriticos,
+    terapias: terapiasSugeridas,
+    scoreGeral,
+    statusScore,
+    setoresAfetados,
+    resumoCategorias,
+  };
+}
+
+// ==============================
+// COMPARATIVO INTELIGENTE
+// ==============================
+
+export type ItemComparativo = {
+  sistema: string;
+  item: string;
+  antes: "baixo" | "normal" | "alto" | null;
+  depois: "baixo" | "normal" | "alto" | null;
+  valor_antes?: number;
+  valor_depois?: number;
+  variacao?: number;
+  evolucao:
+  | "melhora"
+  | "piora"
+  | "novo"
+  | "normalizado";
+};
+
+export type ComparativoInteligente = {
+  melhoraram: ItemComparativo[];
+  pioraram: ItemComparativo[];
+  novos_problemas: ItemComparativo[];
+  normalizados: ItemComparativo[];
+};
+
+const COMPARATIVO_VAZIO: ComparativoInteligente = {
+  melhoraram: [],
+  pioraram: [],
+  novos_problemas: [],
+  normalizados: [],
+};
+
+function classificarStatus(
+  resultado: string
+): "baixo" | "normal" | "alto" | null {
+  const decodificado = decodificarMojibake(resultado);
+  const lower = decodificado.toLowerCase();
+  if (ehNormal(decodificado)) return "normal";
+  if (lower.includes("redu")) return "baixo";
+  if (lower.includes("anormal")) return "alto";
+  return null;
+}
+
+export function gerarComparativoInteligente(
   exames: ExameRow[]
 ): ComparativoInteligente {
   if (exames.length < 2) return COMPARATIVO_VAZIO;
