@@ -755,6 +755,10 @@ function App() {
                           onClick={async () => {
                             if (!relatorioDataHistorico || isGerandoPdf) return;
                             setIsGerandoPdf(true);
+
+                            // 🔥 O SEGREDO: Dá um respiro pro React atualizar a tela antes de travar no PDF
+                            await new Promise(r => setTimeout(r, 50));
+
                             try {
                               await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
                             } finally {

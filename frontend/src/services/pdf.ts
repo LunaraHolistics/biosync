@@ -204,10 +204,10 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     blocks.push(criarBlocoHTML(comparativoHTML));
   }
 
-// 4. MAPA TÉCNICO E IMPACTO FITNESS (COMPRESSÃO INTELIGENTE POR CATEGORIA)
+// 4. MAPA TÉCNICO E IMPACTO FITNESS (OTIMIZAÇÃO TOTAL DE ESPAÇO)
 if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
   
-  // 1. AGRUPAR TODOS OS ITENS PELO SISTEMA (CATEGORIA)
+  // 1. AGRUPAR TUDO POR SISTEMA
   const grupos: Record<string, typeof data.diagnostico.problemas> = {};
   for (const item of data.diagnostico.problemas) {
     const sys = item.sistema || "Geral";
@@ -215,57 +215,62 @@ if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
     grupos[sys].push(item);
   }
 
-  // 2. GERAR TEXTO LIMPO E CONCATENADO PARA CADA CATEGORIA
-  const categoriasHTML = Object.entries(grupos).map(([sistema, itens]) => {
+  // Ordena categorias pelas que têm mais itens
+  const categoriasOrdenadas = Object.entries(grupos).sort((a, b) => b[1].length - a[1].length);
+  
+  let isFirstBlock = true;
+
+  // 2. GERAR UM BLOCO PARA CADA CATEGORIA
+  for (const [sistema, itens] of categoriasOrdenadas) {
     
-    // Pega os nomes dos itens removendo repetições exatas
-    const nomesItens = [...new Set(itens.map(i => i.item))].join(", ");
+    // Se uma categoria for muito grande, quebra em blocos de 12 itens
+    const ITENS_POR_PAGINA_MAPA = 12; 
+    
+    for (let i = 0; i < itens.length; i += ITENS_POR_PAGINA_MAPA) {
+      const chunk = itens.slice(i, i + ITENS_POR_PAGINA_MAPA);
 
-    // Pega os sintomas (impactos) removendo repetições exatas
-    const impactosUnicos = [...new Set(itens.map(i => i.impacto).filter(Boolean))];
-    const sintomasStr = impactosUnicos.length > 0 
-      ? `<div style="font-size:10px;color:#555;margin:4px 0 6px 0"><b>Sintomas:</b> ${impactosUnicos.join("; ")}</div>` 
-      : "";
+      // Concatena os sintomas removendo repetições
+      const impactosUnicos = [...new Set(chunk.map(it => it.impacto).filter(Boolean))];
+      const sintomasStr = impactosUnicos.length > 0 
+        ? `<div style="font-size:10px;color:#555;margin:4px 0 6px 0"><b>Sintomas:</b> ${impactosUnicos.join("; ")}</div>` 
+        : "";
 
-    // Pega os impactos fitness e junta tudo sem repetir o mesmo texto
-    const fitnessMap: Record<string, Set<string>> = {};
-    for (const i of itens) {
-      if (!i.impacto_fitness) continue;
-      for (const [k, v] of Object.entries(i.impacto_fitness)) {
-        if (!fitnessMap[k]) fitnessMap[k] = new Set();
-        fitnessMap[k].add(String(v));
+      // Concatena o fitness removendo repetições
+      const fitnessMap: Record<string, Set<string>> = {};
+      for (const it of chunk) {
+        if (!it.impacto_fitness) continue;
+        for (const [k, v] of Object.entries(it.impacto_fitness)) {
+          if (!fitnessMap[k]) fitnessMap[k] = new Set();
+          fitnessMap[k].add(String(v));
+        }
       }
-    }
-    const fitnessTags = Object.entries(fitnessMap).map(([k, v]) => {
-      const emoji = k === 'performance' ? '💪' : k === 'hipertrofia' ? '🏋️' : k === 'emagrecimento' ? '🔥' : k === 'recuperacao' ? '🩹' : '🧠';
-      return `<span style="background:#f0f9ff;color:#0284c7;padding:2px 5px;border-radius:3px;font-size:9px;margin-right:4px">${emoji} ${k}: ${[...v].join(", ")}</span>`;
-    }).join("");
-    
-    const fitnessStr = fitnessTags ? `<div style="margin-top:4px">${fitnessTags}</div>` : "";
+      const fitnessTags = Object.entries(fitnessMap).map(([k, v]) => {
+        const emoji = k === 'performance' ? '💪' : k === 'hipertrofia' ? '🏋️' : k === 'emagrecimento' ? '🔥' : k === 'recuperacao' ? '🩹' : '🧠';
+        return `<span style="background:#f0f9ff;color:#0284c7;padding:2px 5px;border-radius:3px;font-size:9px;margin-right:4px">${emoji} ${k}: ${[...v].join(", ")}</span>`;
+      }).join("");
+      const fitnessStr = fitnessTags ? `<div style="margin-top:4px">${fitnessTags}</div>` : "";
 
-    return `
-      <div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e5e7eb">
+      // Monta o HTML dos itens
+      const nomesItens = [...new Set(chunk.map(it => it.item))].join(", ");
+      
+      const htmlItens = `
         <div style="font-weight:800;color:#111;font-size:12px;margin-bottom:4px">${escapeHtml(sistema)}</div>
         <div style="font-size:11px;color:#333">${escapeHtml(nomesItens)}</div>
         ${sintomasStr}
         ${fitnessStr}
-      </div>
-    `;
-  }).join("");
+      `;
 
-  // 3. FATIAR O TEXTO FINAL APENAS SE FOR GIGANTE (O que é bem improvável agora)
-  // Ao invés de fatiar por itens, fatiamos o texto final se passar de 3200 caracteres
-  const blocosMapa = dividirTexto(categoriasHTML, MAX_CHARS_POR_BLOCO);
-  
-  blocosMapa.forEach((pedaco, idx) => {
-    const titulo = idx === 0 
-      ? `<div style="font-size:13px;font-weight:900;color:#111;margin-bottom:10px">Mapa Técnico e Impacto Fitness</div>` 
-      : `<div style="font-size:11px;color:#888;margin-bottom:10px;font-style:italic">Mapa Técnico e Impacto Fitness (continuação)</div>`;
-    
-    blocks.push(criarBlocoHTML(`${titulo}${pedaco}`));
-  });
+      // Se for o primeiro bloco, adiciona o título "Mapa Técnico"
+      // Se for continuação, adiciona título smaller
+      const titulo = isFirstBlock 
+        ? `<div style="font-size:13px;font-weight:900;color:#111;margin-bottom:10px">Mapa Técnico e Impacto Fitness</div>`
+        : `<div style="font-size:11px;color:#888;margin-bottom:10px;font-style:italic">Mapa Técnico e Impacto Fitness (continuação)</div>`;
+
+      blocks.push(criarBlocoHTML(`${titulo}${htmlItens}`));
+      isFirstBlock = false;
+    }
+  }
 }
-
   // =======================================================================
   // 🔥 CORREÇÃO 1: PLANO TERAPÊUTICO DIVIDIDO EM PÁGINAS (NÃO CORTA MAIS)
   // =======================================================================
