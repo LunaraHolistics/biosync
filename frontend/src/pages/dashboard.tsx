@@ -152,7 +152,7 @@ export default function Dashboard() {
 
       // Mapeamento das Terapias
       plano_terapeutico: {
-        tipo: "Sugerido pela IA", // 🔥 ADICIONE ESTA LINHA PARA SATISFAZER O TYPESCRIPT
+        tipo: "Sugerido pela IA" as any, // 🔥 ADICIONE ESTA LINHA PARA SATISFAZER O TYPESCRIPT
         terapias: analise.terapias.map((t) => ({
           nome: t.nome,
           descricao: t.descricao || "",
