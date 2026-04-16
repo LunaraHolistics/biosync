@@ -152,10 +152,11 @@ export default function Dashboard() {
 
       // Mapeamento das Terapias
       plano_terapeutico: {
+        tipo: "Sugerido pela IA", // 🔥 ADICIONE ESTA LINHA PARA SATISFAZER O TYPESCRIPT
         terapias: analise.terapias.map((t) => ({
           nome: t.nome,
-          descricao: t.descricao || "", // FIX 2: Garante que nunca será null
-          frequencia: (t as any).frequencia || t.categoria || "", // FIX 3: Pega frequencia ou categoria
+          descricao: t.descricao || "",
+          frequencia: (t as any).frequencia || t.categoria || "",
           justificativa: t.motivos?.join(", "),
         })),
       },
