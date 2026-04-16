@@ -102,6 +102,10 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 // SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX)
 // ==============================
 
+// ==============================
+// SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX E RESTAURAÇÃO)
+// ==============================
+
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
   data: AiStructuredData;
   editavel?: string;
@@ -124,7 +128,7 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
     <div>
       <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
         <span>PLANO TERAPÊUTICO</span>
-        {ocultas && ocultas.size > 0 && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400 }}>{ocultas.size} terapia(s) ocultada(s) do PDF</span>}
+        {ocultas && ocultas.size > 0 && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400 }}>{ocultas.size} terapia(s) ocultada(s)</span>}
       </div>
 
       {p.terapias.length > 0 && (
@@ -135,8 +139,44 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {p.terapias.map((item, i: number) => {
               const idx = String(i);
-              if (ocultas?.has(idx)) return null;
+              const isOculta = ocultas?.has(idx) || false;
 
+              // 🔥 NOVO COMPORTAMENTO: SE ESTIVER OCULTA, MOSTRA RISCADA PARA RESTAURAR
+              if (isOculta) {
+                return (
+                  <div
+                    key={i}
+                    onClick={() => onToggleOculta?.(idx)}
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      border: "1px dashed #475569",
+                      borderRadius: 10,
+                      padding: 10,
+                      opacity: 0.5,
+                      cursor: "pointer",
+                      transition: "opacity 0.2s"
+                    }}
+                    title="Clique para restaurar esta terapia ao PDF"
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 2 }}>
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        readOnly
+                        style={{ cursor: "pointer", accentColor: "#22c55e", width: 16, height: 16 }}
+                      />
+                      <span style={{ fontSize: 8, opacity: 1, marginTop: 2, color: "#22c55e", fontWeight: 700 }}>Restaurar</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, textDecoration: "line-through" }}>{item.nome}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8" }}>Ocultada do PDF. Clique aqui para reverter.</div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // COMPORTAMENTO NORMAL (ATIVA)
               return (
                 <div
                   key={i}
@@ -645,6 +685,35 @@ function App() {
                             : <li>—</li>}
                         </ul>
                       </div>
+
+                      {/* 🔥 NOVO BLOCO: IMPACTO FITNESS NO PREVIEW */}
+                      {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
+                        <div>
+                          <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {analiseMotor.matches
+                              .filter((m: any) => m.impacto_fitness)
+                              .slice(0, 10) // Limita a 10 para não poluir a tela
+                              .map((m: any, i: number) => (
+                                <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
+                                  <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
+                                    {m.categoria} — {m.itemBase}
+                                    <span style={{ marginLeft: 8, color: "#f87171", fontWeight: 600 }}>({m.gravidade})</span>
+                                  </div>
+                                  {m.impacto && (
+                                    <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 6 }}>{m.impacto}</div>
+                                  )}
+                                  <div style={{ fontSize: 11, color: "#38bdf8" }}>
+                                    {Object.entries(m.impacto_fitness).map(([key, val]) => (
+                                      <div key={key}>• <b>{key.charAt(0).toUpperCase() + key.slice(1)}:</b> {val}</div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))
+                            }
+                          </div>
+                        </div>
+                      )}
 
                       <SecaoPlanoTerapeutico
                         data={analiseSelecionadaData}
