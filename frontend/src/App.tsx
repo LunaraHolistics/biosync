@@ -381,6 +381,27 @@ function App() {
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
     : null;
 
+  // 🔥 MOVIDO PARA CIMA
+  const analiseMotor = analiseSelecionada
+    ? obterAnalise(analiseSelecionada)
+    : null;
+
+  const relatorioDataHistorico = analiseSelecionada
+    ? buildRelatorioData(
+      analiseSelecionada,
+      pacienteSelecionado || clientName.trim() || "Cliente",
+      analiseSelecionadaData ?? {
+        interpretacao: "",
+        pontos_criticos: [],
+        plano_terapeutico: { tipo: "mensal", terapias: [] },
+        frequencia_lunara: "",
+        justificativa: "",
+      },
+      comparativoExamesData,
+      analiseMotor ?? undefined // 🔥 ADICIONE AQUI
+    )
+    : null;
+
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -516,10 +537,6 @@ function App() {
     }
   }
 
-  const analiseMotor = analiseSelecionada
-    ? obterAnalise(analiseSelecionada)
-    : null;
-
   return (
     <>
       <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
@@ -624,8 +641,7 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
-                                  const motor = obterAnalise(a); // 🔥 PEGA O MOTOR
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, motor)); // 🔥 PASSA O MOTOR
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a)));
                                 }}
                                 style={{ marginBottom: 0 }}
                               >
