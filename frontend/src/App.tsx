@@ -4,6 +4,8 @@ import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import ComparativoExamesView from "./components/ComparativoExames";
 import {
+  salvarAnaliseCurada,
+  buscarAnaliseCurada,
   listarExames,
   buscarExamesPorNome,
   contarExames,
@@ -84,14 +86,16 @@ const COMPARATIVO_VAZIO = {
 // ==============================
 // HELPER NOVO: FILTRAR TERAPIAS OCULTAS NO PDF
 // ==============================
-function getDataParaPdf(data: AiStructuredData, ocultas: Set<string>): AiStructuredData {
+function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioData {
   if (ocultas.size === 0) return data;
   return {
     ...data,
-    plano_terapeutico: {
-      ...data.plano_terapeutico,
-      terapias: data.plano_terapeutico.terapias.filter((_, i) => !ocultas.has(String(i))),
-    },
+    plano_terapeutico: data.plano_terapeutico
+      ? {
+        ...data.plano_terapeutico,
+        terapias: data.plano_terapeutico.terapias.filter((_, i) => !ocultas.has(String(i))),
+      }
+      : undefined,
   };
 }
 
@@ -119,9 +123,9 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
 
   return (
     <div>
-      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between" }}> 
+      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
         <span>PLANO TERAPÊUTICO</span>
-        {ocultas && ocultas.size > 0 && <span style={{fontSize: 11, color: "#f59e0b", fontWeight: 400}}>{ocultas.size} terapia(s) ocultada(s) do PDF</span>}
+        {ocultas && ocultas.size > 0 && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400 }}>{ocultas.size} terapia(s) ocultada(s) do PDF</span>}
       </div>
 
       {p.terapias.length > 0 && (
@@ -146,8 +150,8 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 2 }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={false}
                       onChange={() => onToggleOculta?.(idx)}
                       style={{ cursor: "pointer", accentColor: "#ef4444", width: 16, height: 16 }}
@@ -312,7 +316,7 @@ function App() {
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
-  
+
   // 🔥 NOVO ESTADO: GUARDAR QUAIS TERAPIAS FORAM OCULTADAS PELO CHECKBOX
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
 
@@ -332,7 +336,22 @@ function App() {
 
   function obterAnalise(row: ExameRow): AnaliseCompleta {
     if (cacheAnalise[row.id]) return cacheAnalise[row.id];
+
+    // 1. Verifica se já tem uma análise curada salva no banco (Cache Permanente)
+    // Como é síncrono com o estado, precisamos de um estado separado se quiser esperar o DB.
+    // Mas para não travar a UI, deixamos o motor calcular normal e salvamos em background.
+
+    // Calcula via Motor Semântico (como fazia antes)
     const analise = gerarAnaliseCompleta(row, baseAnalise, terapias);
+
+    // 🔥 SALVA EM BACKGROUND NO SUPABASE (Não trava a tela)
+    // Usa .then() para rodar de forma assíncrona silenciosa
+    salvarAnaliseCurada(row.id, analise).then((sucesso) => {
+      if (sucesso) {
+        console.log(`✅ Análise curada salva para o exame ${row.id.substring(0, 5)}`);
+      }
+    });
+
     setCacheAnalise((prev) => ({ ...prev, [row.id]: analise }));
     return analise;
   }

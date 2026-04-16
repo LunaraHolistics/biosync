@@ -244,6 +244,69 @@ export async function buscarUltimoExamePorPaciente(
 }
 
 // ==============================
+// SALVAR ANÁLISE CURADA NO SUPABASE
+// ==============================
+
+export async function salvarAnaliseCurada(
+  exameId: string,
+  analise: any // Usamos any aqui porque vindo do motor é um objeto complexo
+): Promise<boolean> {
+  try {
+    // Prepara os dados no formato exato que o banco espera
+    const payload = {
+      exame_id: exameId,
+      score_geral: analise.scoreGeral,
+      status_score: analise.statusScore,
+      interpretacao: analise.interpretacao,
+      pontos_criticos: analise.pontosCriticos,
+      setores_afetados: analise.setoresAfetados,
+      resumo_categorias: analise.resumoCategorias,
+      frequencia_solfeggio: analise.frequencia_lunara || "",
+      justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${(analise.setoresAfetados || []).join(", ")}.`,
+      terapias_sugeridas: analise.terapias.map((t: any) => ({
+        nome: t.nome,
+        descricao: t.descricao,
+        frequencia: t.frequencia || (t as any).frequencia_recomendada || "",
+        justificativa: t.motivos?.join(", ") || "",
+        scoreRelevancia: t.scoreRelevancia
+      })),
+      impacto_fitness: (analise.matches || []).map((m: any) => ({
+        categoria: m.categoria,
+        item: m.itemBase,
+        gravidade: m.gravidade,
+        impacto: m.impacto,
+        impacto_fitness: (m as any).impacto_fitness || null
+      }))
+    };
+
+    const { error } = await supabase
+      .from('analises_curadas')
+      .upsert(payload, { onConflict: 'exame_id' });
+
+    if (error) {
+      console.error("Erro ao salvar análise curada:", error.message);
+      return false;
+    }
+    
+    return true;
+  } catch (err) {
+    console.error("Erro inesperado ao salvar curada:", err);
+    return false;
+  }
+}
+
+export async function buscarAnaliseCurada(exameId: string): Promise<any | null> {
+  const { data, error } = await supabase
+    .from('analises_curadas')
+    .select('*')
+    .eq('exame_id', exameId)
+    .single();
+
+  if (error || !data) return null;
+  return data;
+}
+
+// ==============================
 // INSERÇÃO
 // ==============================
 
