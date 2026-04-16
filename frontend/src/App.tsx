@@ -99,10 +99,6 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 }
 
 // ==============================
-// SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX)
-// ==============================
-
-// ==============================
 // SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX E RESTAURAÇÃO)
 // ==============================
 
@@ -364,7 +360,7 @@ function App() {
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
-
+  const [isGerandoPdf, setIsGerandoPdf] = useState(false); // 🔥 ADICIONE ESTE
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
@@ -753,8 +749,20 @@ function App() {
                       </div>
 
                       {relatorioDataHistorico ? (
-                        <button className="counter" onClick={() => gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas))}>
-                          Baixar PDF
+                        <button
+                          className="counter"
+                          disabled={isGerandoPdf}
+                          onClick={async () => {
+                            if (!relatorioDataHistorico || isGerandoPdf) return;
+                            setIsGerandoPdf(true);
+                            try {
+                              await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
+                            } finally {
+                              setIsGerandoPdf(false);
+                            }
+                          }}
+                        >
+                          {isGerandoPdf ? "⏳ Gerando PDF..." : "Baixar PDF"}
                         </button>
                       ) : null}
                     </div>
@@ -784,7 +792,7 @@ function App() {
         </main>
       </div>
 
-       {modalOpen ? (
+      {modalOpen ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -858,11 +866,11 @@ function App() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {analiseMotor.matches
                         .filter((m: any) => m.impacto_fitness)
-                        .slice(0, 10) 
+                        .slice(0, 10)
                         .map((m: any, i: number) => (
                           <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
                             <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
-                              {m.categoria} — {m.itemBase} 
+                              {m.categoria} — {m.itemBase}
                               <span style={{ marginLeft: 8, color: "#f87171", fontWeight: 600 }}>({m.gravidade})</span>
                             </div>
                             {m.impacto && (
