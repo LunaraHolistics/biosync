@@ -3,7 +3,6 @@ import { jsPDF } from "jspdf";
 import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 const PDF_CANVAS_SCALE_DEFAULT = 2;
-const LIMITE_ITENS_RELATORIO = 40;
 const MAX_CHARS_POR_BLOCO = 2800; // Reduzido levemente para garantir margem de segurança visual
 
 export type RelatorioData = {
