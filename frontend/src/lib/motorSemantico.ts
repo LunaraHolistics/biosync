@@ -60,6 +60,7 @@ export type AnaliseCompleta = {
   terapias: TerapiaSugerida[];
   scoreGeral: number;
   statusScore: string;
+  percentual: number; // 🔥 NOVO
   setoresAfetados: string[];
   resumoCategorias: Record<string, { total: number; criticos: number }>;
   frequencia_lunara: string;
@@ -580,47 +581,47 @@ function sugerirTerapias(
 }
 
 // ==============================
-// 10. SCORE GERAL
+// 10. SCORE GERAL (CURVA SUAVIZANTE)
 // ==============================
-
 export function calcularScoreGeral(
-  itensAlterados: ItemAlterado[]
-): { score: number; status: string } {
-  if (itensAlterados.length === 0)
-    return { score: 95, status: "Ótimo" };
+  itensAlterados: ItemAlterado[],
+  totalScanned: number = 300 // Base padrão do aparelho
+): { score: number; status: string; percentual: number } {
+  if (itensAlterados.length === 0) {
+    return { score: 100, status: "Ótimo", percentual: 0 };
+  }
 
-  let penalidade = 0;
-
+  // 1. Calcula o peso real da doença (Leve=1, Moderado=2, Crítico=3)
+  let pesoDoenca = 0;
   for (const item of itensAlterados) {
     switch (item.gravidade) {
-      case "critica":
-        penalidade += 8;
-        break;
-      case "moderada":
-        penalidade += 4;
-        break;
-      case "leve":
-        penalidade += 1.5;
-        break;
-      case "reducao":
-        penalidade += 1;
-        break;
+      case "critica": pesoDoenca += 3; break;
+      case "moderada": pesoDoenca += 2; break;
+      case "leve": pesoDoenca += 1; break;
+      case "reducao": pesoDoenca += 1; break;
     }
   }
 
-  const score = Math.max(
-    5,
-    Math.round(100 - penalidade)
-  );
+  // 2. Transforma em porcentagem (Máximo teórico = todos os 300 itens com gravidade máxima)
+  const pesoMaximo = totalScanned * 3; 
+  const porcentagemImpacto = Math.min(1, pesoDoenca / pesoMaximo);
+
+  // 3. CURVA SUAVIZANTE: Fórmula exponencial (potência 1.2)
+  // Se 43% estiver doente, o score não será 57 (ruim), será 66 (ameno)
+  const score = Math.max(0, Math.round(100 - (Math.pow(porcentagemImpacto, 1.2) * 100)));
 
   let status: string;
   if (score >= 85) status = "Ótimo";
-  else if (score >= 70) status = "Bom";
-  else if (score >= 50) status = "Atenção";
-  else if (score >= 30) status = "Cuidado";
+  else if (score >= 65) status = "Bom";
+  else if (score >= 40) status = "Atenção";
+  else if (score >= 20) status = "Cuidado";
   else status = "Crítico";
 
-  return { score, status };
+  return { 
+    score, 
+    status, 
+    percentual: Math.round(porcentagemImpacto * 100) 
+  };
 }
 
 // ==============================

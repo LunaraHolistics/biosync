@@ -820,7 +820,7 @@ function App() {
                 </div>
                 {analiseMotor && (
                   <div style={{ fontSize: 13, color: "#38bdf8", marginTop: 2 }}>
-                    Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore} |{" "}
+                    Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore} | {analiseMotor.percentual}% impacto
                     {analiseMotor.itensAlterados.length} alterados |{" "}
                     {analiseMotor.matches.length} matches |{" "}
                     {analiseMotor.terapias.length} terapias
