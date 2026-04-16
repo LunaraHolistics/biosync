@@ -132,6 +132,7 @@ export default function Dashboard() {
     const analise = obterAnalise(exame);
 
     // Mapeando o que o Motor gerou para o formato exato que o pdf.ts exige
+    // Usamos "as any" nas propriedades dinâmicas para não brigar com o TypeScript estrito
     const dadosParaPDF: RelatorioData = {
       clientName: analise.paciente.nome,
       createdAt: exame.data_exame,
@@ -145,7 +146,7 @@ export default function Dashboard() {
           item: m.itemBase,
           status: m.gravidade,
           impacto: m.impacto,
-          impacto_fitness: m.impacto_fitness || undefined,
+          impacto_fitness: (m as any).impacto_fitness || undefined, // FIX 1
         })),
       },
 
@@ -153,13 +154,13 @@ export default function Dashboard() {
       plano_terapeutico: {
         terapias: analise.terapias.map((t) => ({
           nome: t.nome,
-          descricao: t.descricao,
-          frequencia: t.frequencia,
-          justificativa: t.motivos?.join(", "), // Junta os motivos gerados pelo motor
+          descricao: t.descricao || "", // FIX 2: Garante que nunca será null
+          frequencia: (t as any).frequencia || t.categoria || "", // FIX 3: Pega frequencia ou categoria
+          justificativa: t.motivos?.join(", "),
         })),
       },
 
-      // 🔥 AQUI ESTÁ A SOLUÇÃO DO TRAÇO: Puxando direto do Motor Semântico
+      // Frequência Solfeggio
       frequencia_lunara: analise.frequencia_lunara,
 
       justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ")}.`,
