@@ -730,9 +730,8 @@ export function gerarAnaliseCompleta(
 }
 
 // ==============================
-// IMPACTO FITNESS (MAPEAMENTO CLÍNICO)
+// IMPACTO FITNESS (MAPEAMENTO CLÍNICO EXPANDIDO)
 // ==============================
-// 🔥 CORREÇÃO DE TIPO: Removido 'ItemAlterado[...]' para evitar erro de propriedade inexistente
 type ImpactoFitnessType = {
   performance?: string;
   hipertrofia?: string;
@@ -744,32 +743,45 @@ type ImpactoFitnessType = {
 function mapearImpactoFitness(categoria: string, gravidade: Gravidade): ImpactoFitnessType {
   const catNorm = normalizarTexto(categoria);
 
-  if (catNorm.includes('metabolismo') || catNorm.includes('gordura')) {
-    return {
-      emagrecimento: gravidade === 'critica' ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' : 'Metabolismo lento, requer estímulo dietético.',
-      performance: 'Queda de energia disponível para treinos.'
+  if (catNorm.includes('metabolismo') || catNorm.includes('gordura') || catNorm.includes('obesidade')) {
+    return { 
+      emagrecimento: gravidade === 'critica' ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' : 'Metabolismo lento, requer estímulo dietético.', 
+      performance: 'Queda de energia disponível para treinos.' 
     };
   }
-  if (catNorm.includes('muscular') || catNorm.includes('articul')) {
-    return {
-      hipertrofia: gravidade === 'critica' ? 'Risco de lesão. Foco em reparo antes de carga.' : 'Capacidade de recuperação entre séries reduzida.',
-      recuperacao: 'Dor ou inflamação aumentam o tempo de repouso necessário.'
+  if (catNorm.includes('muscular') || catNorm.includes('articul') || catNorm.includes('osseo') || catNorm.includes('colageno')) {
+    return { 
+      hipertrofia: gravidade === 'critica' ? 'Risco de lesão. Foco em reparo antes de carga.' : 'Capacidade de recuperação entre séries reduzida.', 
+      recuperacao: 'Dor ou inflamação aumentam o tempo de repouso necessário.' 
     };
   }
-  if (catNorm.includes('cardiovascular') || catNorm.includes('pulmonar')) {
-    return {
-      performance: 'Capacidade aeróbica reduzida, fadiga precoce.',
-      recuperacao: 'Frequência cardíaca de repouso alterada.'
+  if (catNorm.includes('cardiovascular') || catNorm.includes('pulmonar') || catNorm.includes('sangu')) {
+    return { 
+      performance: 'Capacidade aeróbica reduzida, fadiga precoce.', 
+      recuperacao: 'Frequência cardíaca de repouso alterada.' 
     };
   }
-  if (catNorm.includes('nervoso') || catNorm.includes('emocional')) {
-    return {
-      humor: 'Instabilidade hormonal/neurológica afetando motivação.',
-      performance: 'Foco e concentração prejudicados durante o treino.'
+  if (catNorm.includes('nervoso') || catNorm.includes('emocional') || catNorm.includes('consciencia')) {
+    return { 
+      humor: 'Instabilidade afetando motivação e foco.', 
+      performance: 'Foco e concentração prejudicados durante o treino.' 
+    };
+  }
+  // 🔥 NOVOS MAPEAMENTOS (O segredo para a Lucimara)
+  if (catNorm.includes('mineral') || catNorm.includes('vitamina') || catNorm.includes('aminoacido')) {
+    return { 
+      recuperacao: 'Deficiência de micronutrientes prejudica reparo tecidual e contração muscular.', 
+      performance: 'Fadiga crônica e falta de energia celular (ATP).' 
+    };
+  }
+  if (catNorm.includes('imunologico') || catNorm.includes('linfonodo') || catNorm.includes('timo')) {
+    return { 
+      recuperacao: 'Sistema imune baixo pode gerar inflamações crônicas que atrasam o ganho de massa.', 
+      humor: 'Vulnerabilidade a doenças pode causar fadiga e desânimo.' 
     };
   }
 
-  return null; 
+  return null; // Para coisas muito específicas tipo "Acupuntura" ou "Alergenos", não gera fitness
 }
 
 // ==============================

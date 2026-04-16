@@ -274,7 +274,8 @@ function buildRelatorioData(
   row: ExameRow,
   paciente: string,
   data: AiStructuredData,
-  comparacao?: any
+  comparacao?: any,
+  motor?: AnaliseCompleta // 🔥 NOVO PARÂMETRO
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -286,7 +287,18 @@ function buildRelatorioData(
     plano_terapeutico: data.plano_terapeutico,
     frequencia_lunara: data.frequencia_lunara || "",
     justificativa: data.justificativa || "",
-    diagnostico: toDiagnostico(meta.diagnostico),
+
+    // 🔥 CORREÇÃO: Agora usa o MOTOR se existir, senão tenta o banco antigo
+    diagnostico: motor ? {
+      problemas: motor.matches.map((m) => ({
+        sistema: m.categoria,
+        item: m.itemBase,
+        status: m.gravidade,
+        impacto: m.impacto,
+        impacto_fitness: (m as any).impacto_fitness || undefined,
+      }))
+    } : toDiagnostico(meta.diagnostico),
+
     comparacao,
     relatorio_original_html: getRelatorioOriginal(meta, row),
   };
@@ -380,7 +392,8 @@ function App() {
         frequencia_lunara: "",
         justificativa: "",
       },
-      comparativoExamesData
+      comparativoExamesData,
+      analiseMotor // 🔥 PASSA O MOTOR AQUI TAMBÉM
     )
     : null;
 
@@ -611,7 +624,8 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData));
+                                  const motor = obterAnalise(a); // 🔥 PEGA O MOTOR
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, motor)); // 🔥 PASSA O MOTOR
                                 }}
                                 style={{ marginBottom: 0 }}
                               >

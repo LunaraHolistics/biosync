@@ -176,7 +176,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   blocks.push(
     criarBlocoHTML(`
       <div style="font-size:20px;font-weight:900;color:#111;margin-bottom:8px">
-        Relatório Terapêutico Integrativo
+        Relatório Terapêutico - BioSync Saúde Integrativa
       </div>
       <div style="font-size:12px;color:#333">
         <b>Paciente:</b> ${escapeHtml(data.clientName)}<br/>
