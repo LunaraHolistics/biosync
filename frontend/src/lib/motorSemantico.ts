@@ -665,12 +665,21 @@ export function gerarAnaliseCompleta(
   terapias: TerapiaRow[]
 ): AnaliseCompleta {
   const paciente = parsearPaciente(exame.nome_paciente);
-  const itensAlterados = extrairItensAlterados(exame.resultado_json);
+  let itensAlterados = extrairItensAlterados(exame.resultado_json);
+
+  // �️ BLINDAGEM ANTI-LIXO DE BANCO DE DADOS ANTIGO
+  // Se o exame foi salvo antes da deduplicação da extensão, ele limpa aqui!
+  const mapaDedupMotor = new Map<string, ItemAlterado>();
+  itensAlterados.forEach(item => {
+    mapaDedupMotor.set(item.itemNormalizado, item); // Sobrescreve duplicatas pelo ID normalizado
+  });
+  itensAlterados = Array.from(mapaDedupMotor.values());
+
   const matches = buscarMatches(itensAlterados, base);
 
   // 🔥 SETORES AFETADOS CORRIGIDOS (Tipagem Explícita para evitar o erro TS2345)
   const contagemSetores = new Map<string, number>();
-  
+
   matches.forEach((m) => {
     if (Array.isArray(m.setores)) {
       m.setores.forEach((s) => {
@@ -736,9 +745,9 @@ export type ItemComparativo = {
   valor_depois?: number;
   variacao?: number;
   evolucao:
-  | "melhora" 
-  | "piora" 
-  | "novo" 
+  | "melhora"
+  | "piora"
+  | "novo"
   | "normalizado";
 };
 
@@ -749,10 +758,10 @@ export type ComparativoInteligente = {
   normalizados: ItemComparativo[];
 };
 
-const COMPARATIVO_VAZIO: ComparativoInteligente = { 
-  melhoraram: [], 
-  pioraram: [], 
-  novos_problemas: [], 
+const COMPARATIVO_VAZIO: ComparativoInteligente = {
+  melhoraram: [],
+  pioraram: [],
+  novos_problemas: [],
   normalizados: [],
 };
 
@@ -772,10 +781,10 @@ export function gerarComparativoInteligente(
 ): ComparativoInteligente {
   if (exames.length < 2) return COMPARATIVO_VAZIO;
 
-  const resultado: ComparativoInteligente = { 
-    melhoraram: [], 
-    pioraram: [], 
-    novos_problemas: [], 
+  const resultado: ComparativoInteligente = {
+    melhoraram: [],
+    pioraram: [],
+    novos_problemas: [],
     normalizados: [],
   };
 
@@ -791,10 +800,10 @@ export function gerarComparativoInteligente(
 
   const mapaAntes = new Map<string, ItemAlterado>();
   for (const ia of itensAntes)
-     mapaAntes.set(ia.itemNormalizado, ia);
+    mapaAntes.set(ia.itemNormalizado, ia);
   const mapaDepois = new Map<string, ItemAlterado>();
   for (const id of itensDepois)
-     mapaDepois.set(id.itemNormalizado, id);
+    mapaDepois.set(id.itemNormalizado, id);
 
   // 1. Normalizados
   for (const [key, itemAntes] of mapaAntes) {
@@ -804,8 +813,8 @@ export function gerarComparativoInteligente(
         item: itemAntes.item,
         antes: "alto",
         depois: "normal",
-        valor_antes: 
-        parseFloat(itemAntes.valor) || undefined,
+        valor_antes:
+          parseFloat(itemAntes.valor) || undefined,
         evolucao: "normalizado",
       });
     }
@@ -816,9 +825,9 @@ export function gerarComparativoInteligente(
     const itemAntes = mapaAntes.get(key);
 
     if (itemAntes) {
-      const diff = 
-      itemDepois.scoreGravidade - 
-      itemAntes.scoreGravidade;
+      const diff =
+        itemDepois.scoreGravidade -
+        itemAntes.scoreGravidade;
 
       // Se a gravidade não mudou (ex: era leve e continuou leve), não põe no gráfico para não poluir!
       if (diff === 0) continue;
@@ -832,15 +841,15 @@ export function gerarComparativoInteligente(
         depois: classificarStatus(
           itemDepois.resultadoOriginal
         ),
-        valor_antes: 
-        parseFloat(itemAntes.valor) || undefined,
-        valor_depois: 
-        parseFloat(itemDepois.valor) || undefined,
+        valor_antes:
+          parseFloat(itemAntes.valor) || undefined,
+        valor_depois:
+          parseFloat(itemDepois.valor) || undefined,
         variacao: diff,
-        evolucao: 
-        diff < 0 
-        ? "melhora"
-         :"piora",
+        evolucao:
+          diff < 0
+            ? "melhora"
+            : "piora",
       };
 
       if (diff < 0) resultado.melhoraram.push(comp);
