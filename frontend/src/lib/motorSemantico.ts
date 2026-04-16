@@ -827,97 +827,99 @@ function sugerirTerapias(
   }
 
   export function gerarComparativoInteligente(
-    exames: ExameRow[]
-  ): ComparativoInteligente {
-    if (exames.length < 2) return COMPARATIVO_VAZIO;
+  exames: ExameRow[]
+): ComparativoInteligente {
+  if (exames.length < 2) return COMPARATIVO_VAZIO;
 
-    const resultado: ComparativoInteligente = {
-      melhoraram: [],
-      pioraram: [],
-      novos_problemas: [],
-      normalizados: [],
-    };
+  const resultado: ComparativoInteligente = {
+    melhoraram: [],
+    pioraram: [],
+    novos_problemas: [],
+    normalizados: [],
+  };
 
-    const anterior = exames[exames.length - 2];
-    const atual = exames[exames.length - 1];
+  const anterior = exames[exames.length - 2];
+  const atual = exames[exames.length - 1];
 
-    const itensAntes = extrairItensAlterados(
-      anterior.resultado_json
-    );
-    const itensDepois = extrairItensAlterados(
-      atual.resultado_json
-    );
+  const itensAntes = extrairItensAlterados(
+    anterior.resultado_json
+  );
+  const itensDepois = extrairItensAlterados(
+    atual.resultado_json
+  );
 
-    const mapaAntes = new Map<string, ItemAlterado>();
-    for (const ia of itensAntes) {
-      mapaAntes.set(ia.itemNormalizado, ia);
+  const mapaAntes = new Map<string, ItemAlterado>();
+  for (const ia of itensAntes) {
+    mapaAntes.set(ia.itemNormalizado, ia);
+  }
+
+  const mapaDepois = new Map<string, ItemAlterado>();
+  for (const id of itensDepois) {
+    mapaDepois.set(id.itemNormalizado, id);
+  }
+
+  // Normalizados
+  for (const [key, itemAntes] of mapaAntes) {
+    if (!mapaDepois.has(key)) {
+      resultado.normalizados.push({
+        sistema: "Geral",
+        item: itemAntes.item,
+        antes: "alto",
+        depois: "normal",
+        valor_antes:
+          parseFloat(itemAntes.valor) || undefined,
+        evolucao: "normalizado",
+      });
     }
+  }
 
-    const mapaDepois = new Map<string, ItemAlterado>();
-    for (const id of itensDepois) {
-      mapaDepois.set(id.itemNormalizado, id);
+  // Comparação principal
+  for (const [key, itemDepois] of mapaDepois) {
+    const itemAntes = mapaAntes.get(key);
+
+    if (itemAntes) {
+      const diff =
+        itemDepois.scoreGravidade -
+        itemAntes.scoreGravidade;
+
+      const comp: ItemComparativo = {
+        sistema: "Geral",
+        item: itemDepois.item,
+        antes: classificarStatus(
+          itemAntes.resultadoOriginal
+        ),
+        depois: classificarStatus(
+          itemDepois.resultadoOriginal
+        ),
+        valor_antes:
+          parseFloat(itemAntes.valor) || undefined,
+        valor_depois:
+          parseFloat(itemDepois.valor) || undefined,
+        variacao: diff,
+        evolucao:
+          diff < 0
+            ? "melhora"
+            : diff > 0
+              ? "piora"
+              : "melhora",
+      };
+
+      if (diff < 0) resultado.melhoraram.push(comp);
+      else if (diff > 0) resultado.pioraram.push(comp);
+    } else {
+      resultado.novos_problemas.push({
+        sistema: "Geral",
+        item: itemDepois.item,
+        antes: null,
+        depois: classificarStatus(
+          itemDepois.resultadoOriginal
+        ),
+        valor_depois:
+          parseFloat(itemDepois.valor) || undefined,
+        evolucao: "novo",
+      });
     }
+  }
 
-    // Normalizados: estava alterado antes, não está mais
-    for (const [key, itemAntes] of mapaAntes) {
-      if (!mapaDepois.has(key)) {
-        resultado.normalizados.push({
-          sistema: "Geral",
-          item: itemAntes.item,
-          antes: "alto",
-          depois: "normal",
-          valor_antes:
-            parseFloat(itemAntes.valor) || undefined,
-          evolucao: "normalizado",
-        });
-      }
-    }
-
-    for (const [key, itemDepois] of mapaDepois) {
-      const itemAntes = mapaAntes.get(key);
-
-      if (itemAntes) {
-        const diff =
-          itemDepois.scoreGravidade -
-          itemAntes.scoreGravidade;
-
-        const comp: ItemComparativo = {
-          sistema: "Geral",
-          item: itemDepois.item,
-          antes: classificarStatus(
-            itemAntes.resultadoOriginal
-          ),
-          depois: classificarStatus(
-            itemDepois.resultadoOriginal
-          ),
-          valor_antes:
-            parseFloat(itemAntes.valor) || undefined,
-          valor_depois:
-            parseFloat(itemDepois.valor) || undefined,
-          variacao: diff,
-          evolucao:
-            diff < 0
-              ? "melhora"
-              : diff > 0
-                ? "piora"
-                : "melhora",
-        };
-
-        if (diff < 0) resultado.melhoraram.push(comp);
-        else if (diff > 0) resultado.pioraram.push(comp);
-      } else {
-        resultado.novos_problemas.push({
-          sistema: "Geral",
-          item: itemDepois.item,
-          antes: null,
-          depois: classificarStatus(
-            itemDepois.resultadoOriginal
-          ),
-          valor_depois:
-            parseFloat(itemDepois.valor) || undefined,
-          evolucao: "novo",
-        });
-      }
-    }
-
-    return resultado;
+  return resultado;
+}
