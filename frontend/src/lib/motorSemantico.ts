@@ -390,177 +390,96 @@ function buscarMatches(
 }
 
 // ==============================
-// 7. GERADOR DE INTERPRETAÇÃO (REORGANIZADO)
+// 7. GERADOR DE INTERPRETAÇÃO (SWEET SPOT: Rico, mas Escaneável)
 // ==============================
-
-function gerarInterpretacao(
-  matches: MatchClinico[],
-  itensAlterados: ItemAlterado[]
-): string {
-  if (
-    matches.length === 0 &&
-    itensAlterados.length === 0
-  ) {
+function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): string {
+  if (matches.length === 0) {
     return "Exame dentro dos parâmetros de normalidade. Nenhum desvio significativo identificado.";
-  }
-
-  // 🔥 Agrupar por categoria REAL (não jogar tudo em "Outros")
-  const grupos: Record<string, MatchClinico[]> = {};
-  const outros: MatchClinico[] = [];
-
-  for (const m of matches) {
-    const cat = m.categoria;
-    if (!cat || cat === "Outros" || cat === "outros") {
-      outros.push(m);
-    } else {
-      if (!grupos[cat]) grupos[cat] = [];
-      grupos[cat].push(m);
-    }
   }
 
   const secoes: string[] = [];
 
-  // Resumo inicial
-  const totalItens = itensAlterados.length;
-  const criticos = itensAlterados.filter(
-    (i) => i.scoreGravidade >= 3
-  ).length;
-  const leves = totalItens - criticos;
+  // 1. RESUMO INICIAL (Contextualização)
+  const setoresFormatados = setoresTop.length > 1
+    ? setoresTop.slice(0, -1).join(", ") + " e " + setoresTop[setoresTop.length - 1]
+    : setoresTop[0] || "geral";
 
-  if (totalItens > 0) {
-    secoes.push(
-      `Foram identificados ${totalItens} itens alterados (${criticos} de maior relevância e ${leves} de menor relevância).`
-    );
-  }
-
-  // 🔥 Cada categoria vir um bloco separado e conciso
-  for (const [categoria, itens] of Object.entries(
-    grupos
-  )) {
-    const criticos = itens.filter(
-      (i) =>
-        i.gravidade === "moderada" ||
-        i.gravidade === "critica"
-    );
-    const leves = itens.filter(
-      (i) =>
-        i.gravidade === "leve" ||
-        i.gravidade === "reducao"
-    );
-
-    let texto = `${categoria.toUpperCase()}\n`;
-
-    if (criticos.length > 0) {
-      texto += `• Alerta: ${criticos
-        .slice(0, 5)
-        .map((c) => c.itemBase)
-        .join(", ")}`;
-
-      if (criticos.length > 5) {
-        texto += ` e mais ${criticos.length - 5}`;
-      }
-      texto += ".\n";
-    }
-
-    if (leves.length > 0) {
-      texto += `• Observar: ${leves
-        .slice(0, 5)
-        .map((l) => l.itemBase)
-        .join(", ")}`;
-
-      if (leves.length > 5) {
-        texto += ` e mais ${leves.length - 5}`;
-      }
-      texto += ".\n";
-    }
-
-    secoes.push(texto);
-  }
-
-  // "Outros" de forma resumida
-  if (outros.length > 0) {
-    const criticosOutros = outros.filter(
-      (i) =>
-        i.gravidade === "moderada" ||
-        i.gravidade === "critica"
-    );
-
-    if (criticosOutros.length > 0) {
-      secoes.push(
-        `OUTROS SISTEMAS\n• Itens relevantes: ${criticosOutros
-          .slice(0, 8)
-          .map((o) => o.itemBase)
-          .join(", ")}.`
-      );
-    }
-  }
-
-  // Itens sem match
-  const semMatch = itensAlterados.filter(
-    (ia) =>
-      !matches.some((m) => m.itemExame === ia.item)
+  secoes.push(
+    `Foram identificados desequilíbrios relevantes com maior impacto nos sistemas ${setoresFormatados}. A análise abaixo detalha os principais pontos de atenção agrupados por área.`
   );
 
-  if (semMatch.length > 0) {
-    const criticosSem = semMatch.filter(
-      (s) => s.scoreGravidade >= 3
-    );
-    const levesSem = semMatch.filter(
-      (s) => s.scoreGravidade < 3
-    );
-
-    let txt = "ITENS SEM CORRELAÇÃO NA BASE CLÍNICA\n";
-    if (criticosSem.length > 0) {
-      txt += `• Relevante: ${criticosSem
-        .slice(0, 6)
-        .map((s) => s.item)
-        .join(", ")}.`;
-    }
-    if (levesSem.length > 0) {
-      txt += `\n• Leves: ${levesSem
-        .slice(0, 6)
-        .map((s) => s.item)
-        .join(", ")}.`;
-    }
-    secoes.push(txt);
+  // 2. DETALHAMENTO POR CATEGORIA (O coração do relatório)
+  // Agrupa os matches, ignorando a caixa "Outros" genérica no texto principal
+  const grupos: Record<string, MatchClinico[]> = {};
+  for (const m of matches) {
+    const cat = m.categoria;
+    if (!cat || cat.toLowerCase() === "outros") continue;
+    if (!grupos[cat]) grupos[cat] = [];
+    grupos[cat].push(m);
   }
 
-  return secoes.join("\n\n");
+  // Pega as top 5 categorias com mais ocorrências
+  const categoriasTop = Object.entries(grupos)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 5);
+
+  for (const [categoria, itens] of categoriasTop) {
+    let textoCat = `\n► ${categoria.toUpperCase()}\n`;
+
+    // Pega os top 3 itens mais graves/relevantes DENTRO desta categoria
+    const itensRelevantes = itens
+      .sort((a, b) => b.scoreConfianca - a.scoreConfianca)
+      .slice(0, 3);
+
+    for (const item of itensRelevantes) {
+      const gravidadeTag = (item.gravidade === "critica" || item.gravidade === "moderada") ? "⚠️ " : "• ";
+
+      // Se tiver impacto na base, mostra. Senão, mostra o resultado do exame.
+      const detalhe = item.impacto
+        ? `${item.itemBase}: ${item.impacto}`
+        : `${item.itemBase} apresentando alteração (${item.gravidade}).`;
+
+      textoCat += `${gravidadeTag}${detalhe}\n`;
+    }
+
+    secoes.push(textoCat);
+  }
+
+  // 3. FECHAMENTO CLÍNICO (Call to Action)
+  secoes.push(
+    `\nConclusão: Recomenda-se abordagem terapêutica integrativa focada no reequilíbrio dos sistemas supracitados, priorizando a modulação do estresse fisiológico e a correção dos desvios identificados.`
+  );
+
+  return secoes.join("\n");
 }
 
 // ==============================
-// 8. GERADOR DE PONTOS CRÍTICOS
+// 8. GERADOR DE PONTOS CRÍTICOS (Ajustado para 7)
 // ==============================
-
-function gerarPontosCriticos(
-  matches: MatchClinico[],
-  itensAlterados: ItemAlterado[]
-): string[] {
+function gerarPontosCriticos(matches: MatchClinico[], itensAlterados: ItemAlterado[]): string[] {
   const pontos: string[] = [];
 
-  // Priorizar matches com impacto
+  // Prioriza o que tem descrição de impacto e é grave
   const comImpacto = matches
     .filter((m) => m.impacto)
     .sort((a, b) => {
-      const pa = a.gravidade === "moderada" || a.gravidade === "critica" ? 1 : 0;
-      const pb = b.gravidade === "moderada" || b.gravidade === "critica" ? 1 : 0;
+      const pa = (a.gravidade === "moderada" || a.gravidade === "critica") ? 1 : 0;
+      const pb = (b.gravidade === "moderada" || b.gravidade === "critica") ? 1 : 0;
       return pb - pa;
     });
 
-  for (const m of comImpacto.slice(0, 8)) {
+  // Aumentei para 7 para dar mais "carne" ao relatório sem explodir
+  for (const m of comImpacto.slice(0, 7)) {
     pontos.push(`${m.itemBase}: ${m.impacto}`);
   }
 
-  // Itens sem match
+  // Itens sem match na base, mas que estão muito alterados
   const semMatch = itensAlterados.filter(
-    (ia) =>
-      !matches.some((m) => m.itemExame === ia.item) &&
-      ia.scoreGravidade >= 2
+    (ia) => !matches.some((m) => m.itemExame === ia.item) && ia.scoreGravidade >= 3
   );
-  for (const s of semMatch.slice(0, 4)) {
-    pontos.push(
-      `${s.item} — ${s.resultadoOriginal}`
-    );
+
+  for (const s of semMatch.slice(0, 3)) {
+    pontos.push(`${s.item} — ${s.resultadoOriginal}`);
   }
 
   return pontos;
