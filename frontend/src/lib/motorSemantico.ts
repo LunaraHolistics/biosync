@@ -921,4 +921,3 @@ function sugerirTerapias(
     }
 
     return resultado;
-  }
