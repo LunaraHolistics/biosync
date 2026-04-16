@@ -750,26 +750,25 @@ function App() {
 
                       {relatorioDataHistorico ? (
                         <button
+                          id="btn-pdf-lateral"
                           className="counter"
-                          // 🔥 REMOVI O DISABLED E COLOQUEI ESTILO INLINE PARA BURLAR O CSS
-                          style={{
-                            opacity: isGerandoPdf ? 0.7 : 1,
-                            cursor: isGerandoPdf ? "not-allowed" : "pointer"
-                          }}
-                          onClick={async () => {
-                            if (!relatorioDataHistorico || isGerandoPdf) return;
-                            setIsGerandoPdf(true);
+                          onClick={() => {
+                            const btn = document.getElementById('btn-pdf-lateral');
+                            if (btn) btn.innerText = "⏳ Gerando PDF...";
 
-                            await new Promise(r => setTimeout(r, 50));
-
-                            try {
-                              await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
-                            } finally {
-                              setIsGerandoPdf(false);
-                            }
+                            // 🔥 O SEGREDO: Pinta na tela PRIMEIRO, depois trava no PDF
+                            requestAnimationFrame(async () => {
+                              try {
+                                await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
+                              } catch (e) {
+                                console.error(e);
+                              } finally {
+                                if (btn) btn.innerText = "Baixar PDF";
+                              }
+                            });
                           }}
                         >
-                          {isGerandoPdf ? "⏳ Gerando PDF..." : "Baixar PDF"}
+                          Baixar PDF
                         </button>
                       ) : null}
                     </div>
@@ -831,8 +830,24 @@ function App() {
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
+                  id="btn-pdf-modal"
                   className="counter"
-                  onClick={() => { if (relatorioDataHistorico) gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas)); }}
+                  onClick={() => {
+                    const btn = document.getElementById('btn-pdf-modal');
+                    if (btn) btn.innerText = "⏳ Gerando PDF...";
+
+                    requestAnimationFrame(async () => {
+                      try {
+                        if (relatorioDataHistorico) {
+                          await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
+                        }
+                      } catch (e) {
+                        console.error(e);
+                      } finally {
+                        if (btn) btn.innerText = "Gerar PDF";
+                      }
+                    });
+                  }}
                   disabled={!relatorioDataHistorico}
                   style={{ marginBottom: 0 }}
                 >
