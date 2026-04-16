@@ -564,10 +564,9 @@ function sugerirTerapias(
   }
 
   // 🔥 Se não achou nada pelos matches, usar setores genéricos
+  // 🚫 Se não há setores, não sugerir terapias corretivas
   if (setoresComPeso.size === 0) {
-    setoresComPeso.set("fisico", 2);
-    setoresComPeso.set("mental", 1);
-    setoresComPeso.set("emocional", 1);
+    return [];
   }
 
   const resultados: TerapiaSugerida[] = [];
@@ -624,299 +623,301 @@ function sugerirTerapias(
   }
 
   // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
+  // 🚫 Sem correspondência real → sem terapias corretivas
   if (resultados.length === 0) {
-    return terapias
-      .filter((t) => t.ativo)
-      .sort((a, b) => (a.prioridade ?? 99) - (b.prioridade ?? 99))
-      .slice(0, 5)
-      .map((t) => ({
-        ...t,
-        scoreRelevancia: 1,
-        motivos: ["recomendação geral"],
-      }));
+    return [];
   }
 
-  return resultados
-    .sort(
-      (a, b) =>
-        b.scoreRelevancia - a.scoreRelevancia
-    )
-    .slice(0, 10);
-}
+  // ==============================
+  // 10. SCORE GERAL
+  // ==============================
 
-// ==============================
-// 10. SCORE GERAL
-// ==============================
+  export function calcularScoreGeral(
+    itensAlterados: ItemAlterado[]
+  ): { score: number; status: string } {
+    if (itensAlterados.length === 0)
+      return { score: 95, status: "Ótimo" };
 
-export function calcularScoreGeral(
-  itensAlterados: ItemAlterado[]
-): { score: number; status: string } {
-  if (itensAlterados.length === 0)
-    return { score: 95, status: "Ótimo" };
+    let penalidade = 0;
 
-  let penalidade = 0;
-
-  for (const item of itensAlterados) {
-    switch (item.gravidade) {
-      case "critica":
-        penalidade += 8;
-        break;
-      case "moderada":
-        penalidade += 4;
-        break;
-      case "leve":
-        penalidade += 1.5;
-        break;
-      case "reducao":
-        penalidade += 1;
-        break;
+    for (const item of itensAlterados) {
+      switch (item.gravidade) {
+        case "critica":
+          penalidade += 8;
+          break;
+        case "moderada":
+          penalidade += 4;
+          break;
+        case "leve":
+          penalidade += 1.5;
+          break;
+        case "reducao":
+          penalidade += 1;
+          break;
+      }
     }
+
+    const score = Math.max(
+      5,
+      Math.round(100 - penalidade)
+    );
+
+    let status: string;
+    if (score >= 85) status = "Ótimo";
+    else if (score >= 70) status = "Bom";
+    else if (score >= 50) status = "Atenção";
+    else if (score >= 30) status = "Cuidado";
+    else status = "Crítico";
+
+    return { score, status };
   }
 
-  const score = Math.max(
-    5,
-    Math.round(100 - penalidade)
-  );
+  // ==============================
+  // 11. RESUMO POR CATEGORIA
+  // ==============================
 
-  let status: string;
-  if (score >= 85) status = "Ótimo";
-  else if (score >= 70) status = "Bom";
-  else if (score >= 50) status = "Atenção";
-  else if (score >= 30) status = "Cuidado";
-  else status = "Crítico";
-
-  return { score, status };
-}
-
-// ==============================
-// 11. RESUMO POR CATEGORIA
-// ==============================
-
-function gerarResumoCategorias(
-  matches: MatchClinico[]
-): Record<
-  string,
-  { total: number; criticos: number }
-> {
-  const resumo: Record<
+  function gerarResumoCategorias(
+    matches: MatchClinico[]
+  ): Record<
     string,
     { total: number; criticos: number }
-  > = {};
+  > {
+    const resumo: Record<
+      string,
+      { total: number; criticos: number }
+    > = {};
 
-  for (const m of matches) {
-    const cat = m.categoria || "Outros";
-    if (!resumo[cat])
-      resumo[cat] = { total: 0, criticos: 0 };
-    resumo[cat].total++;
-    if (
-      m.gravidade === "moderada" ||
-      m.gravidade === "critica"
-    ) {
-      resumo[cat].criticos++;
+    for (const m of matches) {
+      const cat = m.categoria || "Outros";
+      if (!resumo[cat])
+        resumo[cat] = { total: 0, criticos: 0 };
+      resumo[cat].total++;
+      if (
+        m.gravidade === "moderada" ||
+        m.gravidade === "critica"
+      ) {
+        resumo[cat].criticos++;
+      }
     }
+
+    return resumo;
   }
 
-  return resumo;
-}
+  // ==============================
+  // 🔥 FUNÇÃO PRINCIPAL
+  // ==============================
 
-// ==============================
-// 🔥 FUNÇÃO PRINCIPAL
-// ==============================
+  export function gerarAnaliseCompleta(
+    exame: ExameRow,
+    base: BaseAnaliseSaudeRow[],
+    terapias: TerapiaRow[]
+  ): AnaliseCompleta {
+    const paciente = parsearPaciente(
+      exame.nome_paciente
+    );
 
-export function gerarAnaliseCompleta(
-  exame: ExameRow,
-  base: BaseAnaliseSaudeRow[],
-  terapias: TerapiaRow[]
-): AnaliseCompleta {
-  const paciente = parsearPaciente(
-    exame.nome_paciente
-  );
+    const itensAlterados = extrairItensAlterados(
+      exame.resultado_json
+    );
 
-  const itensAlterados = extrairItensAlterados(
-    exame.resultado_json
-  );
+    const matches = buscarMatches(
+      itensAlterados,
+      base
+    );
 
-  const matches = buscarMatches(
-    itensAlterados,
-    base
-  );
+    const interpretacao = gerarInterpretacao(
+      matches,
+      itensAlterados
+    );
 
-  const interpretacao = gerarInterpretacao(
-    matches,
-    itensAlterados
-  );
+    const pontosCriticos = gerarPontosCriticos(
+      matches,
+      itensAlterados
+    );
 
-  const pontosCriticos = gerarPontosCriticos(
-    matches,
-    itensAlterados
-  );
+    // 🔥 Geração base de terapias
+    let terapiasSugeridas = sugerirTerapias(matches, terapias);
 
-  const terapiasSugeridas = sugerirTerapias(
-    matches,
-    terapias
-  );
+    // 🔥 REGRA CLÍNICA PRINCIPAL
+    const semAlteracoes = itensAlterados.length === 0;
 
-  const { score: scoreGeral, status: statusScore } =
-    calcularScoreGeral(itensAlterados);
+    if (semAlteracoes) {
+      terapiasSugeridas = [];
+    }
 
-  const setoresAfetados = [
-    ...new Set(matches.flatMap((m) => m.setores)),
-  ];
+    const { score: scoreGeral, status: statusScore } =
+      calcularScoreGeral(itensAlterados);
 
-  const resumoCategorias =
-    gerarResumoCategorias(matches);
+    // 🔥 SETORES AFETADOS — agora mais robusto
+    let setoresAfetados = [
+      ...new Set(matches.flatMap((m) => m.setores)),
+    ];
 
-  return {
-    paciente,
-    itensAlterados,
-    matches,
-    interpretacao,
-    pontosCriticos,
-    terapias: terapiasSugeridas,
-    scoreGeral,
-    statusScore,
-    setoresAfetados,
-    resumoCategorias,
-  };
-}
+    // 🔥 fallback inteligente (caso tenha item alterado mas sem match)
+    if (
+      setoresAfetados.length === 0 &&
+      itensAlterados.length > 0
+    ) {
+      setoresAfetados = ["fisico"];
+    }
 
-// ==============================
-// COMPARATIVO INTELIGENTE
-// ==============================
+    const resumoCategorias =
+      gerarResumoCategorias(matches);
 
-export type ItemComparativo = {
-  sistema: string;
-  item: string;
-  antes: "baixo" | "normal" | "alto" | null;
-  depois: "baixo" | "normal" | "alto" | null;
-  valor_antes?: number;
-  valor_depois?: number;
-  variacao?: number;
-  evolucao:
+    return {
+      paciente,
+      itensAlterados,
+      matches,
+      interpretacao,
+      pontosCriticos,
+
+      // 🔥 saída final coerente com estado clínico
+      terapias: terapiasSugeridas,
+
+      scoreGeral,
+      statusScore,
+      setoresAfetados,
+      resumoCategorias,
+    };
+  }
+
+  // ==============================
+  // COMPARATIVO INTELIGENTE
+  // ==============================
+
+  export type ItemComparativo = {
+    sistema: string;
+    item: string;
+    antes: "baixo" | "normal" | "alto" | null;
+    depois: "baixo" | "normal" | "alto" | null;
+    valor_antes?: number;
+    valor_depois?: number;
+    variacao?: number;
+    evolucao:
     | "melhora"
     | "piora"
     | "novo"
     | "normalizado";
-};
+  };
 
-export type ComparativoInteligente = {
-  melhoraram: ItemComparativo[];
-  pioraram: ItemComparativo[];
-  novos_problemas: ItemComparativo[];
-  normalizados: ItemComparativo[];
-};
+  export type ComparativoInteligente = {
+    melhoraram: ItemComparativo[];
+    pioraram: ItemComparativo[];
+    novos_problemas: ItemComparativo[];
+    normalizados: ItemComparativo[];
+  };
 
-const COMPARATIVO_VAZIO: ComparativoInteligente = {
-  melhoraram: [],
-  pioraram: [],
-  novos_problemas: [],
-  normalizados: [],
-};
-
-function classificarStatus(
-  resultado: string
-): "baixo" | "normal" | "alto" | null {
-  const decodificado = decodificarMojibake(resultado);
-  const lower = decodificado.toLowerCase();
-  if (ehNormal(decodificado)) return "normal";
-  if (lower.includes("redu")) return "baixo";
-  if (lower.includes("anormal")) return "alto";
-  return null;
-}
-
-export function gerarComparativoInteligente(
-  exames: ExameRow[]
-): ComparativoInteligente {
-  if (exames.length < 2) return COMPARATIVO_VAZIO;
-
-  const resultado: ComparativoInteligente = {
+  const COMPARATIVO_VAZIO: ComparativoInteligente = {
     melhoraram: [],
     pioraram: [],
     novos_problemas: [],
     normalizados: [],
   };
 
-  const anterior = exames[exames.length - 2];
-  const atual = exames[exames.length - 1];
-
-  const itensAntes = extrairItensAlterados(
-    anterior.resultado_json
-  );
-  const itensDepois = extrairItensAlterados(
-    atual.resultado_json
-  );
-
-  const mapaAntes = new Map<string, ItemAlterado>();
-  for (const ia of itensAntes) {
-    mapaAntes.set(ia.itemNormalizado, ia);
+  function classificarStatus(
+    resultado: string
+  ): "baixo" | "normal" | "alto" | null {
+    const decodificado = decodificarMojibake(resultado);
+    const lower = decodificado.toLowerCase();
+    if (ehNormal(decodificado)) return "normal";
+    if (lower.includes("redu")) return "baixo";
+    if (lower.includes("anormal")) return "alto";
+    return null;
   }
 
-  const mapaDepois = new Map<string, ItemAlterado>();
-  for (const id of itensDepois) {
-    mapaDepois.set(id.itemNormalizado, id);
-  }
+  export function gerarComparativoInteligente(
+    exames: ExameRow[]
+  ): ComparativoInteligente {
+    if (exames.length < 2) return COMPARATIVO_VAZIO;
 
-  // Normalizados: estava alterado antes, não está mais
-  for (const [key, itemAntes] of mapaAntes) {
-    if (!mapaDepois.has(key)) {
-      resultado.normalizados.push({
-        sistema: "Geral",
-        item: itemAntes.item,
-        antes: "alto",
-        depois: "normal",
-        valor_antes:
-          parseFloat(itemAntes.valor) || undefined,
-        evolucao: "normalizado",
-      });
+    const resultado: ComparativoInteligente = {
+      melhoraram: [],
+      pioraram: [],
+      novos_problemas: [],
+      normalizados: [],
+    };
+
+    const anterior = exames[exames.length - 2];
+    const atual = exames[exames.length - 1];
+
+    const itensAntes = extrairItensAlterados(
+      anterior.resultado_json
+    );
+    const itensDepois = extrairItensAlterados(
+      atual.resultado_json
+    );
+
+    const mapaAntes = new Map<string, ItemAlterado>();
+    for (const ia of itensAntes) {
+      mapaAntes.set(ia.itemNormalizado, ia);
     }
-  }
 
-  for (const [key, itemDepois] of mapaDepois) {
-    const itemAntes = mapaAntes.get(key);
-
-    if (itemAntes) {
-      const diff =
-        itemDepois.scoreGravidade -
-        itemAntes.scoreGravidade;
-
-      const comp: ItemComparativo = {
-        sistema: "Geral",
-        item: itemDepois.item,
-        antes: classificarStatus(
-          itemAntes.resultadoOriginal
-        ),
-        depois: classificarStatus(
-          itemDepois.resultadoOriginal
-        ),
-        valor_antes:
-          parseFloat(itemAntes.valor) || undefined,
-        valor_depois:
-          parseFloat(itemDepois.valor) || undefined,
-        variacao: diff,
-        evolucao:
-          diff < 0
-            ? "melhora"
-            : diff > 0
-              ? "piora"
-              : "melhora",
-      };
-
-      if (diff < 0) resultado.melhoraram.push(comp);
-      else if (diff > 0) resultado.pioraram.push(comp);
-    } else {
-      resultado.novos_problemas.push({
-        sistema: "Geral",
-        item: itemDepois.item,
-        antes: null,
-        depois: classificarStatus(
-          itemDepois.resultadoOriginal
-        ),
-        valor_depois:
-          parseFloat(itemDepois.valor) || undefined,
-        evolucao: "novo",
-      });
+    const mapaDepois = new Map<string, ItemAlterado>();
+    for (const id of itensDepois) {
+      mapaDepois.set(id.itemNormalizado, id);
     }
-  }
 
-  return resultado;
-}
+    // Normalizados: estava alterado antes, não está mais
+    for (const [key, itemAntes] of mapaAntes) {
+      if (!mapaDepois.has(key)) {
+        resultado.normalizados.push({
+          sistema: "Geral",
+          item: itemAntes.item,
+          antes: "alto",
+          depois: "normal",
+          valor_antes:
+            parseFloat(itemAntes.valor) || undefined,
+          evolucao: "normalizado",
+        });
+      }
+    }
+
+    for (const [key, itemDepois] of mapaDepois) {
+      const itemAntes = mapaAntes.get(key);
+
+      if (itemAntes) {
+        const diff =
+          itemDepois.scoreGravidade -
+          itemAntes.scoreGravidade;
+
+        const comp: ItemComparativo = {
+          sistema: "Geral",
+          item: itemDepois.item,
+          antes: classificarStatus(
+            itemAntes.resultadoOriginal
+          ),
+          depois: classificarStatus(
+            itemDepois.resultadoOriginal
+          ),
+          valor_antes:
+            parseFloat(itemAntes.valor) || undefined,
+          valor_depois:
+            parseFloat(itemDepois.valor) || undefined,
+          variacao: diff,
+          evolucao:
+            diff < 0
+              ? "melhora"
+              : diff > 0
+                ? "piora"
+                : "melhora",
+        };
+
+        if (diff < 0) resultado.melhoraram.push(comp);
+        else if (diff > 0) resultado.pioraram.push(comp);
+      } else {
+        resultado.novos_problemas.push({
+          sistema: "Geral",
+          item: itemDepois.item,
+          antes: null,
+          depois: classificarStatus(
+            itemDepois.resultadoOriginal
+          ),
+          valor_depois:
+            parseFloat(itemDepois.valor) || undefined,
+          evolucao: "novo",
+        });
+      }
+    }
+
+    return resultado;
+  }
