@@ -603,7 +603,7 @@ export function calcularScoreGeral(
   }
 
   // 2. Transforma em porcentagem (Máximo teórico = todos os 300 itens com gravidade máxima)
-  const pesoMaximo = totalScanned * 3; 
+  const pesoMaximo = totalScanned * 3;
   const porcentagemImpacto = Math.min(1, pesoDoenca / pesoMaximo);
 
   // 3. CURVA SUAVIZANTE: Fórmula exponencial (potência 1.2)
@@ -617,10 +617,10 @@ export function calcularScoreGeral(
   else if (score >= 20) status = "Cuidado";
   else status = "Crítico";
 
-  return { 
-    score, 
-    status, 
-    percentual: Math.round(porcentagemImpacto * 100) 
+  return {
+    score,
+    status,
+    percentual: Math.round(porcentagemImpacto * 100)
   };
 }
 
@@ -703,7 +703,8 @@ export function gerarAnaliseCompleta(
       .map((t) => ({ ...t, scoreRelevancia: 1, motivos: ["manutenção preventiva"] }));
   }
 
-  const { score: scoreGeral, status: statusScore } = calcularScoreGeral(itensAlterados);
+  const { score: scoreGeral, status: statusScore, percentual } =
+    calcularScoreGeral(itensAlterados, 300);
   const resumoCategorias = gerarResumoCategorias(matches);
 
   // 🔥 ENRIQUECIMENTO FINAL
@@ -718,15 +719,16 @@ export function gerarAnaliseCompleta(
   return {
     paciente,
     itensAlterados,
-    matches: matchesComFitness, 
+    matches: matchesComFitness,
     interpretacao,
     pontosCriticos,
     terapias: terapiasSugeridas,
     scoreGeral,
     statusScore,
+    percentual, // 🔥 ADICIONE AQUI
     setoresAfetados,
     resumoCategorias,
-    frequencia_lunara: frequenciaSugerida, 
+    frequencia_lunara: frequenciaSugerida,
   };
 }
 
@@ -745,40 +747,40 @@ function mapearImpactoFitness(categoria: string, gravidade: Gravidade): ImpactoF
   const catNorm = normalizarTexto(categoria);
 
   if (catNorm.includes('metabolismo') || catNorm.includes('gordura') || catNorm.includes('obesidade')) {
-    return { 
-      emagrecimento: gravidade === 'critica' ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' : 'Metabolismo lento, requer estímulo dietético.', 
-      performance: 'Queda de energia disponível para treinos.' 
+    return {
+      emagrecimento: gravidade === 'critica' ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' : 'Metabolismo lento, requer estímulo dietético.',
+      performance: 'Queda de energia disponível para treinos.'
     };
   }
   if (catNorm.includes('muscular') || catNorm.includes('articul') || catNorm.includes('osseo') || catNorm.includes('colageno')) {
-    return { 
-      hipertrofia: gravidade === 'critica' ? 'Risco de lesão. Foco em reparo antes de carga.' : 'Capacidade de recuperação entre séries reduzida.', 
-      recuperacao: 'Dor ou inflamação aumentam o tempo de repouso necessário.' 
+    return {
+      hipertrofia: gravidade === 'critica' ? 'Risco de lesão. Foco em reparo antes de carga.' : 'Capacidade de recuperação entre séries reduzida.',
+      recuperacao: 'Dor ou inflamação aumentam o tempo de repouso necessário.'
     };
   }
   if (catNorm.includes('cardiovascular') || catNorm.includes('pulmonar') || catNorm.includes('sangu')) {
-    return { 
-      performance: 'Capacidade aeróbica reduzida, fadiga precoce.', 
-      recuperacao: 'Frequência cardíaca de repouso alterada.' 
+    return {
+      performance: 'Capacidade aeróbica reduzida, fadiga precoce.',
+      recuperacao: 'Frequência cardíaca de repouso alterada.'
     };
   }
   if (catNorm.includes('nervoso') || catNorm.includes('emocional') || catNorm.includes('consciencia')) {
-    return { 
-      humor: 'Instabilidade afetando motivação e foco.', 
-      performance: 'Foco e concentração prejudicados durante o treino.' 
+    return {
+      humor: 'Instabilidade afetando motivação e foco.',
+      performance: 'Foco e concentração prejudicados durante o treino.'
     };
   }
   // 🔥 NOVOS MAPEAMENTOS (O segredo para a Lucimara)
   if (catNorm.includes('mineral') || catNorm.includes('vitamina') || catNorm.includes('aminoacido')) {
-    return { 
-      recuperacao: 'Deficiência de micronutrientes prejudica reparo tecidual e contração muscular.', 
-      performance: 'Fadiga crônica e falta de energia celular (ATP).' 
+    return {
+      recuperacao: 'Deficiência de micronutrientes prejudica reparo tecidual e contração muscular.',
+      performance: 'Fadiga crônica e falta de energia celular (ATP).'
     };
   }
   if (catNorm.includes('imunologico') || catNorm.includes('linfonodo') || catNorm.includes('timo')) {
-    return { 
-      recuperacao: 'Sistema imune baixo pode gerar inflamações crônicas que atrasam o ganho de massa.', 
-      humor: 'Vulnerabilidade a doenças pode causar fadiga e desânimo.' 
+    return {
+      recuperacao: 'Sistema imune baixo pode gerar inflamações crônicas que atrasam o ganho de massa.',
+      humor: 'Vulnerabilidade a doenças pode causar fadiga e desânimo.'
     };
   }
 
@@ -834,7 +836,7 @@ function classificarStatus(resultado: string): "baixo" | "normal" | "alto" | nul
   if (ehNormal(decodificado)) return "normal";
   if (lower.includes("redu")) return "baixo";
   if (lower.includes("anormal") || lower.includes("severe") || lower.includes("moderate")) return "alto";
-  return "alto"; 
+  return "alto";
 }
 
 export function gerarComparativoInteligente(exames: ExameRow[]): ComparativoInteligente {
@@ -849,7 +851,7 @@ export function gerarComparativoInteligente(exames: ExameRow[]): ComparativoInte
 
   const mapaAntes = new Map<string, ItemAlterado>();
   for (const ia of itensAntes) mapaAntes.set(ia.itemNormalizado, ia);
-  
+
   const mapaDepois = new Map<string, ItemAlterado>();
   for (const id of itensDepois) mapaDepois.set(id.itemNormalizado, id);
 
