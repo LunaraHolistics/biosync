@@ -667,25 +667,21 @@ export function gerarAnaliseCompleta(
   const paciente = parsearPaciente(exame.nome_paciente);
   let itensAlterados = extrairItensAlterados(exame.resultado_json);
 
-  // �️ BLINDAGEM ANTI-LIXO DE BANCO DE DADOS ANTIGO
-  // Se o exame foi salvo antes da deduplicação da extensão, ele limpa aqui!
+  // 🔥 BLINDAGEM ANTI-LIXO DE BANCO DE DADOS ANTIGO
   const mapaDedupMotor = new Map<string, ItemAlterado>();
   itensAlterados.forEach(item => {
-    mapaDedupMotor.set(item.itemNormalizado, item); // Sobrescreve duplicatas pelo ID normalizado
+    mapaDedupMotor.set(item.itemNormalizado, item);
   });
   itensAlterados = Array.from(mapaDedupMotor.values());
 
   const matches = buscarMatches(itensAlterados, base);
 
-  // 🔥 SETORES AFETADOS CORRIGIDOS (Tipagem Explícita para evitar o erro TS2345)
+  // 🔥 SETORES AFETADOS CORRIGIDOS
   const contagemSetores = new Map<string, number>();
-
   matches.forEach((m) => {
     if (Array.isArray(m.setores)) {
       m.setores.forEach((s) => {
-        if (s) {
-          contagemSetores.set(s, (contagemSetores.get(s) || 0) + 1);
-        }
+        if (s) contagemSetores.set(s, (contagemSetores.get(s) || 0) + 1);
       });
     }
   });
@@ -695,13 +691,9 @@ export function gerarAnaliseCompleta(
     .slice(0, 5)
     .map(([setor]) => setor);
 
-  // 🔥 INTERPRETAÇÃO AGORA USA OS SETORES REAIS
   const interpretacao = gerarInterpretacao(matches, setoresAfetados);
-
-  // 🔥 PONTOS CRÍTICOS
   const pontosCriticos = gerarPontosCriticos(matches, itensAlterados);
 
-  // 🔥 TERAPIAS
   let terapiasSugeridas = sugerirTerapias(matches, terapias);
 
   if (itensAlterados.length === 0) {
@@ -709,20 +701,25 @@ export function gerarAnaliseCompleta(
       .filter((t) => t.ativo)
       .sort((a, b) => (a.prioridade ?? 99) - (b.prioridade ?? 99))
       .slice(0, 2)
-      .map((t) => ({
-        ...t,
-        scoreRelevancia: 1,
-        motivos: ["manutenção preventiva"],
-      }));
+      .map((t) => ({ ...t, scoreRelevancia: 1, motivos: ["manutenção preventiva"] }));
   }
 
   const { score: scoreGeral, status: statusScore } = calcularScoreGeral(itensAlterados);
   const resumoCategorias = gerarResumoCategorias(matches);
 
+  // 🔥 ENRIQUECIMENTO FINAL
+  const matchesComFitness = matches.map(m => ({
+    ...m,
+    impacto_fitness: mapearImpactoFitness(m.categoria, m.gravidade)
+  }));
+
+  const frequenciaSugerida = sugerirFrequenciaSolfeggio(setoresAfetados);
+
+  // 🔥 RETURN ÚNICO E CORRETO (O outro return foi apagado para não quebrar)
   return {
     paciente,
     itensAlterados,
-    matches,
+    matches: matchesComFitness, 
     interpretacao,
     pontosCriticos,
     terapias: terapiasSugeridas,
@@ -730,11 +727,73 @@ export function gerarAnaliseCompleta(
     statusScore,
     setoresAfetados,
     resumoCategorias,
+    frequencia_lunara: frequenciaSugerida, 
   };
 }
 
 // ==============================
-// COMPARATIVO INTELIGENTE
+// IMPACTO FITNESS (MAPEAMENTO CLÍNICO)
+// ==============================
+// 🔥 CORREÇÃO DE TIPO: Removido 'ItemAlterado[...]' para evitar erro de propriedade inexistente
+type ImpactoFitnessType = {
+  performance?: string;
+  hipertrofia?: string;
+  emagrecimento?: string;
+  recuperacao?: string;
+  humor?: string;
+} | null;
+
+function mapearImpactoFitness(categoria: string, gravidade: Gravidade): ImpactoFitnessType {
+  const catNorm = normalizarTexto(categoria);
+
+  if (catNorm.includes('metabolismo') || catNorm.includes('gordura')) {
+    return {
+      emagrecimento: gravidade === 'critica' ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' : 'Metabolismo lento, requer estímulo dietético.',
+      performance: 'Queda de energia disponível para treinos.'
+    };
+  }
+  if (catNorm.includes('muscular') || catNorm.includes('articul')) {
+    return {
+      hipertrofia: gravidade === 'critica' ? 'Risco de lesão. Foco em reparo antes de carga.' : 'Capacidade de recuperação entre séries reduzida.',
+      recuperacao: 'Dor ou inflamação aumentam o tempo de repouso necessário.'
+    };
+  }
+  if (catNorm.includes('cardiovascular') || catNorm.includes('pulmonar')) {
+    return {
+      performance: 'Capacidade aeróbica reduzida, fadiga precoce.',
+      recuperacao: 'Frequência cardíaca de repouso alterada.'
+    };
+  }
+  if (catNorm.includes('nervoso') || catNorm.includes('emocional')) {
+    return {
+      humor: 'Instabilidade hormonal/neurológica afetando motivação.',
+      performance: 'Foco e concentração prejudicados durante o treino.'
+    };
+  }
+
+  return null; 
+}
+
+// ==============================
+// FREQUÊNCIA SOLFEGGIO SUGERIDA
+// ==============================
+function sugerirFrequenciaSolfeggio(setoresAfetados: string[]): string {
+  const setoresNorm = setoresAfetados.map(s => normalizarTexto(s));
+
+  if (setoresNorm.includes('emocional') || setoresNorm.includes('mental'))
+    return "432Hz (Ancoramento e Harmonização Emocional) — Ideal para acalmar o sistema nervoso e abrir os canais de aceitação da terapia.";
+
+  if (setoresNorm.includes('fisico') || setoresNorm.includes('imunologico'))
+    return "528Hz (Reparação e Imunidade) — Frequência de transformação e reparo de DNA celular, excelente para sessões de biomagnetismo ou apometria.";
+
+  if (setoresNorm.includes('espiritual'))
+    return "852Hz (Despertar da Intuição) — Estimula o retorno à ordem espiritual, indicada para mapas astrais, radiônica e alinhamento energético.";
+
+  return "396Hz (Liberação de Medo e Culpa) — Frequência base para limpeza de campos energéticos densos antes de qualquer intervenção.";
+}
+
+// ==============================
+// COMPARATIVO INTELIGENTE (Sem alterações necessárias aqui, estava perfeito)
 // ==============================
 export type ItemComparativo = {
   sistema: string;
@@ -744,11 +803,7 @@ export type ItemComparativo = {
   valor_antes?: number;
   valor_depois?: number;
   variacao?: number;
-  evolucao:
-  | "melhora"
-  | "piora"
-  | "novo"
-  | "normalizado";
+  evolucao: "melhora" | "piora" | "novo" | "normalizado";
 };
 
 export type ComparativoInteligente = {
@@ -759,119 +814,73 @@ export type ComparativoInteligente = {
 };
 
 const COMPARATIVO_VAZIO: ComparativoInteligente = {
-  melhoraram: [],
-  pioraram: [],
-  novos_problemas: [],
-  normalizados: [],
+  melhoraram: [], pioraram: [], novos_problemas: [], normalizados: [],
 };
 
-function classificarStatus(
-  resultado: string
-): "baixo" | "normal" | "alto" | null {
+function classificarStatus(resultado: string): "baixo" | "normal" | "alto" | null {
   const decodificado = decodificarMojibake(resultado);
   const lower = decodificado.toLowerCase();
   if (ehNormal(decodificado)) return "normal";
   if (lower.includes("redu")) return "baixo";
   if (lower.includes("anormal") || lower.includes("severe") || lower.includes("moderate")) return "alto";
-  return "alto"; // Se não é normal e não é redução, é alteração para cima
+  return "alto"; 
 }
 
-export function gerarComparativoInteligente(
-  exames: ExameRow[]
-): ComparativoInteligente {
+export function gerarComparativoInteligente(exames: ExameRow[]): ComparativoInteligente {
   if (exames.length < 2) return COMPARATIVO_VAZIO;
 
-  const resultado: ComparativoInteligente = {
-    melhoraram: [],
-    pioraram: [],
-    novos_problemas: [],
-    normalizados: [],
-  };
-
+  const resultado: ComparativoInteligente = { melhoraram: [], pioraram: [], novos_problemas: [], normalizados: [] };
   const anterior = exames[exames.length - 2];
   const atual = exames[exames.length - 1];
 
-  const itensAntes = extrairItensAlterados(
-    anterior.resultado_json
-  );
-  const itensDepois = extrairItensAlterados(
-    atual.resultado_json
-  );
+  const itensAntes = extrairItensAlterados(anterior.resultado_json);
+  const itensDepois = extrairItensAlterados(atual.resultado_json);
 
   const mapaAntes = new Map<string, ItemAlterado>();
-  for (const ia of itensAntes)
-    mapaAntes.set(ia.itemNormalizado, ia);
+  for (const ia of itensAntes) mapaAntes.set(ia.itemNormalizado, ia);
+  
   const mapaDepois = new Map<string, ItemAlterado>();
-  for (const id of itensDepois)
-    mapaDepois.set(id.itemNormalizado, id);
+  for (const id of itensDepois) mapaDepois.set(id.itemNormalizado, id);
 
-  // 1. Normalizados
   for (const [key, itemAntes] of mapaAntes) {
     if (!mapaDepois.has(key)) {
       resultado.normalizados.push({
-        sistema: "Geral",
-        item: itemAntes.item,
-        antes: "alto",
-        depois: "normal",
-        valor_antes:
-          parseFloat(itemAntes.valor) || undefined,
-        evolucao: "normalizado",
+        sistema: "Geral", item: itemAntes.item, antes: "alto", depois: "normal",
+        valor_antes: parseFloat(itemAntes.valor) || undefined, evolucao: "normalizado",
       });
     }
   }
 
-  // 2. Evolução
   for (const [key, itemDepois] of mapaDepois) {
     const itemAntes = mapaAntes.get(key);
 
     if (itemAntes) {
-      const diff =
-        itemDepois.scoreGravidade -
-        itemAntes.scoreGravidade;
-
-      // Se a gravidade não mudou (ex: era leve e continuou leve), não põe no gráfico para não poluir!
-      if (diff === 0) continue;
+      const diff = itemDepois.scoreGravidade - itemAntes.scoreGravidade;
+      if (diff === 0) continue; // Ignora estáveis para não poluir gráfico
 
       const comp: ItemComparativo = {
-        sistema: "Geral",
-        item: itemDepois.item,
-        antes: classificarStatus(
-          itemAntes.resultadoOriginal
-        ),
-        depois: classificarStatus(
-          itemDepois.resultadoOriginal
-        ),
-        valor_antes:
-          parseFloat(itemAntes.valor) || undefined,
-        valor_depois:
-          parseFloat(itemDepois.valor) || undefined,
-        variacao: diff,
-        evolucao:
-          diff < 0
-            ? "melhora"
-            : "piora",
+        sistema: "Geral", item: itemDepois.item,
+        antes: classificarStatus(itemAntes.resultadoOriginal),
+        depois: classificarStatus(itemDepois.resultadoOriginal),
+        valor_antes: parseFloat(itemAntes.valor) || undefined,
+        valor_depois: parseFloat(itemDepois.valor) || undefined,
+        variacao: diff, evolucao: diff < 0 ? "melhora" : "piora",
       };
 
       if (diff < 0) resultado.melhoraram.push(comp);
       else if (diff > 0) resultado.pioraram.push(comp);
     } else {
-      // 3. Novos Problemas (Apareceu agora)
-      // Ignora itens leves novos para não dar ansiedade no gráfico
       if (itemDepois.scoreGravidade >= 2) {
         resultado.novos_problemas.push({
-          sistema: "Geral",
-          item: itemDepois.item,
-          antes: null,
+          sistema: "Geral", item: itemDepois.item, antes: null,
           depois: classificarStatus(itemDepois.resultadoOriginal),
-          valor_depois: parseFloat(itemDepois.valor) || undefined,
-          evolucao: "novo",
+          valor_depois: parseFloat(itemDepois.valor) || undefined, evolucao: "novo",
         });
       }
     }
   }
 
-  // 🔥 A DIETA DO GRÁFICO: Limita para o frontend não quebrar
-  // Ordena por gravidade (os piores primeiro) e corta o resto
+  // Limites do gráfico
   resultado.melhoraram = resultado.melhoraram.sort((a, b) => (a.variacao || 0) - (b.variacao || 0)).slice(0, 10);
   resultado.pioraram = resultado.pioraram.sort((a, b) => (b.variacao || 0) - (a.variacao || 0)).slice(0, 10);
   resultado.novos_problemas = resultado.novos_problemas.slice(0, 5);

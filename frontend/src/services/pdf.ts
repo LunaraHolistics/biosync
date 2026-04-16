@@ -4,14 +4,13 @@ import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 const PDF_CANVAS_SCALE_DEFAULT = 2;
 const LIMITE_ITENS_RELATORIO = 40;
-const MAX_CHARS_POR_BLOCO = 3200; // CORREÇÃO 1: Limite seguro de texto para não estourar a página
+const MAX_CHARS_POR_BLOCO = 2800; // Reduzido levemente para garantir margem de segurança visual
 
 export type RelatorioData = {
   clientName: string;
   createdAt: string | Date;
   interpretacao: string;
   pontos_criticos: string[];
-
   diagnostico?: {
     problemas: {
       sistema: string;
@@ -28,9 +27,7 @@ export type RelatorioData = {
       };
     }[];
   };
-
   plano_terapeutico?: PlanoTerapeutico;
-
   frequencia_lunara: string;
   justificativa: string;
   comparacao?: unknown;
@@ -50,7 +47,7 @@ function escapeHtml(text: string): string {
     .replaceAll(">", "&gt;");
 }
 
-// CORREÇÃO 1: Função para dividir textos longos antes de virarem imagem
+// Divide textos longos antes de virarem imagem
 function dividirTexto(texto: string, maxChars: number): string[] {
   if (texto.length <= maxChars) return [texto];
   const pedacos: string[] = [];
@@ -91,8 +88,7 @@ async function renderizarBlocoParaCanvas(el: HTMLElement, scale: number) {
   });
 }
 
-// CORREÇÃO 2: Limpada a lógica complexa de "fatiar imagem" que cortava o texto
-// Agora ele apenas joga o bloco para a próxima página se não couber
+// Lógica limpa: Se o bloco não couber, ele pula de página SEM CORTAR a imagem
 function adicionarBlocoAoPDF(
   pdf: jsPDF,
   canvas: HTMLCanvasElement,
@@ -101,27 +97,25 @@ function adicionarBlocoAoPDF(
   pageHeight: number
 ): number {
   const marginX = 20;
-  const marginBotton = 40; // Aumentado de 30 para 40 para dar margem de segurança no rodapé
+  const marginBotton = 50; // Margem de segurança reforçada no rodapé
   const maxY = pageHeight - marginBotton;
 
   const imgData = canvas.toDataURL("image/png");
   const imgWidth = pageWidth - marginX * 2;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-  // Se couber inteiro na página atual
+  // Verifica se o bloco INTEIRO cabe na página atual
   if (currentY + imgHeight <= maxY) {
     pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
     return currentY + imgHeight + 8;
   }
 
-  // Se não couber, mas já temos pelo menos 20% da imagem visível, 
-  // significa que a página está no fim. Pula para a próxima.
-  if (currentY + (imgHeight * 0.2) > maxY) {
-    pdf.addPage();
-    currentY = 20;
-  }
+  // Se não couber, pula para a próxima página
+  pdf.addPage();
+  currentY = 20;
 
-  // Adiciona na página atual (que agora é a nova página, se houve pulo)
+  // Verificação extrema de segurança: se o bloco for MAIOR que uma página inteira, 
+  // ele adiciona do mesmo jeito para não travar o PDF (mas com os blocos quebrados abaixo, isso não deve ocorrer)
   pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
   return currentY + imgHeight + 8;
 }
@@ -214,6 +208,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
 
   const blocks: HTMLElement[] = [];
 
+  // 1. CABEÇALHO
   blocks.push(
     criarBlocoHTML(`
       <div style="font-size:20px;font-weight:900;color:#111;margin-bottom:8px">
@@ -226,7 +221,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     `)
   );
 
-  // CORREÇÃO 3: Dividir a interpretação em vários blocos menores antes de virar HTML
+  // 2. INTERPRETAÇÃO FATIADA
   if (data.interpretacao) {
     const pedacos = dividirTexto(data.interpretacao, MAX_CHARS_POR_BLOCO);
     for (let i = 0; i < pedacos.length; i++) {
@@ -240,36 +235,52 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
+  // 3. COMPARATIVO
   const comparativoHTML = extrairComparativoHTML(data.comparacao);
   if (comparativoHTML) {
     blocks.push(criarBlocoHTML(comparativoHTML));
   }
 
-  if (data.relatorio_original_html) {
-    const itens = extrairRelatorioOriginal(data.relatorio_original_html);
+  // 4. MAPA TÉCNICO ESTRUTURADO COM IMPACTO FITNESS
+  if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
+    const itens = data.diagnostico.problemas.slice(0, LIMITE_ITENS_RELATORIO);
 
-    if (itens.length > 0) {
-      const linhas = itens.slice(0, LIMITE_ITENS_RELATORIO).map((i) => `
-        <div style="margin-bottom:6px">
-          <b>${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}</b><br/>
-          <span style="font-size:10px;color:#555">
-            Normal: ${escapeHtml(i.normal || "—")} |
-            Medido: ${escapeHtml(i.valor || "—")}
-          </span>
+    const linhas = itens.map((i) => {
+      let fitnessHtml = "";
+      if (i.impacto_fitness) {
+        const tags = [];
+        if (i.impacto_fitness.performance) tags.push(`💪 Performance: ${i.impacto_fitness.performance}`);
+        if (i.impacto_fitness.hipertrofia) tags.push(`🏋️ Hipertrofia: ${i.impacto_fitness.hipertrofia}`);
+        if (i.impacto_fitness.emagrecimento) tags.push(`🔥 Emagrecimento: ${i.impacto_fitness.emagrecimento}`);
+        if (i.impacto_fitness.recuperacao) tags.push(`🩹 Recuperação: ${i.impacto_fitness.recuperacao}`);
+        if (i.impacto_fitness.humor) tags.push(`🧠 Humor: ${i.impacto_fitness.humor}`);
+
+        if (tags.length > 0) {
+          fitnessHtml = `<div style="margin-top:4px;font-size:10px;color:#0284c7;background:#f0f9ff;padding:4px 6px;border-radius:4px;">
+            ${tags.join("<br>")}
+          </div>`;
+        }
+      }
+
+      return `
+        <div style="margin-bottom:8px;padding-bottom:6px;border-bottom:1px dashed #e5e7eb">
+          <b style="color:#111">${escapeHtml(i.sistema)} — ${escapeHtml(i.item)}</b> 
+          <span style="font-size:10px;color:#dc2626;font-weight:700;">${escapeHtml(i.status || "")}</span>
+          ${i.impacto ? `<br/><span style="font-size:10px;color:#555">${escapeHtml(i.impacto)}</span>` : ""}
+          ${fitnessHtml}
         </div>
-      `).join("");
+      `;
+    }).join("");
 
-      blocks.push(
-        criarBlocoHTML(`
-          <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:8px">
-            Mapa técnico estruturado
-          </div>
-          ${linhas}
-        `)
-      );
-    }
+    blocks.push(
+      criarBlocoHTML(`
+        <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:10px">Mapa Técnico e Impacto Fitness</div>
+        ${linhas}
+      `)
+    );
   }
 
+  // 5. PONTOS CRÍTICOS
   if (data.pontos_criticos && data.pontos_criticos.length > 0) {
     const lista = data.pontos_criticos
       .slice(0, 15)
@@ -279,44 +290,63 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     blocks.push(
       criarBlocoHTML(`
         <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:8px">Pontos críticos</div>
-        <ul style="color:#222;padding-left:18px">${lista}</ul>
+        <ul style="color:#222;padding-left:18px;margin:0">${lista}</ul>
       `)
     );
   }
 
+  // =======================================================================
+  // 🔥 CORREÇÃO 1: PLANO TERAPÊUTICO DIVIDIDO EM PÁGINAS (NÃO CORTA MAIS)
+  // =======================================================================
   if (data.plano_terapeutico?.terapias?.length) {
-    const terapias = data.plano_terapeutico.terapias.map((t) => `
-      <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
-        <div style="font-weight:700;color:#111">${escapeHtml(t.nome)}</div>
-        <div style="font-size:10px;color:#555;margin-bottom:3px">${escapeHtml(t.frequencia || "")}</div>
-        <div style="color:#333">${escapeHtml(t.descricao || "")}</div>
-        ${t.justificativa ? `<div style="font-size:10px;color:#666;margin-top:3px"><b>Justificativa:</b> ${escapeHtml(t.justificativa)}</div>` : ""}
-      </div>
-    `).join("");
+    const terapias = data.plano_terapeutico.terapias;
+    const TERAPIAS_POR_PAGINA = 4;
 
-    blocks.push(
-      criarBlocoHTML(`
-        <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:8px">Plano terapêutico</div>
-        ${terapias}
-      `)
-    );
+    for (let i = 0; i < terapias.length; i += TERAPIAS_POR_PAGINA) {
+      const chunk = terapias.slice(i, i + TERAPIAS_POR_PAGINA);
+
+      const htmlTerapias = chunk.map((t) => `
+        <div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e5e7eb">
+          <div style="font-weight:700;color:#111;font-size:12px">${escapeHtml(t.nome)}</div>
+          <div style="font-size:10px;color:#0284c7;margin-bottom:4px"><b>${escapeHtml(t.frequencia || "")}</b></div>
+          <div style="color:#333">${escapeHtml(t.descricao || "")}</div>
+          ${t.justificativa ? `<div style="font-size:10px;color:#555;margin-top:4px"><b>Justificativa:</b> ${escapeHtml(t.justificativa)}</div>` : ""}
+        </div>
+      `).join("");
+
+      const titulo = i === 0
+        ? `<div style="font-size:13px;font-weight:900;color:#111;margin-bottom:10px">Plano terapêutico</div>`
+        : `<div style="font-size:11px;color:#888;margin-bottom:10px;font-style:italic">Plano terapêutico (continuação)</div>`;
+
+      blocks.push(criarBlocoHTML(`${titulo}${htmlTerapias}`));
+    }
   }
 
-  if (data.frequencia_lunara || data.justificativa) {
-    blocks.push(
-      criarBlocoHTML(`
-        ${data.frequencia_lunara ? `
-          <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:6px">Frequência Lunara</div>
-          <div style="color:#333;margin-bottom:12px">${escapeHtml(data.frequencia_lunara)}</div>
-        ` : ""}
-        ${data.justificativa ? `
-          <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:6px">Justificativa terapêutica</div>
-          <div style="color:#333">${escapeHtml(data.justificativa)}</div>
-        ` : ""}
-      `)
-    );
+  // =======================================================================
+  // 🔥 CORREÇÃO 2: FREQUÊNCIA LUNARA (SOLFEGGIO) - SEMPRE VISÍVEL
+  // =======================================================================
+  const frequenciaTexto = data.frequencia_lunara && !/^[\s—\-–]+$/.test(data.frequencia_lunara)
+    ? data.frequencia_lunara
+    : "Recomendação: Utilizar frequências Solfeggio (ex: 432Hz para harmonização, 528Hz para reparação) durante a sessão para potencializar o resultado terapêutico.";
+
+  let htmlFrequenciaEJustificativa = `
+    <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:6px">Frequência Solfeggio para Sessão</div>
+    <div style="color:#333;margin-bottom:12px;background:#f8fafc;padding:10px;border-radius:6px;border-left:4px solid #8b5cf6;">
+      🎵 ${escapeHtml(frequenciaTexto)}
+    </div>
+  `;
+
+  if (data.justificativa && !/^[\s—\-–]+$/.test(data.justificativa)) {
+    htmlFrequenciaEJustificativa += `
+      <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:6px">Justificativa terapêutica</div>
+      <div style="color:#333">${escapeHtml(data.justificativa)}</div>
+    `;
   }
 
+  // Como o texto padrão sempre é adicionado, esse bloco vai pro PDF 100% das vezes
+  blocks.push(criarBlocoHTML(htmlFrequenciaEJustificativa));
+
+  // RENDERIZAÇÃO FINAL
   blocks.forEach((b) => container.appendChild(b));
   document.body.appendChild(container);
 
