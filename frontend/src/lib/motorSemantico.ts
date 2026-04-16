@@ -727,7 +727,6 @@ export function gerarAnaliseCompleta(
 // ==============================
 // COMPARATIVO INTELIGENTE
 // ==============================
-
 export type ItemComparativo = {
   sistema: string;
   item: string;
@@ -737,9 +736,9 @@ export type ItemComparativo = {
   valor_depois?: number;
   variacao?: number;
   evolucao:
-  | "melhora"
-  | "piora"
-  | "novo"
+  | "melhora" 
+  | "piora" 
+  | "novo" 
   | "normalizado";
 };
 
@@ -750,10 +749,10 @@ export type ComparativoInteligente = {
   normalizados: ItemComparativo[];
 };
 
-const COMPARATIVO_VAZIO: ComparativoInteligente = {
-  melhoraram: [],
-  pioraram: [],
-  novos_problemas: [],
+const COMPARATIVO_VAZIO: ComparativoInteligente = { 
+  melhoraram: [], 
+  pioraram: [], 
+  novos_problemas: [], 
   normalizados: [],
 };
 
@@ -764,8 +763,8 @@ function classificarStatus(
   const lower = decodificado.toLowerCase();
   if (ehNormal(decodificado)) return "normal";
   if (lower.includes("redu")) return "baixo";
-  if (lower.includes("anormal")) return "alto";
-  return null;
+  if (lower.includes("anormal") || lower.includes("severe") || lower.includes("moderate")) return "alto";
+  return "alto"; // Se não é normal e não é redução, é alteração para cima
 }
 
 export function gerarComparativoInteligente(
@@ -773,10 +772,10 @@ export function gerarComparativoInteligente(
 ): ComparativoInteligente {
   if (exames.length < 2) return COMPARATIVO_VAZIO;
 
-  const resultado: ComparativoInteligente = {
-    melhoraram: [],
-    pioraram: [],
-    novos_problemas: [],
+  const resultado: ComparativoInteligente = { 
+    melhoraram: [], 
+    pioraram: [], 
+    novos_problemas: [], 
     normalizados: [],
   };
 
@@ -791,16 +790,13 @@ export function gerarComparativoInteligente(
   );
 
   const mapaAntes = new Map<string, ItemAlterado>();
-  for (const ia of itensAntes) {
-    mapaAntes.set(ia.itemNormalizado, ia);
-  }
-
+  for (const ia of itensAntes)
+     mapaAntes.set(ia.itemNormalizado, ia);
   const mapaDepois = new Map<string, ItemAlterado>();
-  for (const id of itensDepois) {
-    mapaDepois.set(id.itemNormalizado, id);
-  }
+  for (const id of itensDepois)
+     mapaDepois.set(id.itemNormalizado, id);
 
-  // Normalizados
+  // 1. Normalizados
   for (const [key, itemAntes] of mapaAntes) {
     if (!mapaDepois.has(key)) {
       resultado.normalizados.push({
@@ -808,21 +804,24 @@ export function gerarComparativoInteligente(
         item: itemAntes.item,
         antes: "alto",
         depois: "normal",
-        valor_antes:
-          parseFloat(itemAntes.valor) || undefined,
+        valor_antes: 
+        parseFloat(itemAntes.valor) || undefined,
         evolucao: "normalizado",
       });
     }
   }
 
-  // Comparação principal
+  // 2. Evolução
   for (const [key, itemDepois] of mapaDepois) {
     const itemAntes = mapaAntes.get(key);
 
     if (itemAntes) {
-      const diff =
-        itemDepois.scoreGravidade -
-        itemAntes.scoreGravidade;
+      const diff = 
+      itemDepois.scoreGravidade - 
+      itemAntes.scoreGravidade;
+
+      // Se a gravidade não mudou (ex: era leve e continuou leve), não põe no gráfico para não poluir!
+      if (diff === 0) continue;
 
       const comp: ItemComparativo = {
         sistema: "Geral",
@@ -833,35 +832,41 @@ export function gerarComparativoInteligente(
         depois: classificarStatus(
           itemDepois.resultadoOriginal
         ),
-        valor_antes:
-          parseFloat(itemAntes.valor) || undefined,
-        valor_depois:
-          parseFloat(itemDepois.valor) || undefined,
+        valor_antes: 
+        parseFloat(itemAntes.valor) || undefined,
+        valor_depois: 
+        parseFloat(itemDepois.valor) || undefined,
         variacao: diff,
-        evolucao:
-          diff < 0
-            ? "melhora"
-            : diff > 0
-              ? "piora"
-              : "melhora",
+        evolucao: 
+        diff < 0 
+        ? "melhora"
+         :"piora",
       };
 
       if (diff < 0) resultado.melhoraram.push(comp);
       else if (diff > 0) resultado.pioraram.push(comp);
     } else {
-      resultado.novos_problemas.push({
-        sistema: "Geral",
-        item: itemDepois.item,
-        antes: null,
-        depois: classificarStatus(
-          itemDepois.resultadoOriginal
-        ),
-        valor_depois:
-          parseFloat(itemDepois.valor) || undefined,
-        evolucao: "novo",
-      });
+      // 3. Novos Problemas (Apareceu agora)
+      // Ignora itens leves novos para não dar ansiedade no gráfico
+      if (itemDepois.scoreGravidade >= 2) {
+        resultado.novos_problemas.push({
+          sistema: "Geral",
+          item: itemDepois.item,
+          antes: null,
+          depois: classificarStatus(itemDepois.resultadoOriginal),
+          valor_depois: parseFloat(itemDepois.valor) || undefined,
+          evolucao: "novo",
+        });
+      }
     }
   }
+
+  // 🔥 A DIETA DO GRÁFICO: Limita para o frontend não quebrar
+  // Ordena por gravidade (os piores primeiro) e corta o resto
+  resultado.melhoraram = resultado.melhoraram.sort((a, b) => (a.variacao || 0) - (b.variacao || 0)).slice(0, 10);
+  resultado.pioraram = resultado.pioraram.sort((a, b) => (b.variacao || 0) - (a.variacao || 0)).slice(0, 10);
+  resultado.novos_problemas = resultado.novos_problemas.slice(0, 5);
+  resultado.normalizados = resultado.normalizados.slice(0, 10);
 
   return resultado;
 }
