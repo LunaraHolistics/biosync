@@ -712,6 +712,7 @@ function sugerirTerapias(
     base: BaseAnaliseSaudeRow[],
     terapias: TerapiaRow[]
   ): AnaliseCompleta {
+
     const paciente = parsearPaciente(
       exame.nome_paciente
     );
@@ -735,31 +736,34 @@ function sugerirTerapias(
       itensAlterados
     );
 
-    // 🔥 Geração base de terapias
-    let terapiasSugeridas = sugerirTerapias(matches, terapias);
+    // 🔥 SUGESTÃO DE TERAPIAS BASEADA EM DADOS REAIS
+    let terapiasSugeridas = sugerirTerapias(
+      matches,
+      terapias
+    );
 
-    // 🔥 REGRA CLÍNICA PRINCIPAL
-    const semAlteracoes = itensAlterados.length === 0;
-
-    if (semAlteracoes) {
+    // 🔥 REGRA CLÍNICA 1: SEM ALTERAÇÕES → NÃO SUGERIR TERAPIA
+    if (itensAlterados.length === 0) {
       terapiasSugeridas = [];
     }
+
+    // 🔥 REGRA CLÍNICA 2: PRIORIZAÇÃO REAL (critico > moderado > leve)
+    terapiasSugeridas = terapiasSugeridas.sort((a, b) => {
+      const pesoA = a.scoreRelevancia + (10 - (a.prioridade ?? 10));
+      const pesoB = b.scoreRelevancia + (10 - (b.prioridade ?? 10));
+      return pesoB - pesoA;
+    });
 
     const { score: scoreGeral, status: statusScore } =
       calcularScoreGeral(itensAlterados);
 
-    // 🔥 SETORES AFETADOS — agora mais robusto
-    let setoresAfetados = [
-      ...new Set(matches.flatMap((m) => m.setores)),
+    // 🔥 setores com fallback inteligente
+    const setoresAfetados = [
+      ...new Set([
+        ...matches.flatMap((m) => m.setores),
+        ...itensAlterados.map((i) => i.itemNormalizado)
+      ]),
     ];
-
-    // 🔥 fallback inteligente (caso tenha item alterado mas sem match)
-    if (
-      setoresAfetados.length === 0 &&
-      itensAlterados.length > 0
-    ) {
-      setoresAfetados = ["fisico"];
-    }
 
     const resumoCategorias =
       gerarResumoCategorias(matches);
@@ -770,10 +774,7 @@ function sugerirTerapias(
       matches,
       interpretacao,
       pontosCriticos,
-
-      // 🔥 saída final coerente com estado clínico
       terapias: terapiasSugeridas,
-
       scoreGeral,
       statusScore,
       setoresAfetados,
