@@ -137,7 +137,7 @@ export default function Dashboard() {
       createdAt: exame.data_exame,
       interpretacao: analise.interpretacao,
       pontos_criticos: analise.pontosCriticos,
-      
+
       // Mapeamento do Impacto Fitness
       diagnostico: {
         problemas: analise.matches.map((m) => ({
@@ -161,7 +161,7 @@ export default function Dashboard() {
 
       // 🔥 AQUI ESTÁ A SOLUÇÃO DO TRAÇO: Puxando direto do Motor Semântico
       frequencia_lunara: analise.frequencia_lunara,
-      
+
       justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ")}.`,
     };
 
@@ -275,7 +275,7 @@ export default function Dashboard() {
                 ).toLocaleDateString();
 
                 const { score, status } =
-                  calculateScore(exame);
+                  calcularScore(exame);
 
                 const tendencia =
                   calcularTendencia(exame);
@@ -570,11 +570,11 @@ export default function Dashboard() {
             {analise.frequencia_lunara && (
               <div style={{ marginBottom: 12 }}>
                 <b>Frequência Solfeggio para Sessão:</b>
-                <div style={{ 
-                  marginTop: 6, 
-                  color: "#8b5cf6", 
-                  background: "#1e293b", 
-                  padding: "8px 12px", 
+                <div style={{
+                  marginTop: 6,
+                  color: "#8b5cf6",
+                  background: "#1e293b",
+                  padding: "8px 12px",
                   borderRadius: 6,
                   borderLeft: "4px solid #8b5cf6"
                 }}>
