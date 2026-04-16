@@ -751,12 +751,15 @@ function App() {
                       {relatorioDataHistorico ? (
                         <button
                           className="counter"
-                          disabled={isGerandoPdf}
+                          // 🔥 REMOVI O DISABLED E COLOQUEI ESTILO INLINE PARA BURLAR O CSS
+                          style={{
+                            opacity: isGerandoPdf ? 0.7 : 1,
+                            cursor: isGerandoPdf ? "not-allowed" : "pointer"
+                          }}
                           onClick={async () => {
                             if (!relatorioDataHistorico || isGerandoPdf) return;
                             setIsGerandoPdf(true);
 
-                            // 🔥 O SEGREDO: Dá um respiro pro React atualizar a tela antes de travar no PDF
                             await new Promise(r => setTimeout(r, 50));
 
                             try {
