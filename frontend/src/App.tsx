@@ -705,7 +705,7 @@ function App() {
                                   )}
                                   <div style={{ fontSize: 11, color: "#38bdf8" }}>
                                     {Object.entries(m.impacto_fitness).map(([key, val]) => (
-                                      <div key={key}>• <b>{key.charAt(0).toUpperCase() + key.slice(1)}:</b> {val}</div>
+                                      <div key={key}>• <b>{key.charAt(0).toUpperCase() + key.slice(1)}:</b> {String(val)}</div>
                                     ))}
                                   </div>
                                 </div>
