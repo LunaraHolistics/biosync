@@ -622,16 +622,21 @@ function sugerirTerapias(
     }
   }
 
-  // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
-  // 🚫 Sem correspondência real → sem terapias corretivas
-  if (resultados.length === 0) {
-    return [];
+    // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
+    // 🚫 Sem correspondência real → sem terapias corretivas
+    if (resultados.length === 0) {
+      return [];
+    }
+  
+    return resultados.sort(
+      (a, b) => b.scoreRelevancia - a.scoreRelevancia
+    );
   }
-
+  
   // ==============================
   // 10. SCORE GERAL
   // ==============================
-
+  
   export function calcularScoreGeral(
     itensAlterados: ItemAlterado[]
   ): { score: number; status: string } {
@@ -686,7 +691,7 @@ function sugerirTerapias(
       string,
       { total: number; criticos: number }
     > = {};
-
+  
     for (const m of matches) {
       const cat = m.categoria || "Outros";
       if (!resumo[cat])
@@ -699,14 +704,14 @@ function sugerirTerapias(
         resumo[cat].criticos++;
       }
     }
-
+  
     return resumo;
   }
-
+  
   // ==============================
   // 🔥 FUNÇÃO PRINCIPAL
   // ==============================
-
+  
   export function gerarAnaliseCompleta(
     exame: ExameRow,
     base: BaseAnaliseSaudeRow[],
