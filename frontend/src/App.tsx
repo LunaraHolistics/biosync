@@ -14,7 +14,7 @@ import {
   type ExameRow,
   type TerapiaRow,
   type BaseAnaliseSaudeRow,
-  salvarAnaliseCurada, // Mantém só este
+  salvarAnaliseCurada,
 } from "./services/db";
 
 import {
@@ -244,7 +244,6 @@ function exameRowToAiData(
     }
   }
 
-  // 🔥 CORREÇÃO FINAL DO TRAÇO: Puxa do Motor que calculou o Solfeggio, e não do banco vazio!
   const frequencia_lunara = analise.frequencia_lunara || "";
 
   return {
@@ -275,7 +274,7 @@ function buildRelatorioData(
   paciente: string,
   data: AiStructuredData,
   comparacao?: any,
-  motor?: AnaliseCompleta // 🔥 NOVO PARÂMETRO
+  motor?: AnaliseCompleta
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -287,8 +286,6 @@ function buildRelatorioData(
     plano_terapeutico: data.plano_terapeutico,
     frequencia_lunara: data.frequencia_lunara || "",
     justificativa: data.justificativa || "",
-
-    // 🔥 CORREÇÃO: Agora usa o MOTOR se existir, senão tenta o banco antigo
     diagnostico: motor ? {
       problemas: motor.matches.map((m) => ({
         sistema: m.categoria,
@@ -298,7 +295,6 @@ function buildRelatorioData(
         impacto_fitness: (m as any).impacto_fitness || undefined,
       }))
     } : toDiagnostico(meta.diagnostico),
-
     comparacao,
     relatorio_original_html: getRelatorioOriginal(meta, row),
   };
@@ -327,8 +323,6 @@ function App() {
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
-
-  // 🔥 NOVO ESTADO: GUARDAR QUAIS TERAPIAS FORAM OCULTADAS PELO CHECKBOX
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
 
   const [dashboard, setDashboard] = useState({
@@ -347,22 +341,10 @@ function App() {
 
   function obterAnalise(row: ExameRow): AnaliseCompleta {
     if (cacheAnalise[row.id]) return cacheAnalise[row.id];
-
-    // 1. Verifica se já tem uma análise curada salva no banco (Cache Permanente)
-    // Como é síncrono com o estado, precisamos de um estado separado se quiser esperar o DB.
-    // Mas para não travar a UI, deixamos o motor calcular normal e salvamos em background.
-
-    // Calcula via Motor Semântico (como fazia antes)
     const analise = gerarAnaliseCompleta(row, baseAnalise, terapias);
-
-    // 🔥 SALVA EM BACKGROUND NO SUPABASE (Não trava a tela)
-    // Usa .then() para rodar de forma assíncrona silenciosa
     salvarAnaliseCurada(row.id, analise).then((sucesso) => {
-      if (sucesso) {
-        console.log(`✅ Análise curada salva para o exame ${row.id.substring(0, 5)}`);
-      }
+      if (sucesso) console.log(`✅ Análise curada salva: ${row.id.substring(0, 5)}`);
     });
-
     setCacheAnalise((prev) => ({ ...prev, [row.id]: analise }));
     return analise;
   }
@@ -381,11 +363,12 @@ function App() {
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
     : null;
 
-  // 🔥 MOVIDO PARA CIMA
+  // 🔥 DECLARAÇÃO ÚNICA E CORRETA AQUI
   const analiseMotor = analiseSelecionada
     ? obterAnalise(analiseSelecionada)
-    : null;
+    : undefined;
 
+  // 🔥 DECLARAÇÃO ÚNICA E CORRETA AQUI
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -398,23 +381,7 @@ function App() {
         justificativa: "",
       },
       comparativoExamesData,
-      analiseMotor ?? undefined // 🔥 ADICIONE AQUI
-    )
-    : null;
-
-  const relatorioDataHistorico = analiseSelecionada
-    ? buildRelatorioData(
-      analiseSelecionada,
-      pacienteSelecionado || clientName.trim() || "Cliente",
-      analiseSelecionadaData ?? {
-        interpretacao: "",
-        pontos_criticos: [],
-        plano_terapeutico: { tipo: "mensal", terapias: [] },
-        frequencia_lunara: "",
-        justificativa: "",
-      },
-      comparativoExamesData,
-      analiseMotor // 🔥 PASSA O MOTOR AQUI TAMBÉM
+      analiseMotor
     )
     : null;
 
@@ -452,7 +419,7 @@ function App() {
       setAnaliseSelecionada(ultimo);
       setExamesPaciente(list);
       setTerapiasEditavel("");
-      setTerapiasOcultas(new Set()); // Limpa ocultações
+      setTerapiasOcultas(new Set());
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -521,7 +488,7 @@ function App() {
     setHistoryError(null);
     setHistoryLoading(true);
     setTerapiasEditavel("");
-    setTerapiasOcultas(new Set()); // Limpa ocultações
+    setTerapiasOcultas(new Set());
     try {
       const list = await listarExamesPorPaciente(nome);
       const listOrdenada = [...list].sort(
