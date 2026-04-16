@@ -120,42 +120,6 @@ function adicionarBlocoAoPDF(
   return currentY + imgHeight + 8;
 }
 
-type ItemExtraido = {
-  sistema: string;
-  item: string;
-  normal: string;
-  valor: string;
-  conselho: string;
-};
-
-function extrairRelatorioOriginal(html: string): ItemExtraido[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  const linhas = Array.from(doc.querySelectorAll("tr"));
-  const resultado: ItemExtraido[] = [];
-  let sistemaAtual = "";
-
-  for (const tr of linhas) {
-    const tds = tr.querySelectorAll("td");
-    if (tds.length < 4) continue;
-    if (tds.length >= 5) {
-      const sistemaTexto = tds[0]?.textContent?.trim();
-      if (sistemaTexto) sistemaAtual = sistemaTexto;
-    }
-    const item = tds[1]?.textContent?.trim() || "";
-    if (!item) continue;
-    resultado.push({
-      sistema: sistemaAtual,
-      item,
-      normal: tds[2]?.textContent?.trim() || "",
-      valor: tds[3]?.textContent?.trim() || "",
-      conselho: tds[4]?.textContent?.trim() || "",
-    });
-  }
-
-  return resultado;
-}
-
 function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
 

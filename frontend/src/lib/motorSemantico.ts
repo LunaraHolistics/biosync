@@ -61,10 +61,8 @@ export type AnaliseCompleta = {
   scoreGeral: number;
   statusScore: string;
   setoresAfetados: string[];
-  resumoCategorias: Record<
-    string,
-    { total: number; criticos: number }
-  >;
+  resumoCategorias: Record<string, { total: number; criticos: number }>;
+  frequencia_lunara: string;
 };
 
 // ==============================
