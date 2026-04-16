@@ -4,8 +4,6 @@ import "./App.css";
 import { gerarRelatorioPDF, type RelatorioData } from "./services/pdf";
 import ComparativoExamesView from "./components/ComparativoExames";
 import {
-  salvarAnaliseCurada,
-  buscarAnaliseCurada,
   listarExames,
   buscarExamesPorNome,
   contarExames,
@@ -16,6 +14,7 @@ import {
   type ExameRow,
   type TerapiaRow,
   type BaseAnaliseSaudeRow,
+  salvarAnaliseCurada, // Mantém só este
 } from "./services/db";
 
 import {
