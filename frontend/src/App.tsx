@@ -784,7 +784,7 @@ function App() {
         </main>
       </div>
 
-      {modalOpen ? (
+       {modalOpen ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -850,6 +850,35 @@ function App() {
                       : <li>—</li>}
                   </ul>
                 </div>
+
+                {/* 🔥 AQUI ESTÁ O IMPACTO FITNESS NO LUGAR CERTO */}
+                {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
+                  <div>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {analiseMotor.matches
+                        .filter((m: any) => m.impacto_fitness)
+                        .slice(0, 10) 
+                        .map((m: any, i: number) => (
+                          <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
+                            <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
+                              {m.categoria} — {m.itemBase} 
+                              <span style={{ marginLeft: 8, color: "#f87171", fontWeight: 600 }}>({m.gravidade})</span>
+                            </div>
+                            {m.impacto && (
+                              <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 6 }}>{m.impacto}</div>
+                            )}
+                            <div style={{ fontSize: 11, color: "#38bdf8" }}>
+                              {Object.entries(m.impacto_fitness).map(([key, val]) => (
+                                <div key={key}>• <b>{key.charAt(0).toUpperCase() + key.slice(1)}:</b> {String(val)}</div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  </div>
+                )}
 
                 <SecaoPlanoTerapeutico
                   data={analiseSelecionadaData}

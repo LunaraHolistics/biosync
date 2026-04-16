@@ -205,11 +205,17 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     blocks.push(criarBlocoHTML(comparativoHTML));
   }
 
-  // 4. MAPA TÉCNICO ESTRUTURADO COM IMPACTO FITNESS
-  if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
-    const itens = data.diagnostico.problemas.slice(0, LIMITE_ITENS_RELATORIO);
+// 4. MAPA TÉCNICO ESTRUTURADO COM IMPACTO FITNESS (FATIADO PARA NÃO CORTAR)
+if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
+  const todosItens = data.diagnostico.problemas;
+  const ITENS_POR_PAGINA_MAPA = 8; // Limite seguro por bloco
 
-    const linhas = itens.map((i) => {
+  // Divide a lista de problemas em "páginas" de 8 itens
+  for (let i = 0; i < todosItens.length; i += ITENS_POR_PAGINA_MAPA) {
+    const chunk = todosItens.slice(i, i + ITENS_POR_PAGINA_MAPA);
+
+    const linhas = chunk.map((i) => {
+      // Formata o Impacto Fitness se existir
       let fitnessHtml = "";
       if (i.impacto_fitness) {
         const tags = [];
@@ -236,13 +242,14 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
       `;
     }).join("");
 
-    blocks.push(
-      criarBlocoHTML(`
-        <div style="font-size:13px;font-weight:900;color:#111;margin-bottom:10px">Mapa Técnico e Impacto Fitness</div>
-        ${linhas}
-      `)
-    );
+    // Título só aparece no primeiro bloco
+    const tituloMapa = i === 0
+      ? `<div style="font-size:13px;font-weight:900;color:#111;margin-bottom:10px">Mapa Técnico e Impacto Fitness</div>`
+      : `<div style="font-size:11px;color:#888;margin-bottom:10px;font-style:italic">Mapa Técnico e Impacto Fitness (continuação)</div>`;
+
+    blocks.push(criarBlocoHTML(`${tituloMapa}${linhas}`));
   }
+}
 
   // 5. PONTOS CRÍTICOS
   if (data.pontos_criticos && data.pontos_criticos.length > 0) {
