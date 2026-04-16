@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import {
   listarExames,
@@ -19,6 +18,9 @@ import {
   parsearPaciente,
   type AnaliseCompleta,
 } from "../lib/motorSemantico";
+
+// 🔥 EVOLUÇÃO 1: Removido o jsPDF bruto e importado o seu gerador profissional
+import { gerarRelatorioPDF, type RelatorioData } from "../services/pdf";
 
 import ComparativoExamesView from "../components/ComparativoExames";
 import GraficoEvolucao from "../components/GraficoEvolucao";
@@ -125,62 +127,46 @@ export default function Dashboard() {
     return grupos;
   }, [exames]);
 
-  function gerarPDF(exame: ExameRow) {
-    const doc = new jsPDF();
+  // 🔥 EVOLUÇÃO 2: Função gerarPDF reescrita para usar seu pdf.ts comImpacto e Solfeggio
+  async function gerarPDF(exame: ExameRow) {
     const analise = obterAnalise(exame);
 
-    let y = 10;
+    // Mapeando o que o Motor gerou para o formato exato que o pdf.ts exige
+    const dadosParaPDF: RelatorioData = {
+      clientName: analise.paciente.nome,
+      createdAt: exame.data_exame,
+      interpretacao: analise.interpretacao,
+      pontos_criticos: analise.pontosCriticos,
+      
+      // Mapeamento do Impacto Fitness
+      diagnostico: {
+        problemas: analise.matches.map((m) => ({
+          sistema: m.categoria,
+          item: m.itemBase,
+          status: m.gravidade,
+          impacto: m.impacto,
+          impacto_fitness: m.impacto_fitness || undefined,
+        })),
+      },
 
-    doc.setFontSize(14);
-    doc.text(
-      `Paciente: ${analise.paciente.nome}`,
-      10,
-      y
-    );
-    y += 10;
+      // Mapeamento das Terapias
+      plano_terapeutico: {
+        terapias: analise.terapias.map((t) => ({
+          nome: t.nome,
+          descricao: t.descricao,
+          frequencia: t.frequencia,
+          justificativa: t.motivos?.join(", "), // Junta os motivos gerados pelo motor
+        })),
+      },
 
-    doc.text(`Data: ${exame.data_exame}`, 10, y);
-    y += 10;
+      // 🔥 AQUI ESTÁ A SOLUÇÃO DO TRAÇO: Puxando direto do Motor Semântico
+      frequencia_lunara: analise.frequencia_lunara,
+      
+      justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ")}.`,
+    };
 
-    doc.text(
-      `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}`,
-      10,
-      y
-    );
-    y += 10;
-
-    doc.setFontSize(12);
-    doc.text("Interpretação:", 10, y);
-    y += 8;
-
-    const linhas = doc.splitTextToSize(
-      analise.interpretacao,
-      180
-    );
-    doc.text(linhas, 10, y);
-    y += linhas.length * 5 + 10;
-
-    doc.text("Pontos Críticos:", 10, y);
-    y += 8;
-
-    analise.pontosCriticos.forEach((p) => {
-      const txt = doc.splitTextToSize(`• ${p}`, 175);
-      doc.text(txt, 10, y);
-      y += txt.length * 5 + 2;
-    });
-
-    y += 5;
-    doc.text("Terapias Sugeridas:", 10, y);
-    y += 8;
-
-    analise.terapias.forEach((t) => {
-      doc.text(`• ${t.nome}`, 10, y);
-      y += 6;
-    });
-
-    doc.save(
-      `relatorio-${analise.paciente.nome.replace(/\s/g, "_")}.pdf`
-    );
+    // Chama a função do pdf.ts que não corta texto e tem formatação
+    await gerarRelatorioPDF(dadosParaPDF);
   }
 
   return (
@@ -289,7 +275,7 @@ export default function Dashboard() {
                 ).toLocaleDateString();
 
                 const { score, status } =
-                  calcularScore(exame);
+                  calculateScore(exame);
 
                 const tendencia =
                   calcularTendencia(exame);
@@ -576,6 +562,23 @@ export default function Dashboard() {
                       </span>
                     )
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* 🔥 EVOLUÇÃO 3: Exibição da Frequência Solfeggio na tela também */}
+            {analise.frequencia_lunara && (
+              <div style={{ marginBottom: 12 }}>
+                <b>Frequência Solfeggio para Sessão:</b>
+                <div style={{ 
+                  marginTop: 6, 
+                  color: "#8b5cf6", 
+                  background: "#1e293b", 
+                  padding: "8px 12px", 
+                  borderRadius: 6,
+                  borderLeft: "4px solid #8b5cf6"
+                }}>
+                  🎵 {analise.frequencia_lunara}
                 </div>
               </div>
             )}
