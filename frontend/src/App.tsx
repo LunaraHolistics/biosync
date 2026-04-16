@@ -360,7 +360,6 @@ function App() {
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
-  const [isGerandoPdf, setIsGerandoPdf] = useState(false); // 🔥 ADICIONE ESTE
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
