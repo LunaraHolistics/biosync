@@ -724,7 +724,7 @@ export function gerarAnaliseCompleta(
   // 🔥 ENRIQUECIMENTO FINAL
   const matchesComFitness = matches.map(m => ({
     ...m,
-    impacto_fitness: mapearImpactoFitness(m.categoria, m.gravidade, analise.paciente.imc)
+    impacto_fitness: mapearImpactoFitness(m.categoria, m.gravidade, paciente.imc)
   }));
 
   const frequenciaSugerida = sugerirFrequenciaSolfeggio(setoresAfetados);
