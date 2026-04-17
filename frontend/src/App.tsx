@@ -359,7 +359,8 @@ function App() {
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
-  const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [terapiasOcultas, setTerapiasOlicts] = useState<Set<string>>(new Set());
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
