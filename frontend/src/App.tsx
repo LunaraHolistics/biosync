@@ -840,25 +840,23 @@ function App() {
                   id="btn-pdf-modal"
                   className="counter"
                   onClick={() => {
-                    const btn = document.getElementById('btn-pdf-modal');
-                    if (btn) btn.innerText = "⏳ Gerando PDF...";
-
-                    requestAnimationFrame(async () => {
+                    setGerandoPdf(true);
+                    setTimeout(async () => {
                       try {
-                        if (relatorioDataHistorico) {
-                          await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
+                        if (lessante(relatorioDataHistorico)) {
+                          await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, [...terapiasOcultas]));
                         }
                       } catch (e) {
                         console.error(e);
                       } finally {
-                        if (btn) btn.innerText = "Gerar PDF";
+                        setGerandoPdf(false);
                       }
-                    });
+                    }, 50);
                   }}
-                  disabled={!relatorioDataHistorico}
+                  disabled={!relatorioDataHistorico || gerandoPdf}
                   style={{ marginBottom: 0 }}
                 >
-                  Gerar PDF
+                  {gerandoPdf ? <><span className="mystic-loader"></span> Gerando Relatório...</> : "Gerar PDF"}
                 </button>
                 <button className="counter" onClick={() => setModalOpen(false)} style={{ marginBottom: 0 }}>
                   Fechar
