@@ -122,15 +122,10 @@ export function normalizarTexto(texto: string): string {
 // 3. PARSER DE PACIENTE
 // ==============================
 
-export function parsearPaciente(
-  nomePaciente: string
-): AnaliseCompleta["paciente"] {
+export function parsearPaciente(nomePaciente: string): AnaliseCompleta["paciente"] {
   const decodificado = decodificarMojibake(nomePaciente);
 
-  const extrair = (
-    regex: RegExp,
-    fallback = ""
-  ): string => {
+  const extrair = (regex: RegExp, fallback = ""): string => {
     const match = decodificado.match(regex);
     return match ? match[1].trim() : fallback;
   };
@@ -138,17 +133,8 @@ export function parsearPaciente(
   const nome = extrair(/^(.+?)(?=Sexo:|$)/);
   const sexo = extrair(/Sexo:\s*([^\dI]+)/);
   const idade = extrair(/Idade:\s*(\d+)/);
-  const figura = extrair(
-    /Figura:\s*(.+?)(?=Per[ií]odo|$)/
-  );
-  const periodoTeste = extrair(
-    /Per[ií]odo do teste:\s*(.+)$/
-  );
-  const nome = extrair(/^(.+?)(?=Sexo:|$)/);
-  const sexo = extrair(/Sexo:\s*([^\dI]+)/);
-  const idade = extrair(/Idade:\s*(\d+)/);
 
-  // 🔥 NOVA EXTRAÇÃO DE PESO, ALTURA E IMC
+  // 🔥 EXTRAÇÃO DE PESO, ALTURA E IMC
   const pesoStr = extrair(/Peso:\s*([\d.,]+)\s*kg/i) || "";
   const alturaStr = extrair(/Altura:\s*([\d.,]+)\s*m/i) || "";
 
@@ -738,7 +724,7 @@ export function gerarAnaliseCompleta(
   // 🔥 ENRIQUECIMENTO FINAL
   const matchesComFitness = matches.map(m => ({
     ...m,
-    impacto_fitness: mapearImpactoFitness(m.categoria, m.gravidade)
+    impacto_fitness: mapearImpactoFitness(m.categoria, m.gravidade, analise.paciente.imc)
   }));
 
   const frequenciaSugerida = sugerirFrequenciaSolfeggio(setoresAfetados);
@@ -778,15 +764,15 @@ function mapearImpactoFitness(categoria: string, gravidade: Gravidade, imc: numb
   const focarEmagrecimento = imc !== null && imc >= 25;
 
   if (catNorm.includes('metabolismo') || catNorm.includes('gordura') || catNorm.includes('obesidade')) {
-    return { 
+    return {
       // Se o IMC for de obesidade, o texto fica muito mais agressivo/vendedor
       emagrecimento: focarEmagrecimento
         ? `IMC de ${imc?.toFixed(1)} indica sobrepeso/obesidade. Metabolismo severamente comprometido. Necessidade urgente de déficit calórico aliado a treino HIIT para ativar a lipólise.`
-        : gravidade === 'critica' 
-          ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' 
-          : 'Metabolismo lento, requer estímulo dietético e treino intervalado.', 
-      performance: focarEmagrecimento 
-        ? 'Queda significativa de energia disponível para treinos de alta intensidade.' 
+        : gravidade === 'critica'
+          ? 'Metabolismo severamente comprometido, dificuldade alta de redução.'
+          : 'Metabolismo lento, requer estímulo dietético e treino intervalado.',
+      performance: focarEmagrecimento
+        ? 'Queda significativa de energia disponível para treinos de alta intensidade.'
         : 'Queda de energia disponível para treinos.'
     };
   }
