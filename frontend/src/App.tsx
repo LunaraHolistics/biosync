@@ -360,7 +360,7 @@ function App() {
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
-  const [terapiasOcultas, setTerapiasOlicts] = useState<Set<string>>(new Set());
+  const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
@@ -644,7 +644,7 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setGerandoPdf(true);
-                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
+                                  const data = exameRowToAiData(a, baseAnalise, terapiasOcultas, terapiasEditavel);
                                   gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a)));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
@@ -755,22 +755,14 @@ function App() {
                           id="btn-pdf-lateral"
                           className="counter"
                           onClick={() => {
-                            const btn = document.getElementById('btn-pdf-lateral');
-                            if (btn) btn.innerText = "⏳ Gerando PDF...";
-
-                            // 🔥 O SEGREDO: Pinta na tela PRIMEIRO, depois trava no PDF
-                            requestAnimationFrame(async () => {
-                              try {
-                                await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
-                              } catch (e) {
-                                console.error(e);
-                              } finally {
-                                if (btn) btn.innerText = "Baixar PDF";
-                              }
-                            });
+                            setGerandoPdf(true);
+                            if (relatorioDataHistorico) gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOpendOcultas));
+                            setGerandoPdf(false);
                           }}
+                          disabled={!relatorioDataHistorico || gerandoPdf}
+                          style={{ marginBottom: 0 }}
                         >
-                          Baixar PDF
+                          Gerar PDF
                         </button>
                       ) : null}
                     </div>
