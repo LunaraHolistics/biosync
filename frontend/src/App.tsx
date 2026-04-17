@@ -642,12 +642,14 @@ function App() {
                               <button
                                 className="counter"
                                 onClick={() => {
+                                  setGerandoPdf(true);
                                   const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
                                   gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a)));
+                                  setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
-                                style={{ marginBottom: 0 }}
+                                disabled={gerandoPdf}
                               >
-                                Baixar PDF
+                                {gerandoPdf ? <><span className="mystic-loader"></span> Canalizando...</> : "Baixar PDF"}
                               </button>
                             </div>
                           </div>
