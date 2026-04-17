@@ -814,16 +814,29 @@ function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <div>
-                <div style={{ fontWeight: 900 }}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>
                   {(pacienteSelecionado ?? clientName.trim()) || "Paciente"} —{" "}
                   {analiseSelecionada?.data_exame ?? analiseSelecionada?.created_at ?? ""}
                 </div>
                 {analiseMotor && (
-                  <div style={{ fontSize: 13, color: "#38bdf8", marginTop: 2 }}>
-                    Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore} | {analiseMotor.percentual}% impacto
-                    {analiseMotor.itensAlterados.length} alterados |{" "}
-                    {analiseMotor.matches.length} matches |{" "}
-                    {analiseMotor.terapias.length} terapias
+                  <div style={{ fontSize: 13, color: "#38bdf8", marginTop: 4, display: "flex", gap: 15, flexWrap: "wrap", alignItems: "center" }}>
+                    <span>Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore}</span>
+                    <span>{analiseMotor.itensAlterados.length} alterados | {analiseMotor.terapias.length} terapias</span>
+
+                    {/* 🔥 NOVO BADGE DE IMC PARA O PERSONAL TRAINER */}
+                    {analiseMotor.paciente.imc && (
+                      <span style={{
+                        background: analiseMotor.paciente.imc >= 25 ? "rgba(239, 68, 68, 0.2)" : "rgba(34, 197, 94, 0.2)",
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        fontWeight: 700,
+                        color: analiseMotor.paciente.imc >= 25 ? "#f87171" : "#4ade80"
+                      }}>
+                        IMC: {analiseMotor.paciente.imc.toFixed(1)} ({analiseMotor.paciente.classificacaoImc})
+                        {analiseMotor.paciente.peso && ` • ${analiseMotor.paciente.peso}`}
+                        {analiseMotor.paciente.altura && ` • ${analiseMotor.paciente.altura}`}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

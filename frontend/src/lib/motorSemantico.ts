@@ -50,6 +50,10 @@ export type AnaliseCompleta = {
     nome: string;
     sexo: string;
     idade: string;
+    peso: string;           // 🔥 NOVO
+    altura: string;         // 🔥 NOVO
+    imc: number | null;     // 🔥 NOVO
+    classificacaoImc: string; // 🔥 NOVO
     figura: string;
     periodoTeste: string;
   };
@@ -140,8 +144,32 @@ export function parsearPaciente(
   const periodoTeste = extrair(
     /Per[ií]odo do teste:\s*(.+)$/
   );
+  const nome = extrair(/^(.+?)(?=Sexo:|$)/);
+  const sexo = extrair(/Sexo:\s*([^\dI]+)/);
+  const idade = extrair(/Idade:\s*(\d+)/);
 
-  return { nome, sexo, idade, figura, periodoTeste };
+  // 🔥 NOVA EXTRAÇÃO DE PESO, ALTURA E IMC
+  const pesoStr = extrair(/Peso:\s*([\d.,]+)\s*kg/i) || "";
+  const alturaStr = extrair(/Altura:\s*([\d.,]+)\s*m/i) || "";
+
+  let imc: number | null = null;
+  let classificacaoImc = "";
+
+  const pesoNum = parseFloat(pesoStr.replace(",", "."));
+  const alturaNum = parseFloat(alturaStr.replace(",", "."));
+
+  if (pesoNum > 0 && alturaNum > 0) {
+    imc = pesoNum / (alturaNum * alturaNum);
+    if (imc < 18.5) classificacaoImc = "Abaixo do peso";
+    else if (imc < 25) classificacaoImc = "Normal";
+    else if (imc < 30) classificacaoImc = "Sobrepeso";
+    else classificacaoImc = "Obesidade";
+  }
+
+  const figura = extrair(/Figura:\s*(.+?)(?=Per[ií]odo|$)/);
+  const periodoTeste = extrair(/Per[ií]odo do teste:\s*(.+)$/);
+
+  return { nome, sexo, idade, peso: pesoStr, altura: alturaStr, imc, classificacaoImc, figura, periodoTeste };
 }
 
 // ==============================
@@ -743,40 +771,54 @@ type ImpactoFitnessType = {
   humor?: string;
 } | null;
 
-function mapearImpactoFitness(categoria: string, gravidade: Gravidade): ImpactoFitnessType {
+function mapearImpactoFitness(categoria: string, gravidade: Gravidade, imc: number | null): ImpactoFitnessType {
   const catNorm = normalizarTexto(categoria);
 
+  // 🔥 VARIÁVEL DE GATILHO DO PERSONAL TRAINER (Declarada no início correto)
+  const focarEmagrecimento = imc !== null && imc >= 25;
+
   if (catNorm.includes('metabolismo') || catNorm.includes('gordura') || catNorm.includes('obesidade')) {
-    return {
-      emagrecimento: gravidade === 'critica' ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' : 'Metabolismo lento, requer estímulo dietético.',
-      performance: 'Queda de energia disponível para treinos.'
+    return { 
+      // Se o IMC for de obesidade, o texto fica muito mais agressivo/vendedor
+      emagrecimento: focarEmagrecimento
+        ? `IMC de ${imc?.toFixed(1)} indica sobrepeso/obesidade. Metabolismo severamente comprometido. Necessidade urgente de déficit calórico aliado a treino HIIT para ativar a lipólise.`
+        : gravidade === 'critica' 
+          ? 'Metabolismo severamente comprometido, dificuldade alta de redução.' 
+          : 'Metabolismo lento, requer estímulo dietético e treino intervalado.', 
+      performance: focarEmagrecimento 
+        ? 'Queda significativa de energia disponível para treinos de alta intensidade.' 
+        : 'Queda de energia disponível para treinos.'
     };
   }
+
   if (catNorm.includes('muscular') || catNorm.includes('articul') || catNorm.includes('osseo') || catNorm.includes('colageno')) {
     return {
       hipertrofia: gravidade === 'critica' ? 'Risco de lesão. Foco em reparo antes de carga.' : 'Capacidade de recuperação entre séries reduzida.',
       recuperacao: 'Dor ou inflamação aumentam o tempo de repouso necessário.'
     };
   }
+
   if (catNorm.includes('cardiovascular') || catNorm.includes('pulmonar') || catNorm.includes('sangu')) {
     return {
       performance: 'Capacidade aeróbica reduzida, fadiga precoce.',
       recuperacao: 'Frequência cardíaca de repouso alterada.'
     };
   }
+
   if (catNorm.includes('nervoso') || catNorm.includes('emocional') || catNorm.includes('consciencia')) {
     return {
       humor: 'Instabilidade afetando motivação e foco.',
       performance: 'Foco e concentração prejudicados durante o treino.'
     };
   }
-  // 🔥 NOVOS MAPEAMENTOS (O segredo para a Lucimara)
+
   if (catNorm.includes('mineral') || catNorm.includes('vitamina') || catNorm.includes('aminoacido')) {
     return {
       recuperacao: 'Deficiência de micronutrientes prejudica reparo tecidual e contração muscular.',
       performance: 'Fadiga crônica e falta de energia celular (ATP).'
     };
   }
+
   if (catNorm.includes('imunologico') || catNorm.includes('linfonodo') || catNorm.includes('timo')) {
     return {
       recuperacao: 'Sistema imune baixo pode gerar inflamações crônicas que atrasam o ganho de massa.',
@@ -788,21 +830,60 @@ function mapearImpactoFitness(categoria: string, gravidade: Gravidade): ImpactoF
 }
 
 // ==============================
-// FREQUÊNCIA SOLFEGGIO SUGERIDA
+// PROTOCOLO SOLFEGGIO COMBINADO (EXPANDIDO)
 // ==============================
 function sugerirFrequenciaSolfeggio(setoresAfetados: string[]): string {
   const setoresNorm = setoresAfetados.map(s => normalizarTexto(s));
+  const frequenciasEscolhidas = new Set<string>();
 
-  if (setoresNorm.includes('emocional') || setoresNorm.includes('mental'))
-    return "432Hz (Ancoramento e Harmonização Emocional) — Ideal para acalmar o sistema nervoso e abrir os canais de aceitação da terapia.";
+  // 1. MAPEAMENTO INTELIGENTE: Quais setores pedem quais frequências?
+  for (const setor of setoresNorm) {
+    // Emocional / Mental / Nível de Consciência (Medo, Culpa, Apatia)
+    if (setor.includes('emocional') || setor.includes('mental') || setor.includes('consciencia')) {
+      frequenciasEscolhidas.add("396"); // Liberta medo/culpa
+      frequenciasEscolhidas.add("432"); // Ancoramento emocional
+    }
 
-  if (setoresNorm.includes('fisico') || setoresNorm.includes('imunologico'))
-    return "528Hz (Reparação e Imunidade) — Frequência de transformação e reparo de DNA celular, excelente para sessões de biomagnetismo ou apometria.";
+    // Físico / Imunológico / Metabolismo / Cardiovascular / Digestivo
+    if (setor.includes('fisico') || setor.includes('imunologico') || setor.includes('metabolismo') || setor.includes('cardiovascular') || setor.includes('digestivo')) {
+      frequenciasEscolhidas.add("528"); // Reparo celular e imunidade
+    }
 
-  if (setoresNorm.includes('espiritual'))
-    return "852Hz (Despertar da Intuição) — Estimula o retorno à ordem espiritual, indicada para mapas astrais, radiônica e alinhamento energético.";
+    // Endócrino / Hormonal / Ginecológico
+    if (setor.includes('endocrino') || setor.includes('hormonal') || setor.includes('ginecologico')) {
+      frequenciasEscolhidas.add("639"); // Reconexão e equilíbrio relacional/hormonal
+    }
 
-  return "396Hz (Liberação de Medo e Culpa) — Frequência base para limpeza de campos energéticos densos antes de qualquer intervenção.";
+    // Espiritual
+    if (setor.includes('espiritual')) {
+      frequenciasEscolhidas.add("852"); // Intuição
+      frequenciasEscolhidas.add("963"); // Conexão divina / Pineal
+    }
+
+    // Desintoxicação / Fígado / Rins
+    if (setor.includes('desintox') || setor.includes('figado') || setor.includes('renal')) {
+      frequenciasEscolhidas.add("741"); // Desintoxicação e limpeza
+    }
+  }
+
+  // 2. FALLBACK DE SEGURANÇA: Se o aparelho não bater em nenhuma palavra-chave
+  if (frequenciasEscolhidas.size === 0) {
+    frequenciasEscolhidas.add("432");
+  }
+
+  // 3. BANCO DE DADOS CLÍNICAS DAS FREQUÊNCIAS
+  const mapDescricoes: Record<string, string> = {
+    "396": "396Hz (Libertação) — Transforma sentimentos de medo, culpa e desamparo em poder pessoal. Base para liberação emocional profunda.",
+    "432": "432Hz (Ancoramento) — Acalma o sistema nervoso central, reduz ansiedade e abre os canais de aceitação da terapia.",
+    "528": "528Hz (Reparo e Imunidade) — Frequência de 'milagres'. Estimula reparo de DNA celular, regeneração de tecidos e fortalecimento imunológico.",
+    "639": "639Hz (Equilíbrio Hormonal) — Reconecta sistemas internos, reequilibra o sistema endócrino e harmoniza relações interpessoais.",
+    "741": "741Hz (Desintoxicação) — Purifica células de toxinas físicas, emocionais e eletromagnéticas. Ativa processos intuitivos.",
+    "852": "852Hz (Intuição Espiritual) — Estimula o retorno à ordem espiritual, indicada para alinhamento multidimensional e percepção expandida.",
+    "963": "963Hz (Conexão Divina) — Ativa a glândula pineal, estimulando estados de consciência elevada e ordem neurológica superior."
+  };
+
+  // 4. GERA O TEXTO FINAL (Separado por quebra de linha para o PDF/Preview)
+  return Array.from(frequenciasEscolhidas).map(hz => `🎵 ${mapDescricoes[hz]}`).join("\n");
 }
 
 // ==============================
