@@ -644,7 +644,7 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setGerandoPdf(true);
-                                  const data = exameRowToAiData(a, baseAnalise, terapiasOcultas, terapiasEditavel);
+                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
                                   gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a)));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
@@ -756,7 +756,7 @@ function App() {
                           className="counter"
                           onClick={() => {
                             setGerandoPdf(true);
-                            if (relatorioDataHistorico) gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOpendOcultas));
+                            if (relatorioDataHistorico) gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
                             setGerandoPdf(false);
                           }}
                           disabled={!relatorioDataHistorico || gerandoPdf}
@@ -843,8 +843,8 @@ function App() {
                     setGerandoPdf(true);
                     setTimeout(async () => {
                       try {
-                        if (lessante(relatorioDataHistorico)) {
-                          await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, [...terapiasOcultas]));
+                        if (relatorioDataHistorico) {
+                          await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
                         }
                       } catch (e) {
                         console.error(e);
