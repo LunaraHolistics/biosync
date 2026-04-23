@@ -65,12 +65,50 @@ function compararExames(
 /**
  * Converte dados do parser para formato da engine BioSync
  */
+/**
+ * Converte dados do parser para formato da engine BioSync
+ * 🔬 INCLUI NORMALIZAÇÃO DE VALORES BRUTOS PARA ESCALA 0-100
+ */
 function converterParaEngineBioSync(dadosProcessados: ReturnType<typeof parseBioressonancia>) {
-  return dadosProcessados.map(item => ({
-    nome: item.item,
-    percentual: item.valor,
-    categoria: item.sistema
-  }));
+  return dadosProcessados.map((item, index) => {
+    let percentual = 50; // Valor neutro padrão
+
+    if (item.valor !== undefined && item.valor !== null) {
+      const valStr = String(item.valor).replace(',', '.');
+      const valNum = parseFloat(valStr);
+
+      if (!isNaN(valNum)) {
+        // 📏 Heurística de normalização para índices de bioressonância
+        // Faixa de referência típica para a maioria dos índices: 0.5 a 5.0
+        if (valNum >= 1.0 && valNum <= 3.0) {
+          percentual = 75 + ((valNum - 1.0) / 2.0) * 25; // 75-100 (Faixa ideal)
+        } else if (valNum > 0 && valNum < 1.0) {
+          percentual = 20 + (valNum * 55); // 20-75 (Abaixo do ideal)
+        } else {
+          percentual = Math.max(15, 100 - (Math.log10(valNum + 1) * 20)); // >3.0 (Acima do ideal)
+        }
+      } else {
+        // Valores qualitativos ou percentuais diretos
+        if (valStr.includes('%')) {
+          percentual = parseFloat(valStr) || 50; // Extrai se vier como "33%"
+        } else {
+          percentual = 35; // Considera desequilíbrio moderado para textos qualitativos
+        }
+      }
+    }
+
+    // 🔍 Log apenas dos 3 primeiros itens para validação rápida
+    if (index < 3) {
+      console.log(`🔄 Normalizado: "${item.item}" | Valor bruto: "${item.valor}" → ${Math.round(percentual)}%`);
+    }
+
+    return {
+      nome: item.item,
+      percentual: Math.min(100, Math.max(0, Math.round(percentual))),
+      categoria: item.categoria || 'Geral',
+      status: item.status
+    };
+  });
 }
 
 /**
