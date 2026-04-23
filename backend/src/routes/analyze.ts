@@ -68,13 +68,13 @@ function compararExames(
 function converterParaEngineBioSync(dadosProcessados: ReturnType<typeof parseBioressonancia>) {
   return dadosProcessados.map(item => ({
     nome: item.item,
-    percentual: item.valor, // Assume que valor é 0-100 (100 = ideal)
+    percentual: item.valor,
     categoria: item.sistema
   }));
 }
 
 /**
- * Geração simples de plano terapêutico (BASE - pode evoluir depois)
+ * Geração simples de plano terapêutico (BASE)
  */
 function gerarPlanoTerapeutico(
   diagnostico: ReturnType<typeof gerarDiagnostico>,
@@ -105,10 +105,10 @@ type AnalyzeRequest = {
 
 router.post("/api/analyze", async (req, res) => {
   try {
-    const { 
-      prompt, 
+    const {
+      prompt,
       anterior_dados_processados,
-      modo_analise = 'fitness', // Default: fitness
+      modo_analise = 'fitness',
       peso_cliente,
       altura_cliente_metros
     } = req.body as AnalyzeRequest;
@@ -138,12 +138,12 @@ router.post("/api/analyze", async (req, res) => {
     }
 
     /**
-     * 2. Diagnóstico (LEGACY - mantém compatibilidade)
+     * 2. Diagnóstico (LEGACY)
      */
     const diagnostico = gerarDiagnostico(dadosProcessados);
 
     /**
-     * 3. Comparação (LEGACY - mantém compatibilidade)
+     * 3. Comparação (LEGACY)
      */
     const comparacao = compararExames(
       dadosProcessados,
@@ -151,25 +151,51 @@ router.post("/api/analyze", async (req, res) => {
     );
 
     /**
-     * 4. 🆕 NOVO: Processamento BioSync Engine
-     * Transforma dados brutos em relatório clínico inteligente
+     * 4. 🆕 Processamento BioSync Engine
      */
+    console.log("🔍 Iniciando processamento BioSync...");
+    console.log("📦 Modo selecionado:", modo_analise);
+    console.log("⚖️ Peso/Altura:", peso_cliente, altura_cliente_metros);
+
     const rawItems = converterParaEngineBioSync(dadosProcessados);
     
-    const biosyncResult = await processBioSyncData(
-      rawItems,
-      modo_analise,
-      peso_cliente,
-      altura_cliente_metros
-    );
+    // ✅ Inicializa com fallback para garantir que sempre exista
+    let biosyncResult: Awaited<ReturnType<typeof processBioSyncData>> = {
+      modo_selecionado: modo_analise,
+      category_scores: { fitness: 0, emocional: 0, sono: 0, imunidade: 0, mental: 0 },
+      critical_alerts: [],
+      quick_wins: [],
+      imc_value: null,
+      imc_status: null,
+      translated_items: [],
+      suggested_protocol: { therapies: [], checklist: [], timeline: '' }
+    };
+
+    try {
+      biosyncResult = await processBioSyncData(
+        rawItems,
+        modo_analise,
+        peso_cliente,
+        altura_cliente_metros
+      );
+
+      console.log("✅ BioSync Processado com sucesso!");
+      console.log("📊 Scores:", biosyncResult.category_scores);
+      console.log("🚨 Alertas Críticos:", biosyncResult.critical_alerts.length);
+      
+    } catch (engineError: any) {
+      console.error("❌ ERRO NA ENGINE BIOSYNC:", engineError.message);
+      console.error("📉 Stack:", engineError.stack);
+      // Mantém o fallback definido acima
+    }
 
     /**
-     * 5. Plano terapêutico (🔥 NOVO MODELO - baseado no BioSync)
+     * 5. Plano terapêutico
      */
     const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
     /**
-     * 6. Resposta (HÍBRIDA: mantém legado + adiciona BioSync)
+     * 6. ✅ Resposta (HÍBRIDA: legado + BioSync)
      */
     const resposta = {
       interpretacao:
@@ -186,7 +212,7 @@ router.post("/api/analyze", async (req, res) => {
       justificativa:
         "Plano terapêutico estruturado com base nos principais desequilíbrios identificados.",
 
-      // 🆕 NOVOS CAMPOS BIOSYNC
+      // 🆕 NOVOS CAMPOS BIOSYNC (agora com biosyncResult garantido)
       modo_selecionado: biosyncResult.modo_selecionado,
       category_scores: biosyncResult.category_scores,
       critical_alerts: biosyncResult.critical_alerts,
@@ -204,7 +230,7 @@ router.post("/api/analyze", async (req, res) => {
       diagnostico,
       comparacao,
       plano_terapeutico,
-      biosync: biosyncResult, // 🆕 Retorna o objeto completo do BioSync
+      biosync: biosyncResult,
       reused: false,
     });
   } catch (error: any) {
