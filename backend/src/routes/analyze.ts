@@ -228,6 +228,45 @@ router.post("/api/analyze", async (req, res) => {
       translated_items: biosyncResult.translated_items,
       suggested_protocol: biosyncResult.suggested_protocol,
     };
+    
+    /**
+     * 7. 💾 SALVAR NO BANCO (Passo que estava faltando!)
+     */
+    try {
+      const { salvarNovaAnalise } = await import("../db/analises.repository");
+      
+      // Gerar hash do PDF/texto original
+      const crypto = await import('crypto');
+      const pdfHash = crypto.createHash('md5').update(Array.isArray(prompt) ? prompt.join('') : prompt).digest('hex');
+
+      await salvarNovaAnalise({
+        cliente_id: 'e353bf87-9f93-4c86-9d52-e06c14c1d037', // 🔴 SUBSTITUA pelo ID real do cliente
+        pdf_hash: pdfHash,
+        
+        // Dados legados
+        raw_text: Array.isArray(prompt) ? prompt.join('\n') : prompt,
+        result_text: JSON.stringify(resposta),
+        dados_processados: dadosProcessados,
+        diagnostico: diagnostico,
+        comparacao: comparacao,
+        plano_terapeutico: plano_terapeutico,
+        
+        // 🔥 NOVOS DADOS BIOSYNC
+        modo_selecionado: biosyncResult.modo_selecionado,
+        category_scores: biosyncResult.category_scores,
+        critical_alerts: biosyncResult.critical_alerts,
+        quick_wins: biosyncResult.quick_wins,
+        imc_value: biosyncResult.imc_value,
+        imc_status: biosyncResult.imc_status,
+        suggested_protocol: biosyncResult.suggested_protocol,
+      });
+
+      console.log("✅ Análise salva no Supabase com sucesso!");
+      
+    } catch (saveError: any) {
+      console.error("❌ ERRO AO SALVAR NO BANCO:", saveError.message);
+      console.error("📉 Stack:", saveError.stack);
+    }
 
     return res.json({
       data: resposta,
