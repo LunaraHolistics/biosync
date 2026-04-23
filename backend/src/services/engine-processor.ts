@@ -27,20 +27,45 @@ export async function processBioSyncData(
   clientHeightMeters?: number
 ): Promise<ProcessedAnalysis> {
   
-  // 1️⃣ CARREGAR REFERÊNCIAS DO BANCO (Cache em memória se possível)
-  const { data: correlations } = await supabase.from('correlacoes_marcadores').select('*');
-  const { data: protocols } = await supabase.from('protocolos_base').select('*');
-  const { data: terms } = await supabase.from('base_analise_saude').select('item, client_friendly_term, trainer_friendly_term, mode_tags');
+  // 1️⃣ CARREGAR REFERÊNCIAS DO BANCO
+  console.log("📥 Carregando referências do Supabase...");
+  const { data: correlations, error: errCorr } = await supabase.from('correlacoes_marcadores').select('*');
+  const { data: protocols, error: errProt } = await supabase.from('protocolos_base').select('*');
+  const { data: terms, error: errTerms } = await supabase.from('base_analise_saude').select('item, client_friendly_term, trainer_friendly_term, mode_tags');
+
+  // 🔍 DEBUG: Verificar erros no carregamento
+  if (errCorr) console.error("❌ Erro ao carregar correlacoes_marcadores:", errCorr);
+  if (errProt) console.error("❌ Erro ao carregar protocolos_base:", errProt);
+  if (errTerms) console.error("❌ Erro ao carregar base_analise_saude:", errTerms);
+
+  console.log("🗺️ Tamanho dos mapas carregados:");
+  console.log("- correlacoes_marcadores:", correlations?.length || 0);
+  console.log("- protocolos_base:", protocols?.length || 0);
+  console.log("- base_analise_saude:", terms?.length || 0);
 
   const correlationMap = new Map(correlations?.map(c => [c.marcador_nome.toLowerCase().trim(), c]) || []);
   const termMap = new Map(terms?.map(t => [t.item.toLowerCase().trim(), t]) || []);
 
+  console.log("📊 Mapas criados - correlationMap size:", correlationMap.size);
+  console.log("📊 Mapas criados - termMap size:", termMap.size);
+
   // 2️⃣ FILTRAR E TRADUZIR ITENS
+  console.log(`\n🔍 Processando ${rawItems.length} itens do dispositivo...`);
+  
   const processedItems = rawItems.map(item => {
     const key = item.nome.toLowerCase().trim();
     const corr = correlationMap.get(key);
     const term = termMap.get(key);
 
+    // 🔍 DEBUG: Log para os primeiros 10 itens
+    if (rawItems.indexOf(item) < 10) {
+      console.log(`\n📝 Item "${item.nome}" (key: "${key}"):`);
+      console.log(`   - correlationMap.has("${key}"): ${correlationMap.has(key)}`);
+      console.log(`   - termMap.has("${key}"): ${termMap.has(key)}`);
+      console.log(`   - corr encontrado: ${!!corr}`);
+      console.log(`   - term encontrado: ${!!term}`);
+    }
+    
     return {
       raw: item.nome,
       client_term: term?.client_friendly_term || item.nome,

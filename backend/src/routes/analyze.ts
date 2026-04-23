@@ -158,7 +158,13 @@ router.post("/api/analyze", async (req, res) => {
     console.log("⚖️ Peso/Altura:", peso_cliente, altura_cliente_metros);
 
     const rawItems = converterParaEngineBioSync(dadosProcessados);
-    
+    console.log("🔎 DEBUG - Primeiros 5 itens do parser:");
+    console.log(rawItems.slice(0, 5).map(i => ({
+      nome: i.nome,
+      percentual: i.percentual,
+      categoria: i.categoria
+    })));
+
     // ✅ Inicializa com fallback para garantir que sempre exista
     let biosyncResult: Awaited<ReturnType<typeof processBioSyncData>> = {
       modo_selecionado: modo_analise,
@@ -182,7 +188,7 @@ router.post("/api/analyze", async (req, res) => {
       console.log("✅ BioSync Processado com sucesso!");
       console.log("📊 Scores:", biosyncResult.category_scores);
       console.log("🚨 Alertas Críticos:", biosyncResult.critical_alerts.length);
-      
+
     } catch (engineError: any) {
       console.error("❌ ERRO NA ENGINE BIOSYNC:", engineError.message);
       console.error("📉 Stack:", engineError.stack);
