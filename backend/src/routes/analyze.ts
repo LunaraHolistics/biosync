@@ -177,6 +177,10 @@ router.post("/api/analyze", async (req, res) => {
       suggested_protocol: { therapies: [], checklist: [], timeline: '' }
     };
 
+    // Após: const biosyncResult = await processBioSyncData(...)
+    console.log("🧪 RESULTADO BRUTO DA ENGINE:");
+    console.log(JSON.stringify(biosyncResult, null, 2));
+
     try {
       biosyncResult = await processBioSyncData(
         rawItems,
@@ -234,7 +238,7 @@ router.post("/api/analyze", async (req, res) => {
      */
     try {
       const { salvarNovaAnalise } = await import("../db/analises.repository");
-      
+
       // Gerar hash do PDF/texto original
       const crypto = await import('crypto');
       const pdfHash = crypto.createHash('md5').update(Array.isArray(prompt) ? prompt.join('') : prompt).digest('hex');
@@ -242,7 +246,7 @@ router.post("/api/analyze", async (req, res) => {
       await salvarNovaAnalise({
         cliente_id: '7d6ef555-2452-40d3-bd7c-eb603d641481', // 🔴 SUBSTITUA pelo ID real do cliente
         pdf_hash: pdfHash,
-        
+
         // Dados legados
         raw_text: Array.isArray(prompt) ? prompt.join('\n') : prompt,
         result_text: JSON.stringify(resposta),
@@ -250,7 +254,7 @@ router.post("/api/analyze", async (req, res) => {
         diagnostico: diagnostico,
         comparacao: comparacao,
         plano_terapeutico: plano_terapeutico,
-        
+
         // 🔥 NOVOS DADOS BIOSYNC
         modo_selecionado: biosyncResult.modo_selecionado,
         category_scores: biosyncResult.category_scores,
@@ -262,7 +266,7 @@ router.post("/api/analyze", async (req, res) => {
       });
 
       console.log("✅ Análise salva no Supabase com sucesso!");
-      
+
     } catch (saveError: any) {
       console.error("❌ ERRO AO SALVAR NO BANCO:", saveError.message);
       console.error("📉 Stack:", saveError.stack);
