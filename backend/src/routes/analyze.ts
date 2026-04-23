@@ -238,24 +238,19 @@ router.post("/api/analyze", async (req, res) => {
      */
     try {
       const { salvarNovaAnalise } = await import("../db/analises.repository");
-
-      // Gerar hash do PDF/texto original
       const crypto = await import('crypto');
       const pdfHash = crypto.createHash('md5').update(Array.isArray(prompt) ? prompt.join('') : prompt).digest('hex');
 
       await salvarNovaAnalise({
-        cliente_id: '6597f039-4f3f-4cac-baa5-68ea2a84eeba', // 🔴 SUBSTITUA pelo ID real do cliente
+        cliente_id: '6597f039-4f3f-4cac-baa5-68ea2a84eeba', // ✅ ID real da Lucimara
         pdf_hash: pdfHash,
-
-        // Dados legados
         raw_text: Array.isArray(prompt) ? prompt.join('\n') : prompt,
         result_text: JSON.stringify(resposta),
         dados_processados: dadosProcessados,
         diagnostico: diagnostico,
         comparacao: comparacao,
         plano_terapeutico: plano_terapeutico,
-
-        // 🔥 NOVOS DADOS BIOSYNC
+        // 🆕 Campos BioSync
         modo_selecionado: biosyncResult.modo_selecionado,
         category_scores: biosyncResult.category_scores,
         critical_alerts: biosyncResult.critical_alerts,
@@ -264,12 +259,9 @@ router.post("/api/analyze", async (req, res) => {
         imc_status: biosyncResult.imc_status,
         suggested_protocol: biosyncResult.suggested_protocol,
       });
-
       console.log("✅ Análise salva no Supabase com sucesso!");
-
     } catch (saveError: any) {
       console.error("❌ ERRO AO SALVAR NO BANCO:", saveError.message);
-      console.error("📉 Stack:", saveError.stack);
     }
 
     return res.json({
