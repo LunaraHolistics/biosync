@@ -244,7 +244,7 @@ router.post("/api/analyze", async (req, res) => {
       const pdfHash = crypto.createHash('md5').update(Array.isArray(prompt) ? prompt.join('') : prompt).digest('hex');
 
       await salvarNovaAnalise({
-        cliente_id: '7d6ef555-2452-40d3-bd7c-eb603d641481', // 🔴 SUBSTITUA pelo ID real do cliente
+        cliente_id: 'e353bf87-9f93-4c86-9d52-e06c14c1d037', // 🔴 SUBSTITUA pelo ID real do cliente
         pdf_hash: pdfHash,
 
         // Dados legados
