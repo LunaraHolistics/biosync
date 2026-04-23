@@ -270,36 +270,30 @@ router.post("/api/analyze", async (req, res) => {
       translated_items: biosyncResult.translated_items,
       suggested_protocol: biosyncResult.suggested_protocol,
     };
-
+    
     /**
-     * 7. 💾 SALVAR NO BANCO (Passo que estava faltando!)
+     * 7. 💾 SALVAR EM EXAMES (Tabela real do fluxo - atualiza com BioSync)
      */
     try {
-      const { salvarNovaAnalise } = await import("../db/analises.repository");
-      const crypto = await import('crypto');
-      const pdfHash = crypto.createHash('md5').update(Array.isArray(prompt) ? prompt.join('') : prompt).digest('hex');
-
-      await salvarNovaAnalise({
-        cliente_id: '6597f039-4f3f-4cac-baa5-68ea2a84eeba', // ✅ ID real da Lucimara
-        pdf_hash: pdfHash,
-        raw_text: Array.isArray(prompt) ? prompt.join('\n') : prompt,
-        result_text: JSON.stringify(resposta),
-        dados_processados: dadosProcessados,
-        diagnostico: diagnostico,
-        comparacao: comparacao,
-        plano_terapeutico: plano_terapeutico,
-        // 🆕 Campos BioSync
-        modo_selecionado: biosyncResult.modo_selecionado,
-        category_scores: biosyncResult.category_scores,
-        critical_alerts: biosyncResult.critical_alerts,
-        quick_wins: biosyncResult.quick_wins,
-        imc_value: biosyncResult.imc_value,
-        imc_status: biosyncResult.imc_status,
-        suggested_protocol: biosyncResult.suggested_protocol,
-      });
-      console.log("✅ Análise salva no Supabase com sucesso!");
+      const { atualizarExameComBioSync } = await import("../db/exames.repository");
+      
+      // Captura o exame_id que o frontend deve enviar junto com a análise
+      const exameId = req.body.exame_id;
+      
+      if (exameId) {
+        await atualizarExameComBioSync(exameId, biosyncResult);
+        console.log("✅ Exame atualizado com BioSync no Supabase!");
+        console.log("📊 Scores salvos:", biosyncResult.category_scores);
+        console.log("🚨 Alertas críticos:", biosyncResult.critical_alerts.length);
+      } else {
+        console.warn("⚠️ exame_id não informado. BioSync processado mas não persistido.");
+        console.log("💡 Dica: Envie 'exame_id' no body da requisição para salvar os resultados.");
+      }
+      
     } catch (saveError: any) {
-      console.error("❌ ERRO AO SALVAR NO BANCO:", saveError.message);
+      console.error("❌ ERRO AO ATUALIZAR EXAME:", saveError.message);
+      console.error("📉 Stack:", saveError.stack);
+      // Não bloqueia a resposta ao frontend, apenas loga o erro
     }
 
     return res.json({
