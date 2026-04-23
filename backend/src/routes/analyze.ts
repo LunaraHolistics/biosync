@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { parseBioressonancia } from "../utils/parserBio";
 import { gerarDiagnostico } from "../services/diagnostico.service";
+import { processBioSyncData } from "../services/engine-processor";
 
 const router = Router();
 
@@ -62,6 +63,17 @@ function compararExames(
 }
 
 /**
+ * Converte dados do parser para formato da engine BioSync
+ */
+function converterParaEngineBioSync(dadosProcessados: ReturnType<typeof parseBioressonancia>) {
+  return dadosProcessados.map(item => ({
+    nome: item.item,
+    percentual: item.valor, // Assume que valor é 0-100 (100 = ideal)
+    categoria: item.sistema
+  }));
+}
+
+/**
  * Geração simples de plano terapêutico (BASE - pode evoluir depois)
  */
 function gerarPlanoTerapeutico(
@@ -86,12 +98,20 @@ function gerarPlanoTerapeutico(
 type AnalyzeRequest = {
   prompt: string | string[];
   anterior_dados_processados?: ReturnType<typeof parseBioressonancia>;
+  modo_analise?: 'fitness' | 'weight_loss' | 'emotional_sleep' | 'immunity' | 'mental';
+  peso_cliente?: number;
+  altura_cliente_metros?: number;
 };
 
 router.post("/api/analyze", async (req, res) => {
   try {
-    const { prompt, anterior_dados_processados } =
-      req.body as AnalyzeRequest;
+    const { 
+      prompt, 
+      anterior_dados_processados,
+      modo_analise = 'fitness', // Default: fitness
+      peso_cliente,
+      altura_cliente_metros
+    } = req.body as AnalyzeRequest;
 
     if (!prompt) {
       return res.status(400).json({ error: "Prompt vazio" });
@@ -118,12 +138,12 @@ router.post("/api/analyze", async (req, res) => {
     }
 
     /**
-     * 2. Diagnóstico
+     * 2. Diagnóstico (LEGACY - mantém compatibilidade)
      */
     const diagnostico = gerarDiagnostico(dadosProcessados);
 
     /**
-     * 3. Comparação
+     * 3. Comparação (LEGACY - mantém compatibilidade)
      */
     const comparacao = compararExames(
       dadosProcessados,
@@ -131,12 +151,25 @@ router.post("/api/analyze", async (req, res) => {
     );
 
     /**
-     * 4. Plano terapêutico (🔥 NOVO MODELO)
+     * 4. 🆕 NOVO: Processamento BioSync Engine
+     * Transforma dados brutos em relatório clínico inteligente
+     */
+    const rawItems = converterParaEngineBioSync(dadosProcessados);
+    
+    const biosyncResult = await processBioSyncData(
+      rawItems,
+      modo_analise,
+      peso_cliente,
+      altura_cliente_metros
+    );
+
+    /**
+     * 5. Plano terapêutico (🔥 NOVO MODELO - baseado no BioSync)
      */
     const plano_terapeutico = gerarPlanoTerapeutico(diagnostico);
 
     /**
-     * 5. Resposta
+     * 6. Resposta (HÍBRIDA: mantém legado + adiciona BioSync)
      */
     const resposta = {
       interpretacao:
@@ -152,6 +185,16 @@ router.post("/api/analyze", async (req, res) => {
 
       justificativa:
         "Plano terapêutico estruturado com base nos principais desequilíbrios identificados.",
+
+      // 🆕 NOVOS CAMPOS BIOSYNC
+      modo_selecionado: biosyncResult.modo_selecionado,
+      category_scores: biosyncResult.category_scores,
+      critical_alerts: biosyncResult.critical_alerts,
+      quick_wins: biosyncResult.quick_wins,
+      imc_value: biosyncResult.imc_value,
+      imc_status: biosyncResult.imc_status,
+      translated_items: biosyncResult.translated_items,
+      suggested_protocol: biosyncResult.suggested_protocol,
     };
 
     return res.json({
@@ -161,6 +204,7 @@ router.post("/api/analyze", async (req, res) => {
       diagnostico,
       comparacao,
       plano_terapeutico,
+      biosync: biosyncResult, // 🆕 Retorna o objeto completo do BioSync
       reused: false,
     });
   } catch (error: any) {
