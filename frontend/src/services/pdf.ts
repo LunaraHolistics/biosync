@@ -5,9 +5,8 @@ import { jsPDF } from "jspdf";
 import type { PlanoTerapeutico } from "../types/planoTerapeutico";
 
 const PDF_CANVAS_SCALE = 2;
-const MAX_CHARS_POR_BLOCO = 2400; // Reduzido para garantir quebra segura
-const MARGEM_PDF = 20; // pt
-const ALTURA_CABECALHO = 60;
+const MAX_CHARS_POR_BLOCO = 2400;
+const MARGEM_PDF = 20;
 const ALTURA_RODAPE = 40;
 
 export type RelatorioData = {
