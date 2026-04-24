@@ -2,10 +2,36 @@ import { Router, Request, Response } from "express";
 import { parseBioressonancia } from "../utils/parserBio";
 import { gerarDiagnostico } from "../services/diagnostico.service";
 import { processBioSyncData } from "../services/engine-processor";
-// ✅ CORREÇÃO: Import correto do repository (ajuste o caminho conforme sua estrutura)
 import { atualizarExameComBioSync } from "../db/exames.repository";
 
 const router = Router();
+
+/**
+ * 🔧 EXTRAÇÃO DE NOME LIMPO (fallback se parser falhar)
+ * Tenta extrair nome legível de string HTML corrompida
+ */
+function extrairNomeLimpo(texto: string | undefined): string {
+  if (!texto) return 'Desconhecido';
+  
+  // Remove tags HTML
+  let limpo = texto.replace(/<[^>]*>/g, ' ').trim();
+  
+  // Se ainda tiver HTML, tenta extrair primeira palavra legível
+  if (limpo.includes('<') || limpo.includes('TABLE') || limpo.includes('body')) {
+    // Tenta encontrar padrão "Nome do Item" antes de números ou hífens
+    const match = limpo.match(/^([A-Za-zÀ-ÿ\s]+?)(?:\s*[\d\-\(]|$)/);
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+    // Fallback: pega primeiras 3 palavras não-HTML
+    const palavras = limpo.split(/\s+/).filter(p => 
+      p.length > 2 && !p.match(/^(style|background|align|border|class|td|tr|font|color)$/i)
+    );
+    return palavras.slice(0, 3).join(' ') || 'Desconhecido';
+  }
+  
+  return limpo || 'Desconhecido';
+}
 
 /**
  * Converte dados do parser para formato da engine BioSync
@@ -41,13 +67,16 @@ function converterParaEngineBioSync(dadosProcessados: any[]) {
       }
     }
 
+    // ✅ CORREÇÃO: Extrair nome limpo mesmo se parser falhar
+    const nomeLimpo = extrairNomeLimpo(item.item);
+
     // Debug dos primeiros itens
     if (index < 3) {
-      console.log(`🔄 Normalizado: "${item.item}" | Valor: "${item.valor}" → ${Math.round(percentual)}%`);
+      console.log(`🔄 Normalizado: "${nomeLimpo}" | Valor: "${item.valor}" → ${Math.round(percentual)}%`);
     }
 
     return {
-      nome: item.item?.trim() || 'Desconhecido',
+      nome: nomeLimpo,
       percentual: Math.min(100, Math.max(0, Math.round(percentual))),
       categoria: item.categoria || item.sistema || 'Geral',
       status: item.status
@@ -93,20 +122,23 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       });
     }
 
-    // Debug: validar se os itens têm nomes legíveis (não HTML cru)
-    const primeirosItens = dadosProcessados.slice(0, 3);
+    // ✅ Debug: validar se os itens têm nomes legíveis (não HTML cru)
+    const primeirosItens = dadosProcessados.slice(0, 5);
     console.log("🔍 Primeiros itens extraídos:");
     primeirosItens.forEach((item: any, i: number) => {
-      const nomeLimpo = item.item?.replace(/<[^>]*>/g, '').trim();
-      console.log(`  ${i+1}. "${nomeLimpo}" = ${item.valor} (${item.status})`);
+      const nomeOriginal = item.item?.substring(0, 50) + (item.item?.length > 50 ? '...' : '');
+      const nomeLimpo = extrairNomeLimpo(item.item);
+      console.log(`  ${i+1}. [RAW] "${nomeOriginal}" → [LIMPO] "${nomeLimpo}" = ${item.valor} (${item.status})`);
     });
 
-    // ✅ Alerta se o parser estiver retornando HTML cru
+    // ✅ Alerta e tentativa de recuperação se parser retornar HTML cru
     const temHtmlCru = primeirosItens.some((item: any) => 
-      item.item?.includes('<TABLE') || item.item?.includes('<body')
+      item.item?.includes('<TABLE') || item.item?.includes('<body') || item.item?.length > 200
     );
+    
     if (temHtmlCru) {
-      console.warn("⚠️ Parser pode estar retornando HTML cru - verifique parserBio.ts");
+      console.warn("⚠️ Parser retornou HTML cru - aplicando fallback de extração de nomes");
+      // O fallback já está embutido em converterParaEngineBioSync via extrairNomeLimpo()
     }
 
     /**
@@ -123,13 +155,18 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     
     const rawItems = converterParaEngineBioSync(dadosProcessados);
     
-    console.log("📋 Itens para engine:", rawItems.length);
-    console.log("📊 Amostra:", rawItems.slice(0, 3).map((i: any) => `${i.nome}: ${i.percentual}%`));
+    // ✅ Filtrar itens com nomes inválidos após conversão
+    const itensValidos = rawItems.filter((i: any) => 
+      i.nome && i.nome !== 'Desconhecido' && i.nome.length < 100
+    );
+    
+    console.log("📋 Itens para engine:", itensValidos.length, `(de ${rawItems.length} brutos)`);
+    console.log("📊 Amostra:", itensValidos.slice(0, 3).map((i: any) => `${i.nome}: ${i.percentual}%`));
 
     let biosyncResult;
     try {
       biosyncResult = await processBioSyncData(
-        rawItems,
+        itensValidos, // ✅ Usa apenas itens válidos
         modo_analise as any,
         peso_cliente,
         altura_cliente_metros
@@ -148,7 +185,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         modo_selecionado: modo_analise,
         category_scores: { 
           fitness: 50, 
-          emotional: 50,  // ✅ Correto: 'emotional'
+          emotional: 50,
           sono: 50, 
           imunidade: 50, 
           mental: 50 
@@ -168,8 +205,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     const plano_terapeutico = {
       tipo: "semanal",
       terapias: diagnostico.problemas.slice(0, 5).map((p: any) => ({
-        nome: `Harmonização de ${p.sistema || p.item?.split('(')[0]?.trim() || 'Sistema'}`,
-        descricao: `Atuação em ${p.item}`,
+        nome: `Harmonização de ${extrairNomeLimpo(p.sistema || p.item)}`,
+        descricao: `Atuação em ${extrairNomeLimpo(p.item)}`,
         frequencia: "1x por semana",
         justificativa: p.impacto || 'Desequilíbrio identificado'
       }))
@@ -182,7 +219,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       interpretacao: "Análise baseada em bioressonância com identificação de desequilíbrios",
       pontos_criticos: diagnostico.problemas
         .filter((p: any) => p.prioridade === "alta")
-        .map((p: any) => p.item?.replace(/<[^>]*>/g, '').trim()),
+        .map((p: any) => extrairNomeLimpo(p.item)),
       plano_terapeutico,
       modo_selecionado: biosyncResult.modo_selecionado,
       category_scores: biosyncResult.category_scores,
@@ -215,9 +252,13 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         console.log("📊 Status: concluido");
         
       } catch (saveError: any) {
-        console.error("❌ ERRO AO SALVAR:", saveError.message);
-        console.error("Stack:", saveError.stack);
-        // ✅ Não bloqueia a resposta, mas loga o erro
+        console.error("❌ ERRO AO SALVAR:", {
+          message: saveError.message,
+          code: saveError.code,
+          detail: saveError.detail,
+          stack: process.env.NODE_ENV === 'development' ? saveError.stack : undefined
+        });
+        // ✅ Não bloqueia a resposta, mas loga o erro completo
       }
     } else {
       console.warn("⚠️ exame_id não informado - dados não salvos no banco");
@@ -231,7 +272,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       debug: {
         parser_ok: dadosProcessados.length > 0,
         engine_ok: !!biosyncResult,
-        saved: !!exame_id
+        saved: !!exame_id,
+        html_fallback_used: temHtmlCru
       }
     });
 
