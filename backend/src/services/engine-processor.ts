@@ -95,7 +95,7 @@ export async function processBioSyncData(
   // 2️⃣ FILTRAR E TRADUZIR ITENS
   console.log(`\n🔍 Processando ${rawItems.length} itens do dispositivo...`);
 
-  const processedItems: ProcessedItem[] = rawItems.map((item: MarcadorBio) => {
+  const processedItems: ProcessedItem[] = rawItems.map((item: RawDeviceItem) => {
     const key = item.nome.toLowerCase().trim();
     const corr = correlationMap.get(key);
     const term = termMap.get(key);
