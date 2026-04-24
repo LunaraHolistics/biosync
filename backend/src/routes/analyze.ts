@@ -3,6 +3,7 @@ import { parseBioressonancia } from "../utils/parserBio";
 import { gerarDiagnostico } from "../services/diagnostico.service";
 import { processBioSyncData } from "../services/engine-processor";
 import { atualizarExameComBioSync } from "../db/exames.repository";
+import type { ItemProcessado } from "../types"; // ✅ Import para tipagem
 
 const router = Router();
 
@@ -10,53 +11,37 @@ const router = Router();
 // 🧹 UTILITÁRIOS DE LIMPEZA
 // ============================================================================
 
-/**
- * Extrai nome legível de string HTML corrompida
- * Fallback robusto para quando o parser falha
- */
 function extrairNomeLimpo(texto: string | undefined): string {
   if (!texto) return 'Desconhecido';
-
-  // Remove tags HTML básicas
   let limpo = texto.replace(/<[^>]*>/g, ' ').trim();
-
-  // Se ainda parecer HTML, tenta extrair primeira palavra legível
+  
   if (limpo.includes('<') || limpo.includes('TABLE') || limpo.includes('body') || limpo.length > 100) {
-    // Tenta encontrar padrão "Nome" antes de números ou símbolos
     const match = limpo.match(/^([A-Za-zÀ-ÿ\s]+?)(?:\s*[\d\-\(\:]|$)/);
     if (match?.[1]?.trim() && match[1].trim().length <= 30) {
       return match[1].trim();
     }
-    // Fallback: pega primeiras palavras válidas
     const palavras = limpo.split(/\s+/).filter(p =>
-      p.length > 2 &&
-      p.length < 30 &&
+      p.length > 2 && p.length < 30 &&
       !p.match(/^(style|background|align|border|class|td|tr|font|color|table|body|html)$/i)
     );
     return palavras.slice(0, 2).join(' ') || 'Desconhecido';
   }
-
   return limpo || 'Desconhecido';
 }
 
-/**
- * Converte dados do parser para formato da engine BioSync
- * Aplica limpeza de nomes e cálculo de scores
- */
-function converterParaEngineBioSync(dadosProcessados: any[]) {
-  return dadosProcessados.map((item: any, index: number) => {
+function converterParaEngineBioSync(dadosProcessados: ItemProcessado[]) {
+  return dadosProcessados.map((item, index: number) => {
     let percentual = 50;
 
-    // Cálculo do score baseado no valor numérico
     if (item.valor !== undefined && item.valor !== null) {
       const valStr = String(item.valor).replace(',', '.');
       const valNum = parseFloat(valStr);
 
       if (!isNaN(valNum)) {
         if (valNum >= 1.0 && valNum <= 3.0) {
-          percentual = 75 + ((valNum - 1.0) / 2.0) * 25; // 75-100
+          percentual = 75 + ((valNum - 1.0) / 2.0) * 25;
         } else if (valNum > 0 && valNum < 1.0) {
-          percentual = 20 + (valNum * 55); // 20-75
+          percentual = 20 + (valNum * 55);
         } else if (valNum > 3.0) {
           percentual = Math.max(15, 100 - (Math.log10(valNum - 2) * 25));
         } else {
@@ -69,10 +54,8 @@ function converterParaEngineBioSync(dadosProcessados: any[]) {
       }
     }
 
-    // ✅ Limpeza CRÍTICA do nome do item
     const nomeLimpo = extrairNomeLimpo(item.item);
 
-    // Debug dos primeiros 3 itens
     if (index < 3) {
       console.log(`🔄 [CONVERT] "${item.item?.substring(0, 20)}..." → "${nomeLimpo}" = ${Math.round(percentual)}%`);
     }
@@ -80,11 +63,12 @@ function converterParaEngineBioSync(dadosProcessados: any[]) {
     return {
       nome: nomeLimpo,
       percentual: Math.min(100, Math.max(0, Math.round(percentual))),
-      categoria: item.categoria || item.sistema || 'Geral',
+      categoria: (item as any).categoria || item.sistema || 'Geral',
       status: item.status,
       valor_original: item.valor,
-      min: 0,   // ✅ FIX: Adicionado para satisfazer 'ItemProcessado' da engine
-      max: 100  // ✅ FIX: Adicionado para satisfazer 'ItemProcessado' da engine
+      // ✅ Campos obrigatórios para RawDeviceItem (usado pela engine)
+      min: item.min ?? 0,
+      max: item.max ?? 100
     };
   });
 }
@@ -105,7 +89,6 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       exame_id
     } = req.body;
 
-    // ✅ Validação inicial
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 50) {
       return res.status(400).json({
         error: "Prompt inválido ou vazio",
@@ -120,45 +103,42 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // 1️⃣ PARSE DO HTML
     // -------------------------------------------------------------------------
     console.log("\n🔍 [1/5] Executando parser HTML...");
-    const dadosBrutos = parseBioressonancia(prompt);
+    
+    // ✅ parseBioressonancia agora retorna ItemProcessado[] diretamente
+    const dadosProcessados: ItemProcessado[] = parseBioressonancia(prompt);
 
-    if (!Array.isArray(dadosBrutos) || dadosBrutos.length === 0) {
+    if (!Array.isArray(dadosProcessados) || dadosProcessados.length === 0) {
       console.error("❌ Parser não retornou dados válidos");
       return res.status(400).json({
         error: "Falha ao processar dados de bioressonância",
         hint: "Verifique se o HTML contém tabelas com <tr><td>Item de Teste</td>..."
       });
     }
-    console.log(`✅ Parser: ${dadosBrutos.length} itens extraídos`);
+    console.log(`✅ Parser: ${dadosProcessados.length} itens extraídos`);
 
-    // Debug dos primeiros itens (para identificar se parser está retornando HTML cru)
     console.log("🔍 [DEBUG] Primeiros itens do parser:");
-    dadosBrutos.slice(0, 3).forEach((item: any, i: number) => {
-      const preview = item.item?.substring(0, 40) + (item.item?.length > 40 ? '...' : '');
-      console.log(`   [${i + 1}] item="${preview}" | valor=${item.valor} | status=${item.status}`);
+    dadosProcessados.slice(0, 3).forEach((item, i: number) => {
+      console.log(`   [${i + 1}] item="${item.item}" | valor=${item.valor} | status=${item.status}`);
     });
 
     // -------------------------------------------------------------------------
     // 2️⃣ CONVERSÃO PARA ENGINE + LIMPEZA
     // -------------------------------------------------------------------------
     console.log("\n🔄 [2/5] Convertendo e limpando dados...");
-    const itemsConvertidos: any[] = converterParaEngineBioSync(dadosBrutos);
+    
+    // ✅ dadosProcessados já é ItemProcessado[] → compatível com converterParaEngineBioSync
+    const itemsConvertidos = converterParaEngineBioSync(dadosProcessados);
 
-    // Filtro de itens válidos (nomes legíveis e tamanho razoável)
-    // ✅ FIX: Tipagem explícita 'any[]' para evitar inferência cruzada com 'ItemBio[]'
     const itensValidos = itemsConvertidos.filter((i: any) =>
-      i.nome &&
-      i.nome !== 'Desconhecido' &&
-      i.nome.length < 50 &&
-      !i.nome.includes('<')
+      i.nome && i.nome !== 'Desconhecido' && i.nome.length < 50 && !i.nome.includes('<')
     );
 
     console.log(`📋 Itens válidos para engine: ${itensValidos.length} / ${itemsConvertidos.length}`);
 
     if (itensValidos.length === 0) {
-      console.warn("⚠️ Nenhum item válido após filtragem - verificando causas:");
+      console.warn("⚠️ Nenhum item válido após filtragem:");
       itemsConvertidos.slice(0, 5).forEach((i: any, idx: number) => {
-        console.log(`   [${idx + 1}] nome="${i.nome}" | length=${i.nome?.length} | temHTML=${i.nome?.includes('<')}`);
+        console.log(`   [${idx + 1}] nome="${i.nome}" | length=${i.nome?.length}`);
       });
     }
 
@@ -171,9 +151,9 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
 
     let biosyncResult: any;
     try {
-      // ✅ FIX DEFINITIVO: 'as any' ignora a checagem estrita do TS no argumento
+      // ✅ itensValidos vem de converterParaEngineBioSync → já tem estrutura compatível
       biosyncResult = await processBioSyncData(
-        itensValidos as any, // ✅ Ignora validação de tipo na entrada da engine
+        itensValidos,
         modo_analise as any,
         peso_cliente,
         altura_cliente_metros
@@ -185,8 +165,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
 
     } catch (engineError: any) {
       console.error("❌ ERRO NA ENGINE:", engineError.message);
-
-      // Fallback seguro
+      
       biosyncResult = {
         modo_selecionado: modo_analise,
         category_scores: { fitness: 50, emotional: 50, sono: 50, imunidade: 50, mental: 50 },
@@ -203,16 +182,16 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // 4️⃣ DIAGNÓSTICO LEGACY + PLANO TERAPÊUTICO
     // -------------------------------------------------------------------------
     console.log("\n🩺 [4/5] Gerando diagnóstico e plano...");
-
-    const diagnostico = gerarDiagnostico(dadosBrutos);
-
+    
+    const diagnostico = gerarDiagnostico(dadosProcessados);
+    
     const plano_terapeutico = {
       tipo: "semanal",
       terapias: diagnostico.problemas.slice(0, 5).map((p: any) => ({
-        nome: `Harmonização de ${extrairNomeLimpo(p.sistema || p.item)}`,
+        nome: `Harmonização de ${extrairNomeLimpo((p as any).sistema || p.item)}`,
         descricao: `Atuação em ${extrairNomeLimpo(p.item)}`,
         frequencia: "1x por semana",
-        justificativa: p.impacto || 'Desequilíbrio identificado'
+        justificativa: (p as any).impacto || 'Desequilíbrio identificado'
       }))
     };
 
@@ -222,11 +201,11 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // 5️⃣ MONTAGEM DA RESPOSTA
     // -------------------------------------------------------------------------
     console.log("\n📤 [5/5] Montando resposta...");
-
+    
     const resposta = {
       interpretacao: "Análise baseada em bioressonância com identificação de desequilíbrios",
       pontos_criticos: diagnostico.problemas
-        .filter((p: any) => p.prioridade === "alta")
+        .filter((p: any) => (p as any).prioridade === "alta")
         .map((p: any) => extrairNomeLimpo(p.item)),
       plano_terapeutico,
       modo_selecionado: biosyncResult.modo_selecionado,
@@ -244,8 +223,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     if (exame_id) {
       try {
         console.log(`\n💾 Salvando no Supabase: ${exame_id}`);
-
-        // Debug do payload antes de salvar
+        
         console.log('🔍 [PAYLOAD] Dados para salvar:', {
           scores: biosyncResult.category_scores,
           alerts: biosyncResult.critical_alerts?.length,
@@ -271,7 +249,6 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
           code: saveError.code,
           detail: saveError.detail
         });
-        // Não bloqueia a resposta ao usuário
       }
     } else {
       console.warn("⚠️ exame_id não informado - salvamento pulado");
@@ -287,16 +264,16 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       success: true,
       data: resposta,
       meta: {
-        total_items: dadosBrutos.length,
+        total_items: dadosProcessados.length,
         valid_items: itensValidos.length,
         processing_time_ms: duration,
         modo: modo_analise
       },
       debug: {
-        parser_ok: dadosBrutos.length > 0,
+        parser_ok: dadosProcessados.length > 0,
         engine_ok: !!biosyncResult?.category_scores,
         saved: !!exame_id,
-        html_fallback_used: dadosBrutos.some((d: any) => d.item?.includes('<TABLE'))
+        html_fallback_used: dadosProcessados.some((d: any) => d.item?.includes('<TABLE'))
       }
     });
 

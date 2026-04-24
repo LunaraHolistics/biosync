@@ -2,20 +2,17 @@
 
 import * as cheerio from 'cheerio';
 
-export interface ItemBio {
-  item: string;
-  valor: number;
-  status: 'baixo' | 'normal' | 'alto' | 'desconhecido';
-  sistema: string;  // ← REMOVIDO o '?' → agora é obrigatório
-  min?: number;
-  max?: number;
-}
+// ✅ IMPORTAR O TIPO DA ENGINE para garantir compatibilidade
+// Ajuste o caminho conforme sua estrutura de pastas
+import type { ItemProcessado } from '../types';
+
+// ✅ ALIAS: ItemBio é exatamente ItemProcessado (sem divergências)
+export type ItemBio = ItemProcessado;
 
 /**
  * Detecta status baseado no valor e na faixa de referência
  */
 function detectarStatus(valor: number, referencia: string): ItemBio['status'] {
-  // Tenta extrair min-max da referência (ex: "1.219 - 3.021")
   const match = referencia.match(/([\d.]+)\s*[-–—]\s*([\d.]+)/);
   if (!match) return 'desconhecido';
 
@@ -30,6 +27,7 @@ function detectarStatus(valor: number, referencia: string): ItemBio['status'] {
 
 /**
  * Detecta sistema/categoria baseado no nome do item
+ * Sempre retorna string (nunca undefined)
  */
 function detectarSistema(nome: string): string {
   const n = nome.toLowerCase();
@@ -39,51 +37,52 @@ function detectarSistema(nome: string): string {
   if (/vitamina/i.test(n)) return 'vitaminas';
   if (/hormônio|hormonal|tireóide|tireoide|insulina/i.test(n)) return 'hormonal';
   if (/sono|melatonina|cortisol|adrenalina/i.test(n)) return 'sono_estresse';
-  return 'geral';  // ← Sempre retorna algo, nunca undefined
+  return 'geral'; // ← Sempre retorna algo
 }
 
 /**
  * Parser robusto usando Cheerio para extrair dados de tabelas HTML
+ * Retorna ItemProcessado[] para compatibilidade direta com a engine
  */
-export function parseBioressonancia(html: string): ItemBio[] {
+export function parseBioressonancia(html: string): ItemProcessado[] {
   if (!html || typeof html !== 'string') {
     console.error('❌ Parser: HTML inválido ou vazio');
     return [];
   }
 
   const $ = cheerio.load(html);
-  const resultados: ItemBio[] = [];
+  const resultados: ItemProcessado[] = [];
 
-  // Itera sobre cada linha da tabela
   $('tr').each((_, row) => {
     const cols = $(row).find('td');
-
-    // Precisa de pelo menos 3 colunas: nome, referência, valor
     if (cols.length < 3) return;
 
-    // Extrai texto limpo de cada célula
     const nome = $(cols[0]).text().trim();
     const referencia = $(cols[1]).text().trim();
     const valorRaw = $(cols[2]).text().trim();
-
-    // Converte valor para número (aceita vírgula como decimal)
     const valor = parseFloat(valorRaw.replace(',', '.'));
 
-    // Valida: nome não pode estar vazio e valor deve ser número válido
     if (!nome || isNaN(valor) || nome.length > 100) return;
+    if (/item de teste|padrão de referência|descrição do parâmetro/i.test(nome)) return;
 
-    // Ignora cabeçalhos e linhas de legenda
-    if (/item de teste|padrão de referência|descrição do parâmetro/i.test(nome)) {
-      return;
-    }
+    // Extrair min/max com fallback para 0 (garante número, nunca undefined)
+    const minMatch = referencia.match(/([\d.]+)\s*[-–—]/);
+    const maxMatch = referencia.match(/[-–—]\s*([\d.]+)/);
+    const min = minMatch ? parseFloat(minMatch[1]) : 0;
+    const max = maxMatch ? parseFloat(maxMatch[1]) : 0;
+
+    // Determinar status
+    let status: ItemProcessado['status'] = 'normal';
+    if (valor < min) status = 'baixo';
+    else if (valor > max) status = 'alto';
 
     resultados.push({
       item: nome,
       valor,
-      status: detectarStatus(valor, referencia),
-      sistema: detectarSistema(nome),
-      min: parseFloat(referencia.match(/([\d.]+)\s*[-–—]/)?.[1] || '0'),
-      max: parseFloat(referencia.match(/[-–—]\s*([\d.]+)/)?.[1] || '0')
+      min,      // ← Sempre número (obrigatório)
+      max,      // ← Sempre número (obrigatório)
+      status,
+      sistema: detectarSistema(nome)  // ← Sempre string (obrigatório)
     });
   });
 
@@ -93,20 +92,16 @@ export function parseBioressonancia(html: string): ItemBio[] {
 
 /**
  * Fallback emergencial (caso Cheerio falhe) - usa regex melhorado
- * NÃO use como solução principal, apenas para debug
+ * Também retorna ItemProcessado[] para compatibilidade
  */
-export function parseBioressonanciaFallback(html: string): ItemBio[] {
-  const resultados: ItemBio[] = [];
-
-  // Regex que captura TRs incluindo quebras de linha
+export function parseBioressonanciaFallback(html: string): ItemProcessado[] {
+  const resultados: ItemProcessado[] = [];
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let trMatch;
 
   while ((trMatch = trRegex.exec(html)) !== null) {
     const linhaHtml = trMatch[1];
     const celulas: string[] = [];
-
-    // Extrai TDs dentro do TR
     const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     let tdMatch;
 
@@ -126,10 +121,21 @@ export function parseBioressonanciaFallback(html: string): ItemBio[] {
 
       if (nome && !isNaN(valor) && nome.length < 100) {
         if (!/item de teste|padrão de referência/i.test(nome)) {
+          const minMatch = referencia.match(/([\d.]+)\s*[-–—]/);
+          const maxMatch = referencia.match(/[-–—]\s*([\d.]+)/);
+          
+          let status: ItemProcessado['status'] = 'normal';
+          const min = minMatch ? parseFloat(minMatch[1]) : 0;
+          const max = maxMatch ? parseFloat(maxMatch[1]) : 0;
+          if (valor < min) status = 'baixo';
+          else if (valor > max) status = 'alto';
+
           resultados.push({
             item: nome,
             valor,
-            status: detectarStatus(valor, referencia),
+            min,
+            max,
+            status,
             sistema: detectarSistema(nome)
           });
         }
