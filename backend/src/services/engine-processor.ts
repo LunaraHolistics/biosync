@@ -4,12 +4,17 @@ import { MarcadorBio, ResultadoBioSync } from '../types';
 
 // Forçar IPv4 adicionando parâmetro na URL
 // Forçar IPv4 na URL do Supabase para compatibilidade com Render
+// 🔥 FORÇAR IPv4 para compatibilidade com Render
 const supabaseUrl = process.env.SUPABASE_URL!;
 const urlWithIPv4 = supabaseUrl.includes('?') 
   ? `${supabaseUrl}&ipv4=true` 
   : `${supabaseUrl}?ipv4=true`;
 
-const supabase = createClient(urlWithIPv4, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const supabase = createClient(
+  urlWithIPv4, 
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
+);
 
 export interface RawDeviceItem {
   nome: string;
