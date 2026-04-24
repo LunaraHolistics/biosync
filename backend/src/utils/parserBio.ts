@@ -2,17 +2,20 @@
 
 import * as cheerio from 'cheerio';
 
-// ✅ IMPORTAR O TIPO DA ENGINE para garantir compatibilidade
-// Ajuste o caminho conforme sua estrutura de pastas
-import type { ItemProcessado } from '../types';
-
-// ✅ ALIAS: ItemBio é exatamente ItemProcessado (sem divergências)
-export type ItemBio = ItemProcessado;
+// ✅ DEFINIR E EXPORTAR ItemProcessado LOCALMENTE (já que não está em ../types)
+export interface ItemProcessado {
+  sistema: string;
+  item: string;
+  valor: number;
+  min: number;      // ← obrigatório (sem ?)
+  max: number;      // ← obrigatório (sem ?)
+  status: 'baixo' | 'normal' | 'alto' | 'desconhecido';
+}
 
 /**
  * Detecta status baseado no valor e na faixa de referência
  */
-function detectarStatus(valor: number, referencia: string): ItemBio['status'] {
+function detectarStatus(valor: number, referencia: string): ItemProcessado['status'] {
   const match = referencia.match(/([\d.]+)\s*[-–—]\s*([\d.]+)/);
   if (!match) return 'desconhecido';
 
@@ -37,7 +40,7 @@ function detectarSistema(nome: string): string {
   if (/vitamina/i.test(n)) return 'vitaminas';
   if (/hormônio|hormonal|tireóide|tireoide|insulina/i.test(n)) return 'hormonal';
   if (/sono|melatonina|cortisol|adrenalina/i.test(n)) return 'sono_estresse';
-  return 'geral'; // ← Sempre retorna algo
+  return 'geral';
 }
 
 /**
@@ -92,7 +95,6 @@ export function parseBioressonancia(html: string): ItemProcessado[] {
 
 /**
  * Fallback emergencial (caso Cheerio falhe) - usa regex melhorado
- * Também retorna ItemProcessado[] para compatibilidade
  */
 export function parseBioressonanciaFallback(html: string): ItemProcessado[] {
   const resultados: ItemProcessado[] = [];

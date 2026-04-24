@@ -3,7 +3,7 @@ import { parseBioressonancia } from "../utils/parserBio";
 import { gerarDiagnostico } from "../services/diagnostico.service";
 import { processBioSyncData } from "../services/engine-processor";
 import { atualizarExameComBioSync } from "../db/exames.repository";
-import type { ItemProcessado } from "../types"; // ✅ Import para tipagem
+import type { ItemProcessado } from "../utils/parserBio";
 
 const router = Router();
 
