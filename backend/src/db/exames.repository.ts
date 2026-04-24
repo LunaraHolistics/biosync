@@ -22,14 +22,14 @@ export async function atualizarExameComBioSync(
   }
 ) {
   try {
-    console.log(`🔄 [DB] INICIANDO UPDATE - exameId: ${exameId}`);
+    console.log(`\n💾 [DB] INICIANDO SAVE - exameId: ${exameId}`);
     
-    if (!exameId) {
-      console.error('❌ [DB] exameId é obrigatório');
-      throw new Error('exameId não fornecido');
-    }
+    // 🔍 Log do payload ANTES de enviar
+    console.log(`📦 [DB] Payload keys: ${Object.keys(biosyncResult).join(', ')}`);
+    console.log(`📊 [DB] category_scores: ${JSON.stringify(biosyncResult.category_scores)}`);
+    console.log(`🚨 [DB] critical_alerts count: ${biosyncResult.critical_alerts?.length || 0}`);
 
-    // ✅ Payload como OBJETO JS (NÃO usar JSON.stringify)
+    // ✅ Montar payload para indice_biosync (objeto JS puro, SEM stringify)
     const indiceBiosyncPayload = {
       category_scores: biosyncResult.category_scores,
       critical_alerts: biosyncResult.critical_alerts,
@@ -40,49 +40,67 @@ export async function atualizarExameComBioSync(
       processed_at: new Date().toISOString()
     };
 
-    console.log(`📦 [DB] Payload preparado - scores: ${JSON.stringify(biosyncResult.category_scores)}`);
+    // 🔍 Log da query que será executada
+    console.log(`🔍 [DB] Executando: UPDATE exames SET status='concluido', indice_biosync=..., updated_at=now() WHERE id='${exameId}'`);
 
-    // ✅ Query com cast ::jsonb, mas parâmetro como OBJETO
+    // ✅ Executar UPDATE (objeto direto, pg serializa automaticamente para JSONB)
     const res = await pool.query(
   `
+  BEGIN;
   UPDATE exames
   SET 
     status = 'concluido',
     indice_biosync = $1,
     updated_at = now()
-  WHERE id = $2
+  WHERE id = $2;
+  COMMIT;
+  SELECT id, status, updated_at, indice_biosync FROM exames WHERE id = $2;
   `,
-  [
-    indiceBiosyncPayload, // 👈 objeto JS direto
-    exameId
-  ]
-    );
+  [indiceBiosyncPayload, exameId]
+);
 
-    console.log(`📊 [DB] Query executada - rows affected: ${res.rowCount}`);
+    // 🔍 Log do resultado da query
+    console.log(`📊 [DB] Query result: rowCount=${res.rowCount}, rows length=${res.rows?.length}`);
 
+    // ✅ Validar que pelo menos uma linha foi afetada
     if (!res.rows || res.rows.length === 0) {
-      const check = await pool.query('SELECT id, status FROM exames WHERE id = $1', [exameId]);
+      // 🔍 Verificar se o exame existe
+      const check = await pool.query('SELECT id, status, updated_at FROM exames WHERE id = $1', [exameId]);
       if (check.rows.length === 0) {
         console.error(`❌ [DB] Exame NÃO ENCONTRADO: ${exameId}`);
         throw new Error(`Exame não existe: ${exameId}`);
       } else {
-        console.error(`❌ [DB] UPDATE não retornou linhas. Exame existe: ${check.rows[0].status}`);
-        throw new Error('UPDATE não afetou nenhuma linha');
+        console.error(`❌ [DB] UPDATE não retornou linhas. Exame existe com status: ${check.rows[0].status}, updated_at: ${check.rows[0].updated_at}`);
+        throw new Error(`UPDATE não afetou linhas para exame ${exameId}`);
       }
     }
 
     const updated = res.rows[0];
-    console.log(`✅ [DB] Exame atualizado: ${updated.id} | status: ${updated.status}`);
+    
+    // 🔍 Log do conteúdo salvo
+    console.log(`✅ [DB] Exame atualizado: ${updated.id}`);
+    console.log(`📊 [DB] Status: ${updated.status}`);
+    console.log(`🕐 [DB] Updated at: ${updated.updated_at}`);
+    
+    if (updated.indice_biosync) {
+      const keys = Object.keys(updated.indice_biosync);
+      console.log(`🔑 [DB] indice_biosync keys: ${keys.join(', ')}`);
+      console.log(`📈 [DB] category_scores no banco: ${JSON.stringify(updated.indice_biosync.category_scores)}`);
+    } else {
+      console.warn(`⚠️ [DB] indice_biosync retornado como null/undefined`);
+    }
     
     return updated;
 
   } catch (error: any) {
-    console.error('❌ [DB] ERRO em atualizarExameComBioSync:', {
+    console.error(`❌ [DB] ERRO CRÍTICO em atualizarExameComBioSync:`, {
       message: error.message,
       code: error.code,
-      detail: error.detail
+      detail: error.detail,
+      hint: error.hint,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
-    throw error;
+    throw error; // ✅ Propaga erro para o caller ver no log do Render
   }
 }
 
