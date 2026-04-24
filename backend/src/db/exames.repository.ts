@@ -23,7 +23,7 @@ export async function atualizarExameComBioSync(
 ) {
   try {
     console.log(`🔄 [DB] INICIANDO UPDATE - exameId: ${exameId}`);
-
+    
     if (!exameId) {
       console.error('❌ [DB] exameId é obrigatório');
       throw new Error('exameId não fornecido');
@@ -44,7 +44,7 @@ export async function atualizarExameComBioSync(
 
     // ✅ Query com cast ::jsonb, mas parâmetro como OBJETO
     const res = await pool.query(
-      `
+  `
   UPDATE exames
   SET 
     status = 'concluido',
@@ -52,10 +52,10 @@ export async function atualizarExameComBioSync(
     updated_at = now()
   WHERE id = $2
   `,
-      [
-        indiceBiosyncPayload, // 👈 objeto JS direto
-        exameId
-      ]
+  [
+    indiceBiosyncPayload, // 👈 objeto JS direto
+    exameId
+  ]
     );
 
     console.log(`📊 [DB] Query executada - rows affected: ${res.rowCount}`);
@@ -73,7 +73,7 @@ export async function atualizarExameComBioSync(
 
     const updated = res.rows[0];
     console.log(`✅ [DB] Exame atualizado: ${updated.id} | status: ${updated.status}`);
-
+    
     return updated;
 
   } catch (error: any) {
@@ -114,7 +114,7 @@ export async function buscarExameComBioSync(exameId: string) {
     );
 
     const exame = res.rows[0] ?? null;
-
+    
     if (exame) {
       console.log(`✅ [DB] Exame encontrado: ${exame.id} | status: ${exame.status}`);
     } else {
@@ -144,7 +144,7 @@ function generateSummary(result: any): string {
     const lowScores = Object.entries(result.category_scores || {})
       .filter(([_, v]: [string, any]) => typeof v === 'number' && v < 50)
       .map(([k, _]: [string, any]) => k);
-
+    
     if (lowScores.length === 0) return "Perfil bioenergético equilibrado.";
     return `Atenção em: ${lowScores.join(', ')}. ${result.critical_alerts?.[0]?.impact || ''}`;
   } catch {
