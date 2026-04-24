@@ -82,7 +82,9 @@ function converterParaEngineBioSync(dadosProcessados: any[]) {
       percentual: Math.min(100, Math.max(0, Math.round(percentual))),
       categoria: item.categoria || item.sistema || 'Geral',
       status: item.status,
-      valor_original: item.valor
+      valor_original: item.valor,
+      min: 0,   // ✅ FIX: Adicionado para satisfazer 'ItemProcessado' da engine
+      max: 100  // ✅ FIX: Adicionado para satisfazer 'ItemProcessado' da engine
     };
   });
 }
@@ -143,7 +145,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     const itemsConvertidos = converterParaEngineBioSync(dadosBrutos);
 
     // Filtro de itens válidos (nomes legíveis e tamanho razoável)
-    const itensValidos = itemsConvertidos.filter((i: any) => 
+    // ✅ FIX: Tipagem explícita 'any[]' para evitar inferência cruzada com 'ItemBio[]'
+    const itensValidos: any[] = itemsConvertidos.filter((i: any) => 
       i.nome && 
       i.nome !== 'Desconhecido' && 
       i.nome.length < 50 &&
@@ -166,7 +169,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // -------------------------------------------------------------------------
     console.log("\n🚀 [3/5] Executando BioSync Engine...");
     
-    let biosyncResult;
+    let biosyncResult: any;
     try {
       biosyncResult = await processBioSyncData(
         itensValidos,
