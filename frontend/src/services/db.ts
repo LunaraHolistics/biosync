@@ -1,15 +1,24 @@
 import { supabase } from '../config/supabase';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   ExameSchema,
   TerapiaSchema,
   BaseAnaliseSchema,
 } from "../validators/exameValidator";
 
-// ✅ REMOVIDO: Não recriar o cliente, já vem do config
-// const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-// const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-// if (!supabaseUrl || !supabaseKey) { ... }
-// export const supabase = createClient(...); // ← ESTA LINHA CAUSAVA O CONFLITO
+// Criar cliente Supabase diretamente (frontend usa anon key)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("❌ Variáveis VITE_SUPABASE_* não configuradas no frontend!");
+}
+
+export const supabase: SupabaseClient = createClient(
+  supabaseUrl || '',
+  supabaseKey || '',
+  { auth: { persistSession: true } }
+);
 
 // ==============================
 // TIPOS
@@ -84,8 +93,9 @@ export async function listarBaseAnaliseSaude(): Promise<BaseAnaliseSaudeRow[]> {
 
   if (error) throw new Error(error.message);
 
+  // ✅ CORREÇÃO: map único com tipagem explícita
   return (data ?? [])
-    .map((b) => {
+    .map((b: any) => {
       const parsed = BaseAnaliseSchema.safeParse(b);
       if (!parsed.success) {
         console.warn("Erro base análise:", parsed.error);
@@ -108,8 +118,9 @@ export async function buscarItensBasePorNome(
 
   if (error) throw new Error(error.message);
 
+  // ✅ CORREÇÃO: map com tipagem explícita
   return (data ?? [])
-    .map((b) => {
+    .map((b: any) => {
       const parsed = BaseAnaliseSchema.safeParse(b);
       if (!parsed.success) return null;
       return parsed.data;
@@ -130,8 +141,9 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
 
   if (error) throw new Error(error.message);
 
+  // ✅ CORREÇÃO: map com tipagem explícita
   return (data ?? [])
-    .map((t) => {
+    .map((t: any) => {
       const parsed = TerapiaSchema.safeParse(t);
       if (!parsed.success) {
         console.warn("Erro terapia:", parsed.error);
@@ -148,7 +160,7 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
 
 function validarExameLista(data: any[]): ExameRow[] {
   return (data ?? [])
-    .map((e) => {
+    .map((e: any) => {
       const parsed = ExameSchema.safeParse(e);
       if (!parsed.success) {
         console.warn("Erro exame:", parsed.error);
@@ -240,180 +252,180 @@ export async function buscarUltimoExamePorPaciente(
   return parsed.data;
 }
 
-// ==============================
-// SALVAR ANÁLISE CURADA NO SUPABASE
-// ==============================
+  // ==============================
+  // SALVAR ANÁLISE CURADA NO SUPABASE
+  // ==============================
 
-export async function salvarAnaliseCurada(
-  exameId: string,
-  analise: any // Usamos any aqui porque vindo do motor é um objeto complexo
-): Promise<boolean> {
-  try {
-    // Prepara os dados no formato exato que o banco espera
-    const payload = {
-      exame_id: exameId,
-      score_geral: analise.scoreGeral,
-      status_score: analise.statusScore,
-      interpretacao: analise.interpretacao,
-      pontos_criticos: analise.pontosCriticos,
-      setores_afetados: analise.setoresAfetados,
-      resumo_categorias: analise.resumoCategorias,
-      frequencia_solfeggio: analise.frequencia_lunara || "",
-      justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${(analise.setoresAfetados || []).join(", ")}.`,
-      terapias_sugeridas: analise.terapias.map((t: any) => ({
-        nome: t.nome,
-        descricao: t.descricao,
-        frequencia: t.frequencia || (t as any).frequencia_recomendada || "",
-        justificativa: t.motivos?.join(", ") || "",
-        scoreRelevancia: t.scoreRelevancia
-      })),
-      impacto_fitness: (analise.matches || []).map((m: any) => ({
-        categoria: m.categoria,
-        item: m.itemBase,
-        gravidade: m.gravidade,
-        impacto: m.impacto,
-        impacto_fitness: (m as any).impacto_fitness || null
-      }))
-    };
+  export async function salvarAnaliseCurada(
+    exameId: string,
+    analise: any // Usamos any aqui porque vindo do motor é um objeto complexo
+  ): Promise<boolean> {
+    try {
+      // Prepara os dados no formato exato que o banco espera
+      const payload = {
+        exame_id: exameId,
+        score_geral: analise.scoreGeral,
+        status_score: analise.statusScore,
+        interpretacao: analise.interpretacao,
+        pontos_criticos: analise.pontosCriticos,
+        setores_afetados: analise.setoresAfetados,
+        resumo_categorias: analise.resumoCategorias,
+        frequencia_solfeggio: analise.frequencia_lunara || "",
+        justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${(analise.setoresAfetados || []).join(", ")}.`,
+        terapias_sugeridas: analise.terapias.map((t: any) => ({
+          nome: t.nome,
+          descricao: t.descricao,
+          frequencia: t.frequencia || (t as any).frequencia_recomendada || "",
+          justificativa: t.motivos?.join(", ") || "",
+          scoreRelevancia: t.scoreRelevancia
+        })),
+        impacto_fitness: (analise.matches || []).map((m: any) => ({
+          categoria: m.categoria,
+          item: m.itemBase,
+          gravidade: m.gravidade,
+          impacto: m.impacto,
+          impacto_fitness: (m as any).impacto_fitness || null
+        }))
+      };
 
-    const { error } = await supabase
-      .from('analises_curadas')
-      .upsert(payload, { onConflict: 'exame_id' });
+      const { error } = await supabase
+        .from('analises_curadas')
+        .upsert(payload, { onConflict: 'exame_id' });
 
-    if (error) {
-      console.error("Erro ao salvar análise curada:", error.message);
+      if (error) {
+        console.error("Erro ao salvar análise curada:", error.message);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Erro inesperado ao salvar curada:", err);
       return false;
     }
-    
-    return true;
-  } catch (err) {
-    console.error("Erro inesperado ao salvar curada:", err);
-    return false;
   }
-}
 
-export async function buscarAnaliseCurada(exameId: string): Promise<any | null> {
-  const { data, error } = await supabase
-    .from('analises_curadas')
-    .select('*')
-    .eq('exame_id', exameId)
-    .single();
+  export async function buscarAnaliseCurada(exameId: string): Promise<any | null> {
+    const { data, error } = await supabase
+      .from('analises_curadas')
+      .select('*')
+      .eq('exame_id', exameId)
+      .single();
 
-  if (error || !data) return null;
-  return data;
-}
+    if (error || !data) return null;
+    return data;
+  }
 
-// ==============================
-// INSERÇÃO
-// ==============================
+  // ==============================
+  // INSERÇÃO
+  // ==============================
 
-export type NovoExamePayload = {
-  nome_paciente: string;
-  data_exame: string;
-  resultado_json: Record<string, any>;
-  analise_ia?: Record<string, any>;
-  protocolo?: string;
-  pontos_criticos?: string[];
+  export type NovoExamePayload = {
+    nome_paciente: string;
+    data_exame: string;
+    resultado_json: Record<string, any>;
+    analise_ia?: Record<string, any>;
+    protocolo?: string;
+    pontos_criticos?: string[];
 
-  indice_biosync?: Record<string, any>;
-  status?: string;
-  total_pioraram?: number;
-  total_melhoraram?: number;
-};
+    indice_biosync?: Record<string, any>;
+    status?: string;
+    total_pioraram?: number;
+    total_melhoraram?: number;
+  };
 
-export async function salvarNovoExame(
-  payload: NovoExamePayload
-): Promise<ExameRow> {
-  const { data, error } = await supabase
-    .from("exames")
-    .insert(payload)
-    .select("*")
-    .single();
+  export async function salvarNovoExame(
+    payload: NovoExamePayload
+  ): Promise<ExameRow> {
+    const { data, error } = await supabase
+      .from("exames")
+      .insert(payload)
+      .select("*")
+      .single();
 
-  if (error) throw new Error(error.message);
+    if (error) throw new Error(error.message);
 
-  const parsed = ExameSchema.safeParse(data);
-  if (!parsed.success) throw new Error("Erro validação pós-insert");
+    const parsed = ExameSchema.safeParse(data);
+    if (!parsed.success) throw new Error("Erro validação pós-insert");
 
-  return parsed.data;
-}
+    return parsed.data;
+  }
 
-// ==============================
-// ANALISES
-// ==============================
+  // ==============================
+  // ANALISES
+  // ==============================
 
-export async function buscarUltimaAnalise(): Promise<AnaliseRow | null> {
-  const { data, error } = await supabase
-    .from("analises")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  export async function buscarUltimaAnalise(): Promise<AnaliseRow | null> {
+    const { data, error } = await supabase
+      .from("analises")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  return data;
-}
+    if (error) throw new Error(error.message);
+    return data;
+  }
 
-export async function listarAnalisesPorPaciente(
-  pacienteId: string
-): Promise<AnaliseRow[]> {
-  const { data, error } = await supabase
-    .from("analises")
-    .select("*")
-    .eq("paciente_id", pacienteId)
-    .order("created_at", { ascending: false });
+  export async function listarAnalisesPorPaciente(
+    pacienteId: string
+  ): Promise<AnaliseRow[]> {
+    const { data, error } = await supabase
+      .from("analises")
+      .select("*")
+      .eq("paciente_id", pacienteId)
+      .order("created_at", { ascending: false });
 
-  if (error) throw new Error(error.message);
-  return data ?? [];
-}
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  }
 
-export async function processarAnaliseCompleta() {
-  const { data, error } = await supabase.rpc(
-    "processar_analise_completa"
-  );
+  export async function processarAnaliseCompleta() {
+    const { data, error } = await supabase.rpc(
+      "processar_analise_completa"
+    );
 
-  if (error) throw new Error(error.message);
-  return data;
-}
+    if (error) throw new Error(error.message);
+    return data;
+  }
 
-export async function atualizarAnalise(
-  id: string,
-  payload: Partial<AnaliseRow>
-) {
-  const { data, error } = await supabase
-    .from("analises")
-    .update(payload)
-    .eq("id", id)
-    .select("*")
-    .maybeSingle();
+  export async function atualizarAnalise(
+    id: string,
+    payload: Partial<AnaliseRow>
+  ) {
+    const { data, error } = await supabase
+      .from("analises")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  return data;
-}
+    if (error) throw new Error(error.message);
+    return data;
+  }
 
-// ==============================
-// 📊 DASHBOARD METRICS
-// ==============================
+  // ==============================
+  // 📊 DASHBOARD METRICS
+  // ==============================
 
-export async function contarExames(): Promise<number> {
-  const { count, error } = await supabase
-    .from("exames")
-    .select("*", { count: "exact", head: true });
+  export async function contarExames(): Promise<number> {
+    const { count, error } = await supabase
+      .from("exames")
+      .select("*", { count: "exact", head: true });
 
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  }
 
-export async function contarExamesMesAtual(): Promise<number> {
-  const inicioMes = new Date();
-  inicioMes.setDate(1);
-  inicioMes.setHours(0, 0, 0, 0);
+  export async function contarExamesMesAtual(): Promise<number> {
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
 
-  const { count, error } = await supabase
-    .from("exames")
-    .select("*", { count: "exact", head: true })
-    .gte("data_exame", inicioMes.toISOString());
+    const { count, error } = await supabase
+      .from("exames")
+      .select("*", { count: "exact", head: true })
+      .gte("data_exame", inicioMes.toISOString());
 
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  }
