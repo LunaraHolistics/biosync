@@ -5,8 +5,46 @@ const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SE
 
 export interface RawDeviceItem {
   nome: string;
-  percentual?: number; // 0-100 (100 = ideal, 0 = crítico)
+  percentual?: number;
   categoria?: string;
+}
+
+interface CorrelationRecord {
+  marcador_nome: string;
+  afeta_desempenho_fisico: boolean;
+  afeta_sono: boolean;
+  afeta_metabolismo: boolean;
+  afeta_emocional: boolean;
+  descricao_impacto: string;
+}
+
+interface TermRecord {
+  item: string;
+  client_friendly_term: string;
+  trainer_friendly_term: string;
+  mode_tags: string[];
+}
+
+interface ProtocolRecord {
+  condition_key: string;
+  therapy_suggestions: string[];
+  action_checklist: string[];
+  expected_timeline: string;
+  mode_relevance: string[];
+}
+
+interface ProcessedItem {
+  raw: string;
+  client_term: string;
+  trainer_term: string;
+  score: number;
+  impacts: {
+    fitness: boolean;
+    sleep: boolean;
+    metabolism: boolean;
+    emotional: boolean;
+    description: string;
+  } | null;
 }
 
 export interface ProcessedAnalysis {
@@ -33,7 +71,6 @@ export async function processBioSyncData(
   const { data: protocols, error: errProt } = await supabase.from('protocolos_base').select('*');
   const { data: terms, error: errTerms } = await supabase.from('base_analise_saude').select('item, client_friendly_term, trainer_friendly_term, mode_tags');
 
-  // 🔍 DEBUG: Verificar erros no carregamento
   if (errCorr) console.error("❌ Erro ao carregar correlacoes_marcadores:", errCorr);
   if (errProt) console.error("❌ Erro ao carregar protocolos_base:", errProt);
   if (errTerms) console.error("❌ Erro ao carregar base_analise_saude:", errTerms);
@@ -43,8 +80,13 @@ export async function processBioSyncData(
   console.log("- protocolos_base:", protocols?.length || 0);
   console.log("- base_analise_saude:", terms?.length || 0);
 
-  const correlationMap = new Map(correlations?.map(c => [c.marcador_nome.toLowerCase().trim(), c]) || []);
-  const termMap = new Map(terms?.map(t => [t.item.toLowerCase().trim(), t]) || []);
+  const correlationMap = new Map<string, CorrelationRecord>(
+    (correlations || []).map(c => [c.marcador_nome.toLowerCase().trim(), c as CorrelationRecord])
+  );
+  
+  const termMap = new Map<string, TermRecord>(
+    (terms || []).map(t => [t.item.toLowerCase().trim(), t as TermRecord])
+  );
 
   console.log("📊 Mapas criados - correlationMap size:", correlationMap.size);
   console.log("📊 Mapas criados - termMap size:", termMap.size);
@@ -52,12 +94,11 @@ export async function processBioSyncData(
   // 2️⃣ FILTRAR E TRADUZIR ITENS
   console.log(`\n🔍 Processando ${rawItems.length} itens do dispositivo...`);
   
-  const processedItems = rawItems.map(item => {
+  const processedItems: ProcessedItem[] = rawItems.map(item => {
     const key = item.nome.toLowerCase().trim();
     const corr = correlationMap.get(key);
     const term = termMap.get(key);
 
-    // 🔍 DEBUG: Log para os primeiros 10 itens
     if (rawItems.indexOf(item) < 10) {
       console.log(`\n📝 Item "${item.nome}" (key: "${key}"):`);
       console.log(`   - correlationMap.has("${key}"): ${correlationMap.has(key)}`);
@@ -76,12 +117,12 @@ export async function processBioSyncData(
         sleep: corr.afeta_sono,
         metabolism: corr.afeta_metabolismo,
         emotional: corr.afeta_emocional,
-        description: corr.descricao_impacto
+        description: corr.descricao_impacto || ''
       } : null
     };
   });
 
-  // 3️⃣ ROTEAMENTO POR MODO (Prioriza itens que afetam o modo escolhido)
+  // 3️⃣ ROTEAMENTO POR MODO
   const modeWeights: Record<string, string[]> = {
     fitness: ['fitness', 'immunity'],
     weight_loss: ['metabolism', 'emotional'],
@@ -91,32 +132,35 @@ export async function processBioSyncData(
   };
 
   const activeTags = modeWeights[selectedMode] || ['geral'];
-  const relevantItems = processedItems.filter(item => 
-    item.impacts && activeTags.some(tag => 
-      (tag === 'fitness' && item.impacts.fitness) ||
-      (tag === 'sleep' && item.impacts.sleep) ||
-      (tag === 'metabolism' && item.impacts.metabolism) ||
-      (tag === 'emotional' && item.impacts.emotional) ||
-      (tag === 'immunity' && item.impacts.fitness) // imunidade ligada a recuperação
-    )
-  );
+  const relevantItems = processedItems.filter(item => {
+    if (!item.impacts) return false;
+    return activeTags.some(tag => 
+      (tag === 'fitness' && item.impacts?.fitness) ||
+      (tag === 'sleep' && item.impacts?.sleep) ||
+      (tag === 'metabolism' && item.impacts?.metabolism) ||
+      (tag === 'emotional' && item.impacts?.emotional) ||
+      (tag === 'immunity' && item.impacts?.fitness)
+    );
+  });
 
-  // 4️⃣ CÁLCULO DE SCORES POR CATEGORIA (Média ponderada inversa: 100 - média dos desequilíbrios)
-  const calculateScore = (items: typeof processedItems) => {
-    if (items.length === 0) return 75; // Neutro
-    const avgDesequilibrio = items.reduce((acc, curr) => acc + (100 - curr.score), 0) / items.length;
+  // 4️⃣ CÁLCULO DE SCORES POR CATEGORIA
+  const calculateScore = (items: ProcessedItem[]): number => {
+    if (items.length === 0) return 75;
+    const validItems = items.filter(i => i.score !== undefined && i.score !== null);
+    if (validItems.length === 0) return 75;
+    const avgDesequilibrio = validItems.reduce((acc, curr) => acc + (100 - curr.score), 0) / validItems.length;
     return Math.max(0, Math.min(100, Math.round(100 - avgDesequilibrio)));
   };
 
   const category_scores = {
-    fitness: calculateScore(relevantItems.filter(i => i.impacts?.fitness)),
-    emotional: calculateScore(relevantItems.filter(i => i.impacts?.emotional)),
-    sono: calculateScore(relevantItems.filter(i => i.impacts?.sleep)),
-    imunidade: calculateScore(relevantItems.filter(i => i.impacts.fitness || i.impacts.metabolism)),
-    mental: calculateScore(relevantItems.filter(i => i.impacts.emotional || i.impacts.sleep))
+    fitness: calculateScore(processedItems.filter(i => i.impacts?.fitness)),
+    emotional: calculateScore(processedItems.filter(i => i.impacts?.emotional)),
+    sono: calculateScore(processedItems.filter(i => i.impacts?.sleep)),
+    imunidade: calculateScore(processedItems.filter(i => i.impacts?.fitness || i.impacts?.metabolism)),
+    mental: calculateScore(processedItems.filter(i => i.impacts?.emotional || i.impacts?.sleep))
   };
 
-  // 5️⃣ IDENTIFICAR TOP 3 CRÍTICOS (Menores scores + maior impacto)
+  // 5️⃣ IDENTIFICAR TOP 3 CRÍTICOS
   const critical_alerts = relevantItems
     .sort((a, b) => a.score - b.score)
     .slice(0, 3)
@@ -126,9 +170,12 @@ export async function processBioSyncData(
       impact: item.impacts?.description || 'Desequilíbrio bioenergético identificado'
     }));
 
-  // 6️⃣ QUICK WINS (Itens com score < 45 mas de fácil correção terapêutica)
+  // 6️⃣ QUICK WINS
   const quick_wins = relevantItems
-    .filter(i => i.score < 45 && i.impacts?.description?.includes('suplemento') || i.impacts?.description?.includes('respiração'))
+    .filter(i => {
+      const desc = i.impacts?.description || '';
+      return i.score < 45 && (desc.includes('suplemento') || desc.includes('respiração'));
+    })
     .slice(0, 3)
     .map(item => ({
       item: item.client_term,
@@ -137,18 +184,23 @@ export async function processBioSyncData(
     }));
 
   // 7️⃣ MATCH COM PROTOCOLOS
-  const matchedProtocol = protocols?.find(p => 
-    p.condition_key.includes(critical_alerts[0]?.item.toLowerCase().split('(')[0].trim() || 'general')
-  ) || protocols[0]; // Fallback para o primeiro protocolo
+  const protocolsList = protocols || [];
+  const matchedProtocol = protocolsList.find((p: ProtocolRecord) => 
+    critical_alerts.length > 0 && 
+    p.condition_key.toLowerCase().includes(
+      critical_alerts[0]?.item.toLowerCase().split('(')[0].trim() || 'general'
+    )
+  ) || protocolsList[0];
 
   // 8️⃣ CÁLCULO IMC
-  let imc_value = null;
-  let imc_status = null;
-  if (clientWeight && clientHeightMeters) {
+  let imc_value: number | null = null;
+  let imc_status: string | null = null;
+  if (clientWeight && clientHeightMeters && clientHeightMeters > 0) {
     imc_value = Math.round((clientWeight / (clientHeightMeters ** 2)) * 10) / 10;
-    imc_status = imc_value < 18.5 ? 'Abaixo do peso' : 
-                 imc_value < 24.9 ? 'Normal' : 
-                 imc_value < 29.9 ? 'Sobrepeso' : 'Obesidade';
+    if (imc_value < 18.5) imc_status = 'Abaixo do peso';
+    else if (imc_value < 24.9) imc_status = 'Normal';
+    else if (imc_value < 29.9) imc_status = 'Sobrepeso';
+    else imc_status = 'Obesidade';
   }
 
   return {
@@ -158,7 +210,11 @@ export async function processBioSyncData(
     quick_wins,
     imc_value,
     imc_status,
-    translated_items: processedItems.map(i => ({ raw: i.raw, client_term: i.client_term, trainer_term: i.trainer_term })),
+    translated_items: processedItems.map(i => ({ 
+      raw: i.raw, 
+      client_term: i.client_term, 
+      trainer_term: i.trainer_term 
+    })),
     suggested_protocol: {
       therapies: matchedProtocol?.therapy_suggestions || [],
       checklist: matchedProtocol?.action_checklist || [],
