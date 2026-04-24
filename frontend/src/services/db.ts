@@ -93,8 +93,7 @@ export async function listarBaseAnaliseSaude(): Promise<BaseAnaliseSaudeRow[]> {
   if (error) throw new Error(error.message);
 
   // ✅ CORREÇÃO: map único com tipagem explícita
-  return (data ?? [])
-    .map((b: any) => {
+  return (data ?? []).map((b: any) => {
       const parsed = BaseAnaliseSchema.safeParse(b);
       if (!parsed.success) {
         console.warn("Erro base análise:", parsed.error);
@@ -118,8 +117,7 @@ export async function buscarItensBasePorNome(
   if (error) throw new Error(error.message);
 
   // ✅ CORREÇÃO: map com tipagem explícita
-  return (data ?? [])
-    .map((b: any) => {
+  return (data ?? []).map((b: any) => {
       const parsed = BaseAnaliseSchema.safeParse(b);
       if (!parsed.success) return null;
       return parsed.data;
@@ -141,8 +139,7 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
   if (error) throw new Error(error.message);
 
   // ✅ CORREÇÃO: map com tipagem explícita
-  return (data ?? [])
-    .map((t: any) => {
+  return (data ?? []).map((b: any) => {
       const parsed = TerapiaSchema.safeParse(t);
       if (!parsed.success) {
         console.warn("Erro terapia:", parsed.error);
@@ -158,8 +155,7 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
 // ==============================
 
 function validarExameLista(data: any[]): ExameRow[] {
-  return (data ?? [])
-    .map((e: any) => {
+  return (data ?? []).map((b: any) => {
       const parsed = ExameSchema.safeParse(e);
       if (!parsed.success) {
         console.warn("Erro exame:", parsed.error);
