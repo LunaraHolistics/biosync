@@ -7,121 +7,92 @@ export type ItemProcessado = {
   status: "baixo" | "normal" | "alto";
 };
 
-function limparTexto(texto: string): string {
+function limparHTML(texto: string): string {
   return texto
-    .replace(/<[^>]*>/g, "") // Remove tags HTML
-    .replace(/\s+/g, " ")
+    .replace(/<[^>]*>/g, "") // Remove TODAS as tags HTML
+    .replace(/\s+/g, " ")    // Normaliza espaços
     .trim();
 }
 
-function extrairValorNumerico(texto: string): number | null {
+function extrairNumero(texto: string): number | null {
   const match = texto.match(/([0-9]+(?:\.[0-9]+)?)/);
   return match ? parseFloat(match[1]) : null;
 }
 
-function detectarSistema(linha: string): string | null {
-  if (!linha) return null;
-  
-  const limpa = limparTexto(linha);
-  
-  // Evita linhas que são dados numéricos
-  if (/[0-9]+\s*-\s*[0-9]+/.test(limpa)) return null;
-  
-  // Evita linhas muito longas (descrições)
-  if (limpa.length > 80) return null;
-  
-  // Evita tags HTML
-  if (limpa.startsWith("<")) return null;
-  
-  return limpa.replace(/[()]/g, "");
-}
-
-export function parseBioressonancia(texto: string): ItemProcessado[] {
+export function parseBioressonancia(html: string): ItemProcessado[] {
   const resultados: ItemProcessado[] = [];
   const vistos = new Set<string>();
   
-  let sistemaAtual = "Geral";
+  // 🔥 PASSO 1: Extrair apenas o conteúdo da tabela de resultados
+  // Procura por <TR>...</TR> que contenham dados numéricos
+  const linhasRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let matchLinha;
   
-  // 🔥 EXTRAI TODAS AS TABELAS DO HTML
-  const tabelaRegex = /<table[^>]*>[\s\S]*?<\/table>/gi;
-  const tabelas = texto.match(tabelaRegex) || [];
-  
-  for (const tabela of tabelas) {
-    // 🔥 EXTRAI LINHAS (TR) DA TABELA
-    const linhaRegex = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
-    const linhas = tabela.match(linhaRegex) || [];
+  while ((matchLinha = linhasRegex.exec(html)) !== null) {
+    const linhaHTML = matchLinha[1];
     
-    for (const linha of linhas) {
-      // 🔥 EXTRAI CÉLULAS (TD) DA LINHA
-      const celulaRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-      const celulas: string[] = [];
-      let match;
-      
-      while ((match = celulaRegex.exec(linha)) !== null) {
-        celulas.push(limparTexto(match[1]));
-      }
-      
-      // 🔥 PADRÃO ESPERADO: [Item] [Min - Max] [Valor] [Status]
-      // Exemplo: Cálcio | 1.219 - 3.021 | 0.975 | Ligeiramente Anormal(+)
-      
-      if (celulas.length >= 3) {
-        const item = celulas[0];
-        const intervalo = celulas[1];
-        const valorStr = celulas[2];
-        const statusStr = celulas[3] || "";
-        
-        // Extrai min e max do intervalo (ex: "1.219 - 3.021")
-        const intervaloMatch = intervalo.match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)/);
-        
-        if (!intervaloMatch) continue;
-        
-        const min = parseFloat(intervaloMatch[1]);
-        const max = parseFloat(intervaloMatch[2]);
-        const valor = extrairValorNumerico(valorStr);
-        
-        if (!item || valor === null || Number.isNaN(min) || Number.isNaN(max)) {
-          continue;
-        }
-        
-        // Evita duplicação
-        const chave = `${sistemaAtual}::${item}`;
-        if (vistos.has(chave)) continue;
-        vistos.add(chave);
-        
-        // Determina status
-        let status: "baixo" | "normal" | "alto" = "normal";
-        
-        if (valor < min) status = "baixo";
-        else if (valor > max) status = "alto";
-        
-        // Verifica se é uma linha de cabeçalho ou sistema
-        if (item.toLowerCase().includes("item de teste") || 
-            item.toLowerCase().includes("padrão de referência") ||
-            item.toLowerCase().includes("descrição")) {
-          continue;
-        }
-        
-        resultados.push({
-          sistema: sistemaAtual,
-          item,
-          valor,
-          min,
-          max,
-          status,
-        });
-      }
-      
-      // 🔥 DETECTA MUDANÇA DE SISTEMA
-      const sistemaDetectado = detectarSistema(linha);
-      if (sistemaDetectado && !sistemaDetectado.includes("TABLE")) {
-        sistemaAtual = sistemaDetectado;
-      }
+    // 🔥 PASSO 2: Extrair células (TD) da linha
+    const celulasRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    const celulas: string[] = [];
+    let matchCelula;
+    
+    while ((matchCelula = celulasRegex.exec(linhaHTML)) !== null) {
+      celulas.push(limparHTML(matchCelula[1]));
     }
+    
+    // 🔥 PASSO 3: Validar se é uma linha de dados (precisa de pelo menos 3 células)
+    if (celulas.length < 3) continue;
+    
+    const item = celulas[0];
+    const intervalo = celulas[1];
+    const valorStr = celulas[2];
+    
+    // 🔥 PASSO 4: Ignorar cabeçalhos e descrições
+    if (
+      !item || 
+      item.toLowerCase().includes("item de teste") ||
+      item.toLowerCase().includes("padrão de referência") ||
+      item.toLowerCase().includes("descrição do parâmetro") ||
+      item.toLowerCase().includes("resultados reais") ||
+      intervalo.toLowerCase().includes("normal") ||
+      intervalo.includes("-") === false // Precisa ter intervalo "min - max"
+    ) {
+      continue;
+    }
+    
+    // 🔥 PASSO 5: Extrair min, max e valor
+    const intervaloMatch = intervalo.match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)/);
+    if (!intervaloMatch) continue;
+    
+    const min = parseFloat(intervaloMatch[1]);
+    const max = parseFloat(intervaloMatch[2]);
+    const valor = extrairNumero(valorStr);
+    
+    if (valor === null || Number.isNaN(min) || Number.isNaN(max)) continue;
+    
+    // 🔥 PASSO 6: Determinar status
+    let status: "baixo" | "normal" | "alto" = "normal";
+    if (valor < min) status = "baixo";
+    else if (valor > max) status = "alto";
+    
+    // 🔥 PASSO 7: Evitar duplicatas
+    const chave = `${item}::${valor}`;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    
+    resultados.push({
+      sistema: "Geral", // Pode ser refinado depois
+      item,
+      valor,
+      min,
+      max,
+      status
+    });
   }
   
-  console.log(`✅ Parser extraiu ${resultados.length} itens`);
+  console.log(`✅ Parser: ${resultados.length} itens extraídos`);
   if (resultados.length > 0) {
-    console.log("📋 Primeiros itens:", resultados.slice(0, 3));
+    console.log("📋 Amostra:", resultados.slice(0, 3));
   }
   
   return resultados;
