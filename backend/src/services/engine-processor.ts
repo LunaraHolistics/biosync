@@ -3,15 +3,13 @@ import { supabase } from '../config/supabase';
 import { MarcadorBio, ResultadoBioSync } from '../types';
 
 // Forçar IPv4 adicionando parâmetro na URL
-const supabaseUrl = process.env.SUPABASE_URL!.replace(
-  'supabase.co', 
-  'supabase.co?ipv4=true'
-);
+// Forçar IPv4 na URL do Supabase para compatibilidade com Render
+const supabaseUrl = process.env.SUPABASE_URL!;
+const urlWithIPv4 = supabaseUrl.includes('?') 
+  ? `${supabaseUrl}&ipv4=true` 
+  : `${supabaseUrl}?ipv4=true`;
 
-const supabase = createClient(
-  supabaseUrl, 
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabase = createClient(urlWithIPv4, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 export interface RawDeviceItem {
   nome: string;
