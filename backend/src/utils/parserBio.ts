@@ -1,3 +1,5 @@
+// backend/src/utils/parserBio.ts
+
 export type ItemProcessado = {
   sistema: string;
   item: string;
@@ -9,8 +11,9 @@ export type ItemProcessado = {
 
 function limparHTML(texto: string): string {
   return texto
-    .replace(/<[^>]*>/g, "") // Remove TODAS as tags HTML
-    .replace(/\s+/g, " ")    // Normaliza espaços
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/&nbsp;/g, " ")
     .trim();
 }
 
@@ -23,15 +26,14 @@ export function parseBioressonancia(html: string): ItemProcessado[] {
   const resultados: ItemProcessado[] = [];
   const vistos = new Set<string>();
   
-  // 🔥 PASSO 1: Extrair apenas o conteúdo da tabela de resultados
-  // Procura por <TR>...</TR> que contenham dados numéricos
+  // Extrair linhas da tabela de resultados
   const linhasRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let matchLinha;
   
   while ((matchLinha = linhasRegex.exec(html)) !== null) {
     const linhaHTML = matchLinha[1];
     
-    // 🔥 PASSO 2: Extrair células (TD) da linha
+    // Extrair células TD
     const celulasRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     const celulas: string[] = [];
     let matchCelula;
@@ -40,27 +42,26 @@ export function parseBioressonancia(html: string): ItemProcessado[] {
       celulas.push(limparHTML(matchCelula[1]));
     }
     
-    // 🔥 PASSO 3: Validar se é uma linha de dados (precisa de pelo menos 3 células)
+    // Validar: precisa de pelo menos 3 células (item, intervalo, valor)
     if (celulas.length < 3) continue;
     
     const item = celulas[0];
     const intervalo = celulas[1];
     const valorStr = celulas[2];
     
-    // 🔥 PASSO 4: Ignorar cabeçalhos e descrições
+    // Ignorar cabeçalhos e descrições
     if (
       !item || 
       item.toLowerCase().includes("item de teste") ||
       item.toLowerCase().includes("padrão de referência") ||
       item.toLowerCase().includes("descrição do parâmetro") ||
       item.toLowerCase().includes("resultados reais") ||
-      intervalo.toLowerCase().includes("normal") ||
-      intervalo.includes("-") === false // Precisa ter intervalo "min - max"
+      !intervalo.includes("-") // Precisa ter intervalo "min - max"
     ) {
       continue;
     }
     
-    // 🔥 PASSO 5: Extrair min, max e valor
+    // Extrair min e max do intervalo
     const intervaloMatch = intervalo.match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)/);
     if (!intervaloMatch) continue;
     
@@ -68,20 +69,20 @@ export function parseBioressonancia(html: string): ItemProcessado[] {
     const max = parseFloat(intervaloMatch[2]);
     const valor = extrairNumero(valorStr);
     
-    if (valor === null || Number.isNaN(min) || Number.isNaN(max)) continue;
+    if (valor === null || isNaN(min) || isNaN(max)) continue;
     
-    // 🔥 PASSO 6: Determinar status
+    // Determinar status
     let status: "baixo" | "normal" | "alto" = "normal";
     if (valor < min) status = "baixo";
     else if (valor > max) status = "alto";
     
-    // 🔥 PASSO 7: Evitar duplicatas
+    // Evitar duplicatas
     const chave = `${item}::${valor}`;
     if (vistos.has(chave)) continue;
     vistos.add(chave);
     
     resultados.push({
-      sistema: "Geral", // Pode ser refinado depois
+      sistema: "Geral",
       item,
       valor,
       min,
@@ -92,7 +93,7 @@ export function parseBioressonancia(html: string): ItemProcessado[] {
   
   console.log(`✅ Parser: ${resultados.length} itens extraídos`);
   if (resultados.length > 0) {
-    console.log("📋 Amostra:", resultados.slice(0, 3));
+    console.log("📋 Amostra:", resultados.slice(0, 3).map(r => ({ item: r.item, valor: r.valor })));
   }
   
   return resultados;
