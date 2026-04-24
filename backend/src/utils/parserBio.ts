@@ -8,95 +8,121 @@ export type ItemProcessado = {
 };
 
 function limparTexto(texto: string): string {
-  return texto.replace(/\s+/g, " ").trim();
+  return texto
+    .replace(/<[^>]*>/g, "") // Remove tags HTML
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extrairValorNumerico(texto: string): number | null {
+  const match = texto.match(/([0-9]+(?:\.[0-9]+)?)/);
+  return match ? parseFloat(match[1]) : null;
 }
 
 function detectarSistema(linha: string): string | null {
   if (!linha) return null;
-
+  
   const limpa = limparTexto(linha);
-
-  // evita linhas que claramente são dados numéricos
+  
+  // Evita linhas que são dados numéricos
   if (/[0-9]+\s*-\s*[0-9]+/.test(limpa)) return null;
-
-  // evita linhas muito longas (provável descrição)
+  
+  // Evita linhas muito longas (descrições)
   if (limpa.length > 80) return null;
-
+  
+  // Evita tags HTML
+  if (limpa.startsWith("<")) return null;
+  
   return limpa.replace(/[()]/g, "");
 }
 
 export function parseBioressonancia(texto: string): ItemProcessado[] {
-  const linhas = texto
-    .split("\n")
-    .map((l) => limparTexto(l))
-    .filter((l) => l.length > 0);
-
   const resultados: ItemProcessado[] = [];
   const vistos = new Set<string>();
-
+  
   let sistemaAtual = "Geral";
-
-  for (let i = 0; i < linhas.length; i++) {
-    const linha = linhas[i];
-
-    // 🔥 DETECÇÃO DE SISTEMA MELHORADA
-    if (
-      linha.includes("Cartão do Relatório") ||
-      linha.includes("Relatório de Análise")
-    ) {
-      const candidato = detectarSistema(linhas[i - 1]);
-      if (candidato) {
-        sistemaAtual = candidato;
+  
+  // 🔥 EXTRAI TODAS AS TABELAS DO HTML
+  const tabelaRegex = /<table[^>]*>[\s\S]*?<\/table>/gi;
+  const tabelas = texto.match(tabelaRegex) || [];
+  
+  for (const tabela of tabelas) {
+    // 🔥 EXTRAI LINHAS (TR) DA TABELA
+    const linhaRegex = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
+    const linhas = tabela.match(linhaRegex) || [];
+    
+    for (const linha of linhas) {
+      // 🔥 EXTRAI CÉLULAS (TD) DA LINHA
+      const celulaRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      const celulas: string[] = [];
+      let match;
+      
+      while ((match = celulaRegex.exec(linha)) !== null) {
+        celulas.push(limparTexto(match[1]));
       }
-      continue;
+      
+      // 🔥 PADRÃO ESPERADO: [Item] [Min - Max] [Valor] [Status]
+      // Exemplo: Cálcio | 1.219 - 3.021 | 0.975 | Ligeiramente Anormal(+)
+      
+      if (celulas.length >= 3) {
+        const item = celulas[0];
+        const intervalo = celulas[1];
+        const valorStr = celulas[2];
+        const statusStr = celulas[3] || "";
+        
+        // Extrai min e max do intervalo (ex: "1.219 - 3.021")
+        const intervaloMatch = intervalo.match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)/);
+        
+        if (!intervaloMatch) continue;
+        
+        const min = parseFloat(intervaloMatch[1]);
+        const max = parseFloat(intervaloMatch[2]);
+        const valor = extrairValorNumerico(valorStr);
+        
+        if (!item || valor === null || Number.isNaN(min) || Number.isNaN(max)) {
+          continue;
+        }
+        
+        // Evita duplicação
+        const chave = `${sistemaAtual}::${item}`;
+        if (vistos.has(chave)) continue;
+        vistos.add(chave);
+        
+        // Determina status
+        let status: "baixo" | "normal" | "alto" = "normal";
+        
+        if (valor < min) status = "baixo";
+        else if (valor > max) status = "alto";
+        
+        // Verifica se é uma linha de cabeçalho ou sistema
+        if (item.toLowerCase().includes("item de teste") || 
+            item.toLowerCase().includes("padrão de referência") ||
+            item.toLowerCase().includes("descrição")) {
+          continue;
+        }
+        
+        resultados.push({
+          sistema: sistemaAtual,
+          item,
+          valor,
+          min,
+          max,
+          status,
+        });
+      }
+      
+      // 🔥 DETECTA MUDANÇA DE SISTEMA
+      const sistemaDetectado = detectarSistema(linha);
+      if (sistemaDetectado && !sistemaDetectado.includes("TABLE")) {
+        sistemaAtual = sistemaDetectado;
+      }
     }
-
-    const combinado = [
-      linha,
-      linhas[i + 1] || "",
-      linhas[i + 2] || "",
-    ].join(" ");
-
-    // 🔥 REGEX MAIS FLEXÍVEL
-    const match = combinado.match(
-      /(.+?)\s+([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)/,
-    );
-
-    if (!match) continue;
-
-    const item = limparTexto(match[1]);
-    const min = parseFloat(match[2]);
-    const max = parseFloat(match[3]);
-    const valor = parseFloat(match[4]);
-
-    if (
-      !item ||
-      Number.isNaN(valor) ||
-      Number.isNaN(min) ||
-      Number.isNaN(max)
-    ) {
-      continue;
-    }
-
-    // 🔥 EVITA DUPLICAÇÃO
-    const chave = `${sistemaAtual}::${item}`;
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
-
-    let status: "baixo" | "normal" | "alto" = "normal";
-
-    if (valor < min) status = "baixo";
-    else if (valor > max) status = "alto";
-
-    resultados.push({
-      sistema: sistemaAtual,
-      item,
-      valor,
-      min,
-      max,
-      status,
-    });
   }
-
+  
+  console.log(`✅ Parser extraiu ${resultados.length} itens`);
+  if (resultados.length > 0) {
+    console.log("📋 Primeiros itens:", resultados.slice(0, 3));
+  }
+  
   return resultados;
 }
