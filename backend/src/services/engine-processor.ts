@@ -2,19 +2,12 @@
 import { supabase } from '../config/supabase';
 import { MarcadorBio, ResultadoBioSync } from '../types';
 
-// Forçar IPv4 adicionando parâmetro na URL
-// Forçar IPv4 na URL do Supabase para compatibilidade com Render
-// 🔥 FORÇAR IPv4 para compatibilidade com Render
-const supabaseUrl = process.env.SUPABASE_URL!;
-const urlWithIPv4 = supabaseUrl.includes('?') 
-  ? `${supabaseUrl}&ipv4=true` 
-  : `${supabaseUrl}?ipv4=true`;
-
-const supabase = createClient(
-  urlWithIPv4, 
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// ✅ REMOVIDO: Não recriar o cliente Supabase aqui
+// O cliente já vem configurado com IPv4 fix de '../config/supabase'
+// ❌ Estas linhas causavam conflito de declaração:
+// const supabaseUrl = process.env.SUPABASE_URL!;
+// const urlWithIPv4 = ...
+// const supabase = createClient(...)
 
 export interface RawDeviceItem {
   nome: string;
@@ -93,6 +86,7 @@ export async function processBioSyncData(
   console.log("- protocolos_base:", protocols?.length || 0);
   console.log("- base_analise_saude:", terms?.length || 0);
 
+  // ✅ CORREÇÃO: Tipagem explícita nos .map()
   const correlationMap = new Map<string, CorrelationRecord>(
     (correlations || []).map((c: any) => [String(c.marcador_nome).toLowerCase().trim(), c as CorrelationRecord])
   );
@@ -198,7 +192,7 @@ export async function processBioSyncData(
 
   // 7️⃣ MATCH COM PROTOCOLOS
   const protocolsList = protocols || [];
-  const matchedProtocol = protocolsList.find((p: ProtocolRecord) =>
+  const matchedProtocol = protocolsList.find((p: any) =>
     critical_alerts.length > 0 &&
     p.condition_key.toLowerCase().includes(
       critical_alerts[0]?.item.toLowerCase().split('(')[0].trim() || 'general'
