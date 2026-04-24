@@ -1,99 +1,140 @@
 // backend/src/utils/parserBio.ts
 
-export type ItemProcessado = {
-  sistema: string;
+import * as cheerio from 'cheerio';
+
+export interface ItemBio {
   item: string;
   valor: number;
-  min: number;
-  max: number;
-  status: "baixo" | "normal" | "alto";
-};
-
-function limparHTML(texto: string): string {
-  return texto
-    .replace(/<[^>]*>/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .trim();
+  status: 'baixo' | 'normal' | 'alto' | 'desconhecido';
+  sistema?: string;
+  min?: number;
+  max?: number;
 }
 
-function extrairNumero(texto: string): number | null {
-  const match = texto.match(/([0-9]+(?:\.[0-9]+)?)/);
-  return match ? parseFloat(match[1]) : null;
+/**
+ * Detecta status baseado no valor e na faixa de referência
+ */
+function detectarStatus(valor: number, referencia: string): ItemBio['status'] {
+  // Tenta extrair min-max da referência (ex: "1.219 - 3.021")
+  const match = referencia.match(/([\d.]+)\s*[-–—]\s*([\d.]+)/);
+  if (!match) return 'desconhecido';
+
+  const min = parseFloat(match[1]);
+  const max = parseFloat(match[2]);
+
+  if (isNaN(min) || isNaN(max)) return 'desconhecido';
+  if (valor < min) return 'baixo';
+  if (valor > max) return 'alto';
+  return 'normal';
 }
 
-export function parseBioressonancia(html: string): ItemProcessado[] {
-  const resultados: ItemProcessado[] = [];
-  const vistos = new Set<string>();
-  
-  // Extrair linhas da tabela de resultados
-  const linhasRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let matchLinha;
-  
-  while ((matchLinha = linhasRegex.exec(html)) !== null) {
-    const linhaHTML = matchLinha[1];
-    
-    // Extrair células TD
-    const celulasRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-    const celulas: string[] = [];
-    let matchCelula;
-    
-    while ((matchCelula = celulasRegex.exec(linhaHTML)) !== null) {
-      celulas.push(limparHTML(matchCelula[1]));
-    }
-    
-    // Validar: precisa de pelo menos 3 células (item, intervalo, valor)
-    if (celulas.length < 3) continue;
-    
-    const item = celulas[0];
-    const intervalo = celulas[1];
-    const valorStr = celulas[2];
-    
-    // Ignorar cabeçalhos e descrições
-    if (
-      !item || 
-      item.toLowerCase().includes("item de teste") ||
-      item.toLowerCase().includes("padrão de referência") ||
-      item.toLowerCase().includes("descrição do parâmetro") ||
-      item.toLowerCase().includes("resultados reais") ||
-      !intervalo.includes("-") // Precisa ter intervalo "min - max"
-    ) {
-      continue;
-    }
-    
-    // Extrair min e max do intervalo
-    const intervaloMatch = intervalo.match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)/);
-    if (!intervaloMatch) continue;
-    
-    const min = parseFloat(intervaloMatch[1]);
-    const max = parseFloat(intervaloMatch[2]);
-    const valor = extrairNumero(valorStr);
-    
-    if (valor === null || isNaN(min) || isNaN(max)) continue;
-    
-    // Determinar status
-    let status: "baixo" | "normal" | "alto" = "normal";
-    if (valor < min) status = "baixo";
-    else if (valor > max) status = "alto";
-    
-    // Evitar duplicatas
-    const chave = `${item}::${valor}`;
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
-    
-    resultados.push({
-      sistema: "Geral",
-      item,
-      valor,
-      min,
-      max,
-      status
-    });
+/**
+ * Detecta sistema/categoria baseado no nome do item
+ */
+function detectarSistema(nome: string): string {
+  const n = nome.toLowerCase();
+  if (/(cálcio|magnésio|zinco|ferro|potássio|selênio|fósforo|cobre|cobalto|manganês|iodo|níquel|flúor|molibdênio|vanádio|estanho|silício|estrôncio|boro)/i.test(n)) {
+    return 'minerais';
   }
+  if (/vitamina/i.test(n)) return 'vitaminas';
+  if (/hormônio|hormonal|tireóide|tireoide|insulina/i.test(n)) return 'hormonal';
+  if (/sono|melatonina|cortisol|adrenalina/i.test(n)) return 'sono_estresse';
+  return 'geral';
+}
+
+/**
+ * Parser robusto usando Cheerio para extrair dados de tabelas HTML
+ */
+export function parseBioressonancia(html: string): ItemBio[] {
+  if (!html || typeof html !== 'string') {
+    console.error('❌ Parser: HTML inválido ou vazio');
+    return [];
+  }
+
+  const $ = cheerio.load(html);
+  const resultados: ItemBio[] = [];
+
+  // Itera sobre cada linha da tabela
+  $('tr').each((_, row) => {
+    const cols = $(row).find('td');
+    
+    // Precisa de pelo menos 3 colunas: nome, referência, valor
+    if (cols.length < 3) return;
+
+    // Extrai texto limpo de cada célula
+    const nome = $(cols[0]).text().trim();
+    const referencia = $(cols[1]).text().trim();
+    const valorRaw = $(cols[2]).text().trim();
+
+    // Converte valor para número (aceita vírgula como decimal)
+    const valor = parseFloat(valorRaw.replace(',', '.'));
+
+    // Valida: nome não pode estar vazio e valor deve ser número válido
+    if (!nome || isNaN(valor) || nome.length > 100) return;
+
+    // Ignora cabeçalhos e linhas de legenda
+    if (/item de teste|padrão de referência|descrição do parâmetro/i.test(nome)) {
+      return;
+    }
+
+    resultados.push({
+      item: nome,
+      valor,
+      status: detectarStatus(valor, referencia),
+      sistema: detectarSistema(nome),
+      min: parseFloat(referencia.match(/([\d.]+)\s*[-–—]/)?.[1] || '0'),
+      max: parseFloat(referencia.match(/[-–—]\s*([\d.]+)/)?.[1] || '0')
+    });
+  });
+
+  console.log(`✅ Parser: ${resultados.length} itens extraídos com Cheerio`);
+  return resultados;
+}
+
+/**
+ * Fallback emergencial (caso Cheerio falhe) - usa regex melhorado
+ * NÃO use como solução principal, apenas para debug
+ */
+export function parseBioressonanciaFallback(html: string): ItemBio[] {
+  const resultados: ItemBio[] = [];
   
-  console.log(`✅ Parser: ${resultados.length} itens extraídos`);
-  if (resultados.length > 0) {
-    console.log("📋 Amostra:", resultados.slice(0, 3).map(r => ({ item: r.item, valor: r.valor })));
+  // Regex que captura TRs incluindo quebras de linha
+  const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let trMatch;
+
+  while ((trMatch = trRegex.exec(html)) !== null) {
+    const linhaHtml = trMatch[1];
+    const celulas: string[] = [];
+    
+    // Extrai TDs dentro do TR
+    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let tdMatch;
+    
+    while ((tdMatch = tdRegex.exec(linhaHtml)) !== null) {
+      const conteudo = tdMatch[1]
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .trim();
+      celulas.push(conteudo);
+    }
+    
+    if (celulas.length >= 3) {
+      const nome = celulas[0];
+      const referencia = celulas[1];
+      const valorRaw = celulas[2];
+      const valor = parseFloat(valorRaw.replace(',', '.'));
+      
+      if (nome && !isNaN(valor) && nome.length < 100) {
+        if (!/item de teste|padrão de referência/i.test(nome)) {
+          resultados.push({
+            item: nome,
+            valor,
+            status: detectarStatus(valor, referencia),
+            sistema: detectarSistema(nome)
+          });
+        }
+      }
+    }
   }
   
   return resultados;
