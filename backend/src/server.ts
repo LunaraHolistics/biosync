@@ -8,7 +8,8 @@ import express from "express";
 import cors from "cors";
 import { createHash } from "crypto";
 import { GoogleGenAI } from "@google/genai";
-import multer, { type File as MulterFile } from "multer";
+import multer from "multer";
+import { Request } from "express";
 
 // ✅ Import do cliente Supabase configurado (com IPv4 fix + singleton)
 import { supabase } from './config/supabase';
@@ -171,7 +172,7 @@ DADOS COMPLETOS: ${JSON.stringify(dados)}
 // 🔥 ROTA PRINCIPAL /api/upload
 app.post("/api/upload", upload.array("files"), async (req, res) => {
   try {
-    const files = req.files as MulterFile[];
+    const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "Nenhum arquivo enviado" });
     }
