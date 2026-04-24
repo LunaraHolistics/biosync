@@ -94,7 +94,7 @@ export async function listarBaseAnaliseSaude(): Promise<BaseAnaliseSaudeRow[]> {
 
   // ✅ CORREÇÃO: map único com tipagem explícita
   return (data ?? []).map((b: any) => {
-      const parsed = BaseAnaliseSchema.safeParse(b);
+  const parsed = BaseAnaliseSchema.safeParse(b);
       if (!parsed.success) {
         console.warn("Erro base análise:", parsed.error);
         return null;
@@ -118,7 +118,7 @@ export async function buscarItensBasePorNome(
 
   // ✅ CORREÇÃO: map com tipagem explícita
   return (data ?? []).map((b: any) => {
-      const parsed = BaseAnaliseSchema.safeParse(b);
+  const parsed = BaseAnaliseSchema.safeParse(b);
       if (!parsed.success) return null;
       return parsed.data;
     })
@@ -139,15 +139,16 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
   if (error) throw new Error(error.message);
 
   // ✅ CORREÇÃO: map com tipagem explícita
-  return (data ?? []).map((b: any) => {
-      const parsed = TerapiaSchema.safeParse(t);
-      if (!parsed.success) {
-        console.warn("Erro terapia:", parsed.error);
-        return null;
-      }
-      return parsed.data;
-    })
-    .filter(Boolean) as TerapiaRow[];
+  return (data ?? [])
+  .map((t: any) => {  // ← parâmetro 't' ✅
+    const parsed = TerapiaSchema.safeParse(t);  // ← usa 't' ✅
+    if (!parsed.success) {
+      console.warn("Erro terapia:", parsed.error);
+      return null;
+    }
+    return parsed.data;
+  })
+  .filter(Boolean) as TerapiaRow[];
 }
 
 // ==============================
@@ -155,15 +156,16 @@ export async function listarTerapias(): Promise<TerapiaRow[]> {
 // ==============================
 
 function validarExameLista(data: any[]): ExameRow[] {
-  return (data ?? []).map((b: any) => {
-      const parsed = ExameSchema.safeParse(e);
-      if (!parsed.success) {
-        console.warn("Erro exame:", parsed.error);
-        return null;
-      }
-      return parsed.data;
-    })
-    .filter(Boolean) as ExameRow[];
+  return (data ?? [])
+  .map((e: any) => {  // ← parâmetro 'e' ✅
+    const parsed = ExameSchema.safeParse(e);  // ← usa 'e' ✅
+    if (!parsed.success) {
+      console.warn("Erro exame:", parsed.error);
+      return null;
+    }
+    return parsed.data;
+  })
+  .filter(Boolean) as ExameRow[];
 }
 
 export async function listarExames(): Promise<ExameRow[]> {
