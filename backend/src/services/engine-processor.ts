@@ -94,11 +94,11 @@ export async function processBioSyncData(
   console.log("- base_analise_saude:", terms?.length || 0);
 
   const correlationMap = new Map<string, CorrelationRecord>(
-    (correlations || []).map(c => [c.marcador_nome.toLowerCase().trim(), c as CorrelationRecord])
+    (correlations || []).map((c: any) => [String(c.marcador_nome).toLowerCase().trim(), c as CorrelationRecord])
   );
 
   const termMap = new Map<string, TermRecord>(
-    (terms || []).map(t => [t.item.toLowerCase().trim(), t as TermRecord])
+    (terms || []).map((t: any) => [String(t.item).toLowerCase().trim(), t as TermRecord])
   );
 
   console.log("📊 Mapas criados - correlationMap size:", correlationMap.size);
