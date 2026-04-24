@@ -4,11 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Forçar IPv4 para Render
-const urlWithIPv4 = supabaseUrl.includes('?') 
-  ? `${supabaseUrl}&ipv4=true` 
-  : `${supabaseUrl}?ipv4=true`;
-
-export const supabase = createClient(urlWithIPv4, supabaseKey, {
-  auth: { persistSession: false }
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false }, // ✅ Backend não precisa de sessão
+  global: {
+    // ✅ Headers para service_role
+    headers: {
+      apiKey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`
+    }
+  }
 });

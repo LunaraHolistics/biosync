@@ -1,9 +1,11 @@
 // backend/src/db/exames.repository.ts
-import { pool } from "./client";
+import { pool } from '../config/pool'; // ✅ Import do pool, não do supabase client
 
 /**
  * Atualiza um exame existente com os resultados da engine BioSync
  */
+// backend/src/db/exames.repository.ts
+
 export async function atualizarExameComBioSync(
   exameId: string,
   biosyncResult: {
@@ -18,23 +20,15 @@ export async function atualizarExameComBioSync(
   }
 ) {
   try {
-    console.log(`🔄 [DB] Iniciando atualização do exame: ${exameId}`);
-
-    // ✅ Validação inicial
+    console.log(`🔄 [DB] INICIANDO UPDATE - exameId: ${exameId}`);
+    
+    // ✅ Validar entrada
     if (!exameId) {
-      console.error('❌ [DB] exameId não informado');
-      throw new Error('exameId é obrigatório');
+      console.error('❌ [DB] exameId é obrigatório');
+      throw new Error('exameId não fornecido');
     }
 
     // ✅ Preparar payloads
-    const analiseIaPayload = {
-      score_geral: calculateOverallScore(biosyncResult.category_scores),
-      resumo: generateSummary(biosyncResult),
-      modo: biosyncResult.modo_selecionado,
-      critical_count: biosyncResult.critical_alerts.length,
-      quick_wins_count: biosyncResult.quick_wins.length
-    };
-
     const indiceBiosyncPayload = {
       category_scores: biosyncResult.category_scores,
       critical_alerts: biosyncResult.critical_alerts,
@@ -45,54 +39,54 @@ export async function atualizarExameComBioSync(
       processed_at: new Date().toISOString()
     };
 
-    const pontosCriticosPayload = biosyncResult.critical_alerts.map(c => c.item);
-    const planoTerapeuticoPayload = biosyncResult.suggested_protocol;
+    console.log(`📦 [DB] Payload preparado - scores: ${JSON.stringify(biosyncResult.category_scores)}`);
 
-    console.log(`📦 [DB] Payloads preparados - scores: ${Object.keys(biosyncResult.category_scores).length} categorias`);
-
-    // ✅ Executar query de atualização
+    // ✅ Executar UPDATE
     const res = await pool.query(
       `
       UPDATE exames
       SET 
-        analise_ia = $1::jsonb,
-        indice_biosync = $2::jsonb,
-        pontos_criticos = $3,
-        plano_terapeutico = $4::jsonb,
         status = 'concluido',
+        indice_biosync = $1::jsonb,
         updated_at = now()
-      WHERE id = $5
-      RETURNING id, status, updated_at
+      WHERE id = $2
+      RETURNING id, status, updated_at, indice_biosync
       `,
       [
-        JSON.stringify(analiseIaPayload),
         JSON.stringify(indiceBiosyncPayload),
-        pontosCriticosPayload,
-        JSON.stringify(planoTerapeuticoPayload),
         exameId
       ]
     );
 
+    console.log(`📊 [DB] Query executada - rows affected: ${res.rowCount}`);
+
     // ✅ Validar resultado
     if (!res.rows || res.rows.length === 0) {
-      console.error(`❌ [DB] Nenhum registro atualizado para exameId: ${exameId}`);
-      throw new Error(`Exame não encontrado ou não atualizado: ${exameId}`);
+      // 🔍 Verificar se o exame existe
+      const check = await pool.query('SELECT id, status FROM exames WHERE id = $1', [exameId]);
+      if (check.rows.length === 0) {
+        console.error(`❌ [DB] Exame NÃO ENCONTRADO: ${exameId}`);
+        throw new Error(`Exame não existe: ${exameId}`);
+      } else {
+        console.error(`❌ [DB] UPDATE não retornou linhas. Exame existe: ${check.rows[0].status}`);
+        throw new Error('UPDATE não afetou nenhuma linha - possível problema de permissão ou trigger');
+      }
     }
 
     const updated = res.rows[0];
-    console.log(`✅ [DB] Exame atualizado com sucesso: ${updated.id} | status: ${updated.status} | updated_at: ${updated.updated_at}`);
-
+    console.log(`✅ [DB] Exame atualizado: ${updated.id} | status: ${updated.status} | updated_at: ${updated.updated_at}`);
+    
     return updated;
 
   } catch (error: any) {
-    console.error('❌ [DB] ERRO em atualizarExameComBioSync:', {
+    console.error('❌ [DB] ERRO CRÍTICO em atualizarExameComBioSync:', {
       message: error.message,
       code: error.code,
       detail: error.detail,
       hint: error.hint,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
-    throw error; // ✅ Propaga para o caller saber que falhou
+    throw error; // ✅ Propaga para o caller
   }
 }
 
