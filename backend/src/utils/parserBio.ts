@@ -7,22 +7,21 @@ export interface ItemProcessado {
   sistema: string;
   item: string;
   valor: number;
-  min: number;      // ← obrigatório (sem ?)
-  max: number;      // ← obrigatório (sem ?)
-  status: 'baixo' | 'normal' | 'alto' | 'desconhecido';
+  min: number;
+  max: number;
+  // ✅ REMOVIDO 'desconhecido' para match exato
+  status: 'baixo' | 'normal' | 'alto';
 }
 
-/**
- * Detecta status baseado no valor e na faixa de referência
- */
+// ✅ Função detectarStatus sempre retorna um dos 3 valores válidos
 function detectarStatus(valor: number, referencia: string): ItemProcessado['status'] {
   const match = referencia.match(/([\d.]+)\s*[-–—]\s*([\d.]+)/);
-  if (!match) return 'desconhecido';
+  if (!match) return 'normal'; // ← Fallback para 'normal' em vez de 'desconhecido'
 
   const min = parseFloat(match[1]);
   const max = parseFloat(match[2]);
 
-  if (isNaN(min) || isNaN(max)) return 'desconhecido';
+  if (isNaN(min) || isNaN(max)) return 'normal'; // ← Fallback seguro
   if (valor < min) return 'baixo';
   if (valor > max) return 'alto';
   return 'normal';
