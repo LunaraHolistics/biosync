@@ -19,25 +19,35 @@ import {
   type AnaliseCompleta,
 } from "../lib/motorSemantico";
 
-// 🔥 EVOLUÇÃO 1: Removido o jsPDF bruto e importado o seu gerador profissional
 import { gerarRelatorioPDF, type RelatorioData } from "../services/pdf";
 
 import ComparativoExamesView from "../components/ComparativoExames";
 import GraficoEvolucao from "../components/GraficoEvolucao";
 
+// 🔥 CATEGORIAS DISPONÍVEIS PARA FILTRO
+const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
+
 export default function Dashboard() {
   const [exames, setExames] = useState<ExameRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
-  const [selecionado, setSelecionado] =
-    useState<ExameRow | null>(null);
-  const [mostrarGrafico, setMostrarGrafico] =
-    useState(false);
+  const [selecionado, setSelecionado] = useState<ExameRow | null>(null);
+  const [mostrarGrafico, setMostrarGrafico] = useState(false);
+
+  // 🔥 FILTROS POR CATEGORIA
+  const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
+  const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
+
+  const toggleCategoria = (cat: string) => {
+    setCategoriasFiltro(prev => 
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const estaSelecionado = (cat: string) => todasCategoriasSelecionadas || categoriasFiltro.includes(cat);
 
   // Cache de análises por exame.id
-  const [cacheAnalise, setCacheAnalise] = useState<
-    Record<string, AnaliseCompleta>
-  >({});
+  const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +89,28 @@ export default function Dashboard() {
     }));
 
     return analise;
+  }
+
+  // 🔥 FILTRAR DADOS DA ANÁLISE POR CATEGORIA
+  function filtrarAnalisePorCategoria(analise: AnaliseCompleta) {
+    if (todasCategoriasSelecionadas) return analise;
+
+    return {
+      ...analise,
+      // Filtra pontos críticos que mencionam categorias selecionadas
+      pontosCriticos: analise.pontosCriticos.filter((p: string) => 
+        CATEGORIAS_DISPONIVEIS.some(cat => estaSelecionado(cat) && p.toLowerCase().includes(cat))
+      ),
+      // Filtra matches por categoria
+      matches: analise.matches.filter((m: any) => estaSelecionado(m.categoria)),
+      // Filtra terapias por categoria/tag
+      terapias: analise.terapias.filter((t: any) => {
+        const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
+        return tags.some((tag: string) => estaSelecionado(tag.toLowerCase()));
+      }),
+      // Filtra setores afetados
+      setoresAfetados: analise.setoresAfetados.filter((s: string) => estaSelecionado(s.toLowerCase()))
+    };
   }
 
   // 🔥 EXTRAIR NOME LIMPO (robusto contra mojibake e variações)
@@ -127,33 +159,30 @@ export default function Dashboard() {
     return grupos;
   }, [exames]);
 
-  // 🔥 EVOLUÇÃO 2: Função gerarPDF reescrita para usar seu pdf.ts comImpacto e Solfeggio
+  // 🔥 EVOLUÇÃO: Função gerarPDF com filtros aplicados
   async function gerarPDF(exame: ExameRow) {
-    const analise = obterAnalise(exame);
+    const analiseRaw = obterAnalise(exame);
+    const analiseFiltrada = filtrarAnalisePorCategoria(analiseRaw);
 
-    // Mapeando o que o Motor gerou para o formato exato que o pdf.ts exige
-    // Usamos "as any" nas propriedades dinâmicas para não brigar com o TypeScript estrito
     const dadosParaPDF: RelatorioData = {
-      clientName: analise.paciente.nome,
+      clientName: analiseFiltrada.paciente.nome,
       createdAt: exame.data_exame,
-      interpretacao: analise.interpretacao,
-      pontos_criticos: analise.pontosCriticos,
+      interpretacao: analiseFiltrada.interpretacao,
+      pontos_criticos: analiseFiltrada.pontosCriticos,
 
-      // Mapeamento do Impacto Fitness
       diagnostico: {
-        problemas: analise.matches.map((m) => ({
+        problemas: analiseFiltrada.matches.map((m) => ({
           sistema: m.categoria,
           item: m.itemBase,
           status: m.gravidade,
           impacto: m.impacto,
-          impacto_fitness: (m as any).impacto_fitness || undefined, // FIX 1
+          impacto_fitness: (m as any).impacto_fitness || undefined,
         })),
       },
 
-      // Mapeamento das Terapias
       plano_terapeutico: {
-        tipo: "Sugerido pela IA" as any, // 🔥 ADICIONE ESTA LINHA PARA SATISFAZER O TYPESCRIPT
-        terapias: analise.terapias.map((t) => ({
+        tipo: "Sugerido pela IA" as any,
+        terapias: analiseFiltrada.terapias.map((t) => ({
           nome: t.nome,
           descricao: t.descricao || "",
           frequencia: (t as any).frequencia || t.categoria || "",
@@ -161,13 +190,12 @@ export default function Dashboard() {
         })),
       },
 
-      // Frequência Solfeggio
-      frequencia_lunara: analise.frequencia_lunara,
-
-      justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ")}.`,
+      frequencia_lunara: analiseFiltrada.frequencia_lunara,
+      justificativa: `Score: ${analiseFiltrada.scoreGeral}/100 — ${analiseFiltrada.statusScore}. Setores: ${analiseFiltrada.setoresAfetados.join(", ")}.`,
+      
+      filtros_aplicados: categoriasFiltro.length > 0 ? categoriasFiltro : undefined,
     };
 
-    // Chama a função do pdf.ts que não corta texto e tem formatação
     await gerarRelatorioPDF(dadosParaPDF);
   }
 
@@ -416,7 +444,8 @@ export default function Dashboard() {
 
       {/* 🔥 MODAL */}
       {selecionado && (() => {
-        const analise = obterAnalise(selecionado);
+        const analiseRaw = obterAnalise(selecionado);
+        const analise = filtrarAnalisePorCategoria(analiseRaw);
 
         const nomeBase = extrairNomeLimpo(
           selecionado.nome_paciente || ""
@@ -451,6 +480,55 @@ export default function Dashboard() {
             <h3>
               Detalhes — {analise.paciente.nome}
             </h3>
+
+            {/* 🔥 FILTROS POR CATEGORIA */}
+            <div style={{ marginBottom: 16, padding: '0.75rem', background: '#1e293b', borderRadius: 8 }}>
+              <div style={{ fontSize: 13, marginBottom: 8, opacity: 0.9 }}>
+                Filtrar por categoria:
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {CATEGORIAS_DISPONIVEIS.map(cat => (
+                  <label 
+                    key={cat}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '0.3rem 0.6rem',
+                      background: estaSelecionado(cat) ? '#0ea5e9' : '#334155',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      userSelect: 'none'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={categoriasFiltro.includes(cat)}
+                      onChange={() => toggleCategoria(cat)}
+                      style={{ accentColor: '#0ea5e9', width: 14, height: 14 }}
+                    />
+                    <span>{cat === 'emotional' ? 'Emocional' : cat}</span>
+                  </label>
+                ))}
+                {categoriasFiltro.length > 0 && (
+                  <button
+                    onClick={() => setCategoriasFiltro([])}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      textDecoration: 'underline',
+                      marginLeft: 'auto'
+                    }}
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
 
             <div
               style={{
@@ -568,7 +646,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* 🔥 EVOLUÇÃO 3: Exibição da Frequência Solfeggio na tela também */}
+            {/* 🔥 Frequência Solfeggio */}
             {analise.frequencia_lunara && (
               <div style={{ marginBottom: 12 }}>
                 <b>Frequência Solfeggio para Sessão:</b>
