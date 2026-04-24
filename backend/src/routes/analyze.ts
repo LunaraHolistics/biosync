@@ -16,10 +16,10 @@ const router = Router();
  */
 function extrairNomeLimpo(texto: string | undefined): string {
   if (!texto) return 'Desconhecido';
-  
+
   // Remove tags HTML básicas
   let limpo = texto.replace(/<[^>]*>/g, ' ').trim();
-  
+
   // Se ainda parecer HTML, tenta extrair primeira palavra legível
   if (limpo.includes('<') || limpo.includes('TABLE') || limpo.includes('body') || limpo.length > 100) {
     // Tenta encontrar padrão "Nome" antes de números ou símbolos
@@ -29,13 +29,13 @@ function extrairNomeLimpo(texto: string | undefined): string {
     }
     // Fallback: pega primeiras palavras válidas
     const palavras = limpo.split(/\s+/).filter(p =>
-      p.length > 2 && 
+      p.length > 2 &&
       p.length < 30 &&
       !p.match(/^(style|background|align|border|class|td|tr|font|color|table|body|html)$/i)
     );
     return palavras.slice(0, 2).join(' ') || 'Desconhecido';
   }
-  
+
   return limpo || 'Desconhecido';
 }
 
@@ -95,7 +95,7 @@ function converterParaEngineBioSync(dadosProcessados: any[]) {
 
 router.post("/api/analyze", async (req: Request, res: Response) => {
   const startTime = Date.now();
-  
+
   try {
     const {
       prompt,
@@ -121,7 +121,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // -------------------------------------------------------------------------
     console.log("\n🔍 [1/5] Executando parser HTML...");
     const dadosBrutos = parseBioressonancia(prompt);
-    
+
     if (!Array.isArray(dadosBrutos) || dadosBrutos.length === 0) {
       console.error("❌ Parser não retornou dados válidos");
       return res.status(400).json({
@@ -135,30 +135,30 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     console.log("🔍 [DEBUG] Primeiros itens do parser:");
     dadosBrutos.slice(0, 3).forEach((item: any, i: number) => {
       const preview = item.item?.substring(0, 40) + (item.item?.length > 40 ? '...' : '');
-      console.log(`   [${i+1}] item="${preview}" | valor=${item.valor} | status=${item.status}`);
+      console.log(`   [${i + 1}] item="${preview}" | valor=${item.valor} | status=${item.status}`);
     });
 
     // -------------------------------------------------------------------------
     // 2️⃣ CONVERSÃO PARA ENGINE + LIMPEZA
     // -------------------------------------------------------------------------
     console.log("\n🔄 [2/5] Convertendo e limpando dados...");
-    const itemsConvertidos = converterParaEngineBioSync(dadosBrutos);
+    const itemsConvertidos: any[] = converterParaEngineBioSync(dadosBrutos);
 
     // Filtro de itens válidos (nomes legíveis e tamanho razoável)
     // ✅ FIX: Tipagem explícita 'any[]' para evitar inferência cruzada com 'ItemBio[]'
-    const itensValidos: any[] = itemsConvertidos.filter((i: any) => 
-      i.nome && 
-      i.nome !== 'Desconhecido' && 
+    const itensValidos = itemsConvertidos.filter((i: any) =>
+      i.nome &&
+      i.nome !== 'Desconhecido' &&
       i.nome.length < 50 &&
       !i.nome.includes('<')
     );
 
     console.log(`📋 Itens válidos para engine: ${itensValidos.length} / ${itemsConvertidos.length}`);
-    
+
     if (itensValidos.length === 0) {
       console.warn("⚠️ Nenhum item válido após filtragem - verificando causas:");
       itemsConvertidos.slice(0, 5).forEach((i: any, idx: number) => {
-        console.log(`   [${idx+1}] nome="${i.nome}" | length=${i.nome?.length} | temHTML=${i.nome?.includes('<')}`);
+        console.log(`   [${idx + 1}] nome="${i.nome}" | length=${i.nome?.length} | temHTML=${i.nome?.includes('<')}`);
       });
     }
 
@@ -168,12 +168,12 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // 3️⃣ PROCESSAMENTO DA ENGINE BIOSYNC
     // -------------------------------------------------------------------------
     console.log("\n🚀 [3/5] Executando BioSync Engine...");
-    
+
     let biosyncResult: any;
     try {
       // ✅ FIX DEFINITIVO: 'as any' ignora a checagem estrita do TS no argumento
       biosyncResult = await processBioSyncData(
-        itensValidos as any,
+        itensValidos as any, // ✅ Ignora validação de tipo na entrada da engine
         modo_analise as any,
         peso_cliente,
         altura_cliente_metros
@@ -185,7 +185,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
 
     } catch (engineError: any) {
       console.error("❌ ERRO NA ENGINE:", engineError.message);
-      
+
       // Fallback seguro
       biosyncResult = {
         modo_selecionado: modo_analise,
@@ -203,9 +203,9 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // 4️⃣ DIAGNÓSTICO LEGACY + PLANO TERAPÊUTICO
     // -------------------------------------------------------------------------
     console.log("\n🩺 [4/5] Gerando diagnóstico e plano...");
-    
+
     const diagnostico = gerarDiagnostico(dadosBrutos);
-    
+
     const plano_terapeutico = {
       tipo: "semanal",
       terapias: diagnostico.problemas.slice(0, 5).map((p: any) => ({
@@ -222,7 +222,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // 5️⃣ MONTAGEM DA RESPOSTA
     // -------------------------------------------------------------------------
     console.log("\n📤 [5/5] Montando resposta...");
-    
+
     const resposta = {
       interpretacao: "Análise baseada em bioressonância com identificação de desequilíbrios",
       pontos_criticos: diagnostico.problemas
@@ -244,7 +244,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     if (exame_id) {
       try {
         console.log(`\n💾 Salvando no Supabase: ${exame_id}`);
-        
+
         // Debug do payload antes de salvar
         console.log('🔍 [PAYLOAD] Dados para salvar:', {
           scores: biosyncResult.category_scores,
