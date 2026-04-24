@@ -5,14 +5,11 @@ import {
   BaseAnaliseSchema,
 } from "../validators/exameValidator";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error("Variáveis de ambiente do Supabase não configuradas!");
-}
-
-export const supabase = createClient(supabaseUrl!, supabaseKey!);
+// ✅ REMOVIDO: Não recriar o cliente, já vem do config
+// const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+// const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// if (!supabaseUrl || !supabaseKey) { ... }
+// export const supabase = createClient(...); // ← ESTA LINHA CAUSAVA O CONFLITO
 
 // ==============================
 // TIPOS
