@@ -2,6 +2,7 @@ import { Router } from "express";
 import { parseBioressonancia } from "../utils/parserBio";
 import { gerarDiagnostico } from "../services/diagnostico.service";
 import { processBioSyncData } from "../services/engine-processor";
+import { atualizarExameComBioSync } from '../db/exames.repository';
 
 const router = Router();
 
@@ -62,9 +63,6 @@ function compararExames(
   return comparacao;
 }
 
-/**
- * Converte dados do parser para formato da engine BioSync
- */
 /**
  * Converte dados do parser para formato da engine BioSync
  * 🔬 INCLUI NORMALIZAÇÃO DE VALORES BRUTOS PARA ESCALA 0-100
@@ -139,6 +137,7 @@ type AnalyzeRequest = {
   modo_analise?: 'fitness' | 'weight_loss' | 'emotional_sleep' | 'immunity' | 'mental';
   peso_cliente?: number;
   altura_cliente_metros?: number;
+  exame_id?: string; // ← Adicionado para tipar o campo de salvamento
 };
 
 router.post("/api/analyze", async (req, res) => {
@@ -148,7 +147,8 @@ router.post("/api/analyze", async (req, res) => {
       anterior_dados_processados,
       modo_analise = 'fitness',
       peso_cliente,
-      altura_cliente_metros
+      altura_cliente_metros,
+      exame_id
     } = req.body as AnalyzeRequest;
 
     if (!prompt) {
@@ -196,7 +196,8 @@ router.post("/api/analyze", async (req, res) => {
     console.log("⚖️ Peso/Altura:", peso_cliente, altura_cliente_metros);
 
     const rawItems = converterParaEngineBioSync(dadosProcessados);
-    console.log("🔎 DEBUG - Primeiros 5 itens do parser:");
+    
+    console.log("🔎 DEBUG - Primeiros 5 itens normalizados:");
     console.log(rawItems.slice(0, 5).map(i => ({
       nome: i.nome,
       percentual: i.percentual,
@@ -215,10 +216,6 @@ router.post("/api/analyze", async (req, res) => {
       suggested_protocol: { therapies: [], checklist: [], timeline: '' }
     };
 
-    // Após: const biosyncResult = await processBioSyncData(...)
-    console.log("🧪 RESULTADO BRUTO DA ENGINE:");
-    console.log(JSON.stringify(biosyncResult, null, 2));
-
     try {
       biosyncResult = await processBioSyncData(
         rawItems,
@@ -230,6 +227,13 @@ router.post("/api/analyze", async (req, res) => {
       console.log("✅ BioSync Processado com sucesso!");
       console.log("📊 Scores:", biosyncResult.category_scores);
       console.log("🚨 Alertas Críticos:", biosyncResult.critical_alerts.length);
+      
+      // 🧪 Log do resultado REAL (após processamento)
+      console.log("🧪 RESULTADO DA ENGINE (pós-processamento):");
+      console.log(JSON.stringify({
+        scores: biosyncResult.category_scores,
+        criticos: biosyncResult.critical_alerts.map(c => c.item)
+      }, null, 2));
 
     } catch (engineError: any) {
       console.error("❌ ERRO NA ENGINE BIOSYNC:", engineError.message);
@@ -260,7 +264,7 @@ router.post("/api/analyze", async (req, res) => {
       justificativa:
         "Plano terapêutico estruturado com base nos principais desequilíbrios identificados.",
 
-      // 🆕 NOVOS CAMPOS BIOSYNC (agora com biosyncResult garantido)
+      // 🆕 NOVOS CAMPOS BIOSYNC
       modo_selecionado: biosyncResult.modo_selecionado,
       category_scores: biosyncResult.category_scores,
       critical_alerts: biosyncResult.critical_alerts,
@@ -272,28 +276,30 @@ router.post("/api/analyze", async (req, res) => {
     };
     
     /**
-     * 7. 💾 SALVAR EM EXAMES (Tabela real do fluxo - atualiza com BioSync)
+     * 7. 💾 SALVAR EM EXAMES (Tabela real do fluxo)
      */
     try {
-      const { atualizarExameComBioSync } = await import("../db/exames.repository");
+      // ✅ Usa o import estático do topo (não precisa de dynamic import)
+      const targetExameId = exame_id || req.body.exame_id;
       
-      // Captura o exame_id que o frontend deve enviar junto com a análise
-      const exameId = req.body.exame_id;
-      
-      if (exameId) {
-        await atualizarExameComBioSync(exameId, biosyncResult);
-        console.log("✅ Exame atualizado com BioSync no Supabase!");
-        console.log("📊 Scores salvos:", biosyncResult.category_scores);
-        console.log("🚨 Alertas críticos:", biosyncResult.critical_alerts.length);
+      if (targetExameId) {
+        await atualizarExameComBioSync(targetExameId, {
+          modo_selecionado: biosyncResult.modo_selecionado,
+          category_scores: biosyncResult.category_scores,
+          critical_alerts: biosyncResult.critical_alerts,
+          quick_wins: biosyncResult.quick_wins,
+          imc_value: biosyncResult.imc_value,
+          imc_status: biosyncResult.imc_status,
+          suggested_protocol: biosyncResult.suggested_protocol,
+          translated_items: biosyncResult.translated_items
+        });
+        console.log('[DB:INFO] Exame atualizado com BioSync', { exameId: targetExameId });
       } else {
-        console.warn("⚠️ exame_id não informado. BioSync processado mas não persistido.");
-        console.log("💡 Dica: Envie 'exame_id' no body da requisição para salvar os resultados.");
+        console.warn('[DB:WARN] exame_id não informado. BioSync processado mas não salvo.');
       }
-      
     } catch (saveError: any) {
-      console.error("❌ ERRO AO ATUALIZAR EXAME:", saveError.message);
-      console.error("📉 Stack:", saveError.stack);
-      // Não bloqueia a resposta ao frontend, apenas loga o erro
+      console.error('[DB:ERROR] Falha ao salvar exame:', saveError.message);
+      // Não bloqueia a resposta ao frontend
     }
 
     return res.json({
