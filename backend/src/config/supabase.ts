@@ -5,12 +5,12 @@ const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: { persistSession: false }, // ✅ Backend não precisa de sessão
+  auth: { persistSession: false }, // Backend não precisa de sessão
   global: {
-    // ✅ Headers para service_role
     headers: {
       apiKey: supabaseKey,
       Authorization: `Bearer ${supabaseKey}`
     }
   }
+  // ✅ O cliente JS já lida com IPv4/IPv6 automaticamente
 });
