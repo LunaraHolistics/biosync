@@ -1,5 +1,6 @@
 // 📦 engine-processor.ts
 import { createClient } from '@supabase/supabase-js';
+import { MarcadorBio, ResultadoBioSync } from '../types';
 
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -64,7 +65,7 @@ export async function processBioSyncData(
   clientWeight?: number,
   clientHeightMeters?: number
 ): Promise<ProcessedAnalysis> {
-  
+
   // 1️⃣ CARREGAR REFERÊNCIAS DO BANCO
   console.log("📥 Carregando referências do Supabase...");
   const { data: correlations, error: errCorr } = await supabase.from('correlacoes_marcadores').select('*');
@@ -83,7 +84,7 @@ export async function processBioSyncData(
   const correlationMap = new Map<string, CorrelationRecord>(
     (correlations || []).map(c => [c.marcador_nome.toLowerCase().trim(), c as CorrelationRecord])
   );
-  
+
   const termMap = new Map<string, TermRecord>(
     (terms || []).map(t => [t.item.toLowerCase().trim(), t as TermRecord])
   );
@@ -93,8 +94,8 @@ export async function processBioSyncData(
 
   // 2️⃣ FILTRAR E TRADUZIR ITENS
   console.log(`\n🔍 Processando ${rawItems.length} itens do dispositivo...`);
-  
-  const processedItems: ProcessedItem[] = rawItems.map(item => {
+
+  const processedItems: ProcessedItem[] = rawItems.map((item: MarcadorBio) => {
     const key = item.nome.toLowerCase().trim();
     const corr = correlationMap.get(key);
     const term = termMap.get(key);
@@ -106,7 +107,7 @@ export async function processBioSyncData(
       console.log(`   - corr encontrado: ${!!corr}`);
       console.log(`   - term encontrado: ${!!term}`);
     }
-    
+
     return {
       raw: item.nome,
       client_term: term?.client_friendly_term || item.nome,
@@ -134,7 +135,7 @@ export async function processBioSyncData(
   const activeTags = modeWeights[selectedMode] || ['geral'];
   const relevantItems = processedItems.filter(item => {
     if (!item.impacts) return false;
-    return activeTags.some(tag => 
+    return activeTags.some(tag =>
       (tag === 'fitness' && item.impacts?.fitness) ||
       (tag === 'sleep' && item.impacts?.sleep) ||
       (tag === 'metabolism' && item.impacts?.metabolism) ||
@@ -153,7 +154,7 @@ export async function processBioSyncData(
   };
 
   const category_scores = {
-    fitness: calculateScore(processedItems.filter(i => i.impacts?.fitness)),
+    fitness: calculateScore(relevantItems.filter(i => i.impacts?.fitness)),
     emotional: calculateScore(processedItems.filter(i => i.impacts?.emotional)),
     sono: calculateScore(processedItems.filter(i => i.impacts?.sleep)),
     imunidade: calculateScore(processedItems.filter(i => i.impacts?.fitness || i.impacts?.metabolism)),
@@ -185,8 +186,8 @@ export async function processBioSyncData(
 
   // 7️⃣ MATCH COM PROTOCOLOS
   const protocolsList = protocols || [];
-  const matchedProtocol = protocolsList.find((p: ProtocolRecord) => 
-    critical_alerts.length > 0 && 
+  const matchedProtocol = protocolsList.find((p: ProtocolRecord) =>
+    critical_alerts.length > 0 &&
     p.condition_key.toLowerCase().includes(
       critical_alerts[0]?.item.toLowerCase().split('(')[0].trim() || 'general'
     )
@@ -210,10 +211,10 @@ export async function processBioSyncData(
     quick_wins,
     imc_value,
     imc_status,
-    translated_items: processedItems.map(i => ({ 
-      raw: i.raw, 
-      client_term: i.client_term, 
-      trainer_term: i.trainer_term 
+    translated_items: processedItems.map(i => ({
+      raw: i.raw,
+      client_term: i.client_term,
+      trainer_term: i.trainer_term
     })),
     suggested_protocol: {
       therapies: matchedProtocol?.therapy_suggestions || [],
