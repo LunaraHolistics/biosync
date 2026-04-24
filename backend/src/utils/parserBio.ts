@@ -6,7 +6,7 @@ export interface ItemBio {
   item: string;
   valor: number;
   status: 'baixo' | 'normal' | 'alto' | 'desconhecido';
-  sistema?: string;
+  sistema: string;  // ← REMOVIDO o '?' → agora é obrigatório
   min?: number;
   max?: number;
 }
@@ -39,7 +39,7 @@ function detectarSistema(nome: string): string {
   if (/vitamina/i.test(n)) return 'vitaminas';
   if (/hormônio|hormonal|tireóide|tireoide|insulina/i.test(n)) return 'hormonal';
   if (/sono|melatonina|cortisol|adrenalina/i.test(n)) return 'sono_estresse';
-  return 'geral';
+  return 'geral';  // ← Sempre retorna algo, nunca undefined
 }
 
 /**
@@ -57,7 +57,7 @@ export function parseBioressonancia(html: string): ItemBio[] {
   // Itera sobre cada linha da tabela
   $('tr').each((_, row) => {
     const cols = $(row).find('td');
-    
+
     // Precisa de pelo menos 3 colunas: nome, referência, valor
     if (cols.length < 3) return;
 
@@ -97,7 +97,7 @@ export function parseBioressonancia(html: string): ItemBio[] {
  */
 export function parseBioressonanciaFallback(html: string): ItemBio[] {
   const resultados: ItemBio[] = [];
-  
+
   // Regex que captura TRs incluindo quebras de linha
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let trMatch;
@@ -105,11 +105,11 @@ export function parseBioressonanciaFallback(html: string): ItemBio[] {
   while ((trMatch = trRegex.exec(html)) !== null) {
     const linhaHtml = trMatch[1];
     const celulas: string[] = [];
-    
+
     // Extrai TDs dentro do TR
     const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     let tdMatch;
-    
+
     while ((tdMatch = tdRegex.exec(linhaHtml)) !== null) {
       const conteudo = tdMatch[1]
         .replace(/<[^>]*>/g, ' ')
@@ -117,13 +117,13 @@ export function parseBioressonanciaFallback(html: string): ItemBio[] {
         .trim();
       celulas.push(conteudo);
     }
-    
+
     if (celulas.length >= 3) {
       const nome = celulas[0];
       const referencia = celulas[1];
       const valorRaw = celulas[2];
       const valor = parseFloat(valorRaw.replace(',', '.'));
-      
+
       if (nome && !isNaN(valor) && nome.length < 100) {
         if (!/item de teste|padrão de referência/i.test(nome)) {
           resultados.push({
@@ -136,6 +136,6 @@ export function parseBioressonanciaFallback(html: string): ItemBio[] {
       }
     }
   }
-  
+
   return resultados;
 }
