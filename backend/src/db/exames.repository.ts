@@ -6,6 +6,8 @@ import { pool } from '../config/pool'; // ✅ Import do pool, não do supabase c
  */
 // backend/src/db/exames.repository.ts
 
+// backend/src/db/exames.repository.ts
+
 export async function atualizarExameComBioSync(
   exameId: string,
   biosyncResult: {
@@ -22,13 +24,12 @@ export async function atualizarExameComBioSync(
   try {
     console.log(`🔄 [DB] INICIANDO UPDATE - exameId: ${exameId}`);
     
-    // ✅ Validar entrada
     if (!exameId) {
       console.error('❌ [DB] exameId é obrigatório');
       throw new Error('exameId não fornecido');
     }
 
-    // ✅ Preparar payloads
+    // ✅ Payload como OBJETO JS (NÃO usar JSON.stringify)
     const indiceBiosyncPayload = {
       category_scores: biosyncResult.category_scores,
       critical_alerts: biosyncResult.critical_alerts,
@@ -41,7 +42,7 @@ export async function atualizarExameComBioSync(
 
     console.log(`📦 [DB] Payload preparado - scores: ${JSON.stringify(biosyncResult.category_scores)}`);
 
-    // ✅ Executar UPDATE
+    // ✅ Query com cast ::jsonb, mas parâmetro como OBJETO
     const res = await pool.query(
       `
       UPDATE exames
@@ -53,40 +54,36 @@ export async function atualizarExameComBioSync(
       RETURNING id, status, updated_at, indice_biosync
       `,
       [
-        JSON.stringify(indiceBiosyncPayload),
+        indiceBiosyncPayload,  // 🔥 SEM JSON.stringify() — objeto JS direto!
         exameId
       ]
     );
 
     console.log(`📊 [DB] Query executada - rows affected: ${res.rowCount}`);
 
-    // ✅ Validar resultado
     if (!res.rows || res.rows.length === 0) {
-      // 🔍 Verificar se o exame existe
       const check = await pool.query('SELECT id, status FROM exames WHERE id = $1', [exameId]);
       if (check.rows.length === 0) {
         console.error(`❌ [DB] Exame NÃO ENCONTRADO: ${exameId}`);
         throw new Error(`Exame não existe: ${exameId}`);
       } else {
         console.error(`❌ [DB] UPDATE não retornou linhas. Exame existe: ${check.rows[0].status}`);
-        throw new Error('UPDATE não afetou nenhuma linha - possível problema de permissão ou trigger');
+        throw new Error('UPDATE não afetou nenhuma linha');
       }
     }
 
     const updated = res.rows[0];
-    console.log(`✅ [DB] Exame atualizado: ${updated.id} | status: ${updated.status} | updated_at: ${updated.updated_at}`);
+    console.log(`✅ [DB] Exame atualizado: ${updated.id} | status: ${updated.status}`);
     
     return updated;
 
   } catch (error: any) {
-    console.error('❌ [DB] ERRO CRÍTICO em atualizarExameComBioSync:', {
+    console.error('❌ [DB] ERRO em atualizarExameComBioSync:', {
       message: error.message,
       code: error.code,
-      detail: error.detail,
-      hint: error.hint,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      detail: error.detail
     });
-    throw error; // ✅ Propaga para o caller
+    throw error;
   }
 }
 
