@@ -7,7 +7,7 @@ import cors from "cors";
 import { createHash } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import multer from "multer";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from '../config/supabase';
 
 // Importando os parsers e serviços
 import { parseHtmReport } from "./utils/parserHtml";

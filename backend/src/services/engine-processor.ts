@@ -1,8 +1,17 @@
 // 📦 engine-processor.ts
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../config/supabase';
 import { MarcadorBio, ResultadoBioSync } from '../types';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+// Forçar IPv4 adicionando parâmetro na URL
+const supabaseUrl = process.env.SUPABASE_URL!.replace(
+  'supabase.co', 
+  'supabase.co?ipv4=true'
+);
+
+const supabase = createClient(
+  supabaseUrl, 
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export interface RawDeviceItem {
   nome: string;
