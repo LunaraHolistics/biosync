@@ -386,6 +386,11 @@ function exameRowToAiData(
   };
 }
 
+// 🔥 CORREÇÃO PRINCIPAL: Passar categoriasFiltro para exameRowToAiData
+const analiseSelecionadaData = analiseSelecionada
+  ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
+  : null;
+
 function getRelatorioOriginal(
   meta: Record<string, unknown>,
   _row: ExameRow
