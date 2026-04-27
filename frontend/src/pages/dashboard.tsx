@@ -39,7 +39,7 @@ export default function Dashboard() {
   const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
 
   const toggleCategoria = (cat: string) => {
-    setCategoriasFiltro(prev => 
+    setCategoriasFiltro(prev =>
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
     );
   };
@@ -98,7 +98,7 @@ export default function Dashboard() {
     return {
       ...analise,
       // Filtra pontos críticos que mencionam categorias selecionadas
-      pontosCriticos: analise.pontosCriticos.filter((p: string) => 
+      pontosCriticos: analise.pontosCriticos.filter((p: string) =>
         CATEGORIAS_DISPONIVEIS.some(cat => estaSelecionado(cat) && p.toLowerCase().includes(cat))
       ),
       // Filtra matches por categoria
@@ -192,7 +192,7 @@ export default function Dashboard() {
 
       frequencia_lunara: analiseFiltrada.frequencia_lunara,
       justificativa: `Score: ${analiseFiltrada.scoreGeral}/100 — ${analiseFiltrada.statusScore}. Setores: ${analiseFiltrada.setoresAfetados.join(", ")}.`,
-      
+
       filtros_aplicados: categoriasFiltro.length > 0 ? categoriasFiltro : undefined,
     };
 
@@ -480,6 +480,11 @@ export default function Dashboard() {
             <h3>
               Detalhes — {analise.paciente.nome}
             </h3>
+            <div style={{ background: 'red', color: 'white', padding: '10px', marginBottom: '20px' }}>
+              SE VOCÊ ESTÁ LENDO ISSO, O MODAL ESTÁ RENDERIZANDO!
+              <br />
+              Filtros ativos: {JSON.stringify(categoriasFiltro)}
+            </div>
 
             {/* 🔥 FILTROS POR CATEGORIA */}
             <div style={{ marginBottom: 16, padding: '0.75rem', background: '#1e293b', borderRadius: 8 }}>
@@ -488,7 +493,7 @@ export default function Dashboard() {
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {CATEGORIAS_DISPONIVEIS.map(cat => (
-                  <label 
+                  <label
                     key={cat}
                     style={{
                       display: 'flex',
