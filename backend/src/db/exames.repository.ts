@@ -4,6 +4,25 @@
 import { supabase } from '../config/supabase';
 
 // ============================================================================
+// 📦 TIPOS AUXILIARES PARA EVOLUÇÃO
+// ============================================================================
+
+export type ItemScoreEvolucao = {
+  item: string;
+  categoria: string;
+  score: number;
+  status: 'baixo' | 'normal' | 'alto';
+  impacto: string;
+  impacto_fitness?: {
+    performance?: string;
+    hipertrofia?: string;
+    emagrecimento?: string;
+    recuperacao?: string;
+    humor?: string;
+  };
+};
+
+// ============================================================================
 // 🔄 ATUALIZAR EXAME COM BIOSYNC
 // ============================================================================
 
@@ -22,6 +41,15 @@ export async function atualizarExameComBioSync(
     imc_status: string | null;
     suggested_protocol: { therapies: string[]; checklist: string[]; timeline: string };
     translated_items?: Array<{ raw: string; client_term: string; trainer_term: string }>;
+    // 🔥 NOVO: Matches da engine para histórico de evolução por item
+    matches?: Array<{
+      itemBase: string;
+      categoria: string;
+      score?: number;
+      gravidade: 'baixo' | 'normal' | 'alto';
+      impacto: string;
+      impacto_fitness?: ItemScoreEvolucao['impacto_fitness'];
+    }>;
   }
 ) {
   try {
@@ -32,6 +60,18 @@ export async function atualizarExameComBioSync(
     console.log(`📊 [Supabase JS] category_scores: ${JSON.stringify(biosyncResult.category_scores)}`);
     console.log(`🚨 [Supabase JS] critical_alerts count: ${biosyncResult.critical_alerts?.length || 0}`);
 
+    // 🔥 NOVO: Calcular item_scores para histórico de evolução
+    const itemScores = biosyncResult.matches?.map((m) => ({
+      item: m.itemBase,
+      categoria: m.categoria,
+      score: m.score ?? 50, // Se não tiver score calculado, usa 50 como base neutra
+      status: m.gravidade,
+      impacto: m.impacto,
+      impacto_fitness: m.impacto_fitness
+    })) || [];
+
+    console.log(`📈 [Supabase JS] item_scores salvos: ${itemScores.length} itens`);
+
     // ✅ Montar payload para indice_biosync (objeto JS puro)
     const indiceBiosyncPayload = {
       category_scores: biosyncResult.category_scores,
@@ -40,7 +80,9 @@ export async function atualizarExameComBioSync(
       imc: { value: biosyncResult.imc_value, status: biosyncResult.imc_status },
       protocol: biosyncResult.suggested_protocol,
       translated_items: biosyncResult.translated_items || [],
-      processed_at: new Date().toISOString()
+      processed_at: new Date().toISOString(),
+      // 🔥 NOVO: Scores por item para comparação histórica
+      item_scores: itemScores
     };
 
     // ✅ Usar cliente Supabase JS para UPDATE (já tem IPv4 fix + reconexão automática)
@@ -76,6 +118,9 @@ export async function atualizarExameComBioSync(
     
     if (data.indice_biosync?.category_scores) {
       console.log(`📈 [Supabase JS] Scores salvos: ${JSON.stringify(data.indice_biosync.category_scores)}`);
+    }
+    if (data.indice_biosync?.item_scores?.length) {
+      console.log(`📊 [Supabase JS] Item scores salvos: ${data.indice_biosync.item_scores.length} itens`);
     }
 
     return data;
@@ -129,6 +174,11 @@ export async function buscarExameComBioSync(exameId: string) {
 
     if (data) {
       console.log(`✅ [Supabase JS] Exame encontrado: ${data.id} | status: ${data.status}`);
+      
+      // 🔍 Debug: mostrar se tem item_scores
+      if (data.indice_biosync?.item_scores?.length) {
+        console.log(`📊 [DB] item_scores disponíveis: ${data.indice_biosync.item_scores.length} itens`);
+      }
     } else {
       console.warn(`⚠️ [Supabase JS] Exame não encontrado: ${exameId}`);
     }
@@ -145,7 +195,47 @@ export async function buscarExameComBioSync(exameId: string) {
 }
 
 // ============================================================================
-// 🔧 FUNÇÕES AUXILIARES INTERNAS
+// 📊 UTILITÁRIOS DE EVOLUÇÃO (para comparação entre exames)
+// ============================================================================
+
+/**
+ * Compara item_scores de dois exames e calcula tendências
+ */
+export function calcularTendenciaItem(
+  scoreAtual: number,
+  scoreAnterior: number | null
+): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
+  if (scoreAnterior === null) return 'novo';
+  
+  const delta = scoreAtual - scoreAnterior;
+  if (delta >= 10) return 'melhorou';
+  if (delta <= -10) return 'piorou';
+  return 'estavel';
+}
+
+/**
+ * Gera resumo estatístico da evolução entre exames
+ */
+export function gerarResumoEvolucao(itensEvolucao: Array<{ trend: string }>) {
+  const melhoraram = itensEvolucao.filter(i => i.trend === 'melhorou').length;
+  const pioraram = itensEvolucao.filter(i => i.trend === 'piorou').length;
+  const estaveis = itensEvolucao.filter(i => i.trend === 'estavel').length;
+  const novos = itensEvolucao.filter(i => i.trend === 'novo').length;
+  
+  return {
+    total: itensEvolucao.length,
+    melhoraram,
+    pioraram,
+    estaveis,
+    novos,
+    percentual_melhora: itensEvolucao.length > 0 
+      ? Math.round((melhoraram / itensEvolucao.length) * 100) 
+      : 0
+  };
+}
+
+// ============================================================================
+// 🔧 FUNÇÕES AUXILIARES INTERNAS (LEGACY)
 // ============================================================================
 
 function calculateOverallScore(scores: Record<string, number>): number {

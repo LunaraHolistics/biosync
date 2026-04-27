@@ -162,6 +162,11 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       console.log("✅ Engine: processamento concluído");
       console.log(`📊 Scores: ${JSON.stringify(biosyncResult.category_scores)}`);
       console.log(`🚨 Alerts: ${biosyncResult.critical_alerts?.length || 0} críticos`);
+      
+      // 🔍 Debug: verificar se matches está presente
+      if (biosyncResult.matches?.length) {
+        console.log(`📈 [Engine] matches disponíveis para histórico: ${biosyncResult.matches.length} itens`);
+      }
 
     } catch (engineError: any) {
       console.error("❌ ERRO NA ENGINE:", engineError.message);
@@ -174,7 +179,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         imc_value: null,
         imc_status: null,
         translated_items: [],
-        suggested_protocol: { therapies: [], checklist: [], timeline: '' }
+        suggested_protocol: { therapies: [], checklist: [], timeline: '' },
+        matches: [] // ✅ Garantir matches vazio no fallback
       };
     }
 
@@ -227,9 +233,11 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         console.log('🔍 [PAYLOAD] Dados para salvar:', {
           scores: biosyncResult.category_scores,
           alerts: biosyncResult.critical_alerts?.length,
-          imc: biosyncResult.imc_value
+          imc: biosyncResult.imc_value,
+          matches_count: biosyncResult.matches?.length || 0
         });
 
+        // 🔥 NOVO: Passar matches para salvar item_scores no histórico
         await atualizarExameComBioSync(exame_id, {
           modo_selecionado: biosyncResult.modo_selecionado,
           category_scores: biosyncResult.category_scores,
@@ -238,7 +246,9 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
           imc_value: biosyncResult.imc_value,
           imc_status: biosyncResult.imc_status,
           suggested_protocol: biosyncResult.suggested_protocol,
-          translated_items: biosyncResult.translated_items || []
+          translated_items: biosyncResult.translated_items || [],
+          // 🔥 NOVO: matches para histórico de evolução por item
+          matches: biosyncResult.matches || []
         });
 
         console.log("✅ Supabase: exame atualizado com sucesso");
@@ -273,7 +283,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         parser_ok: dadosProcessados.length > 0,
         engine_ok: !!biosyncResult?.category_scores,
         saved: !!exame_id,
-        html_fallback_used: dadosProcessados.some((d: any) => d.item?.includes('<TABLE'))
+        html_fallback_used: dadosProcessados.some((d: any) => d.item?.includes('<TABLE')),
+        matches_saved: !!(biosyncResult.matches?.length && exame_id)
       }
     });
 

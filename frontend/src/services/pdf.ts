@@ -9,6 +9,17 @@ const MAX_CHARS_POR_BLOCO = 2400;
 const MARGEM_PDF = 20;
 const ALTURA_RODAPE = 40;
 
+// 🔥 NOVO: Tipo para evolução de itens no PDF
+export type ItemScoreEvolucao = {
+  item: string;
+  categoria: string;
+  score_atual: number;
+  score_anterior: number | null;
+  delta: number;
+  trend: 'melhorou' | 'piorou' | 'estavel' | 'novo';
+  impacto: string;
+};
+
 export type RelatorioData = {
   clientName: string;
   createdAt: string | Date;
@@ -35,7 +46,9 @@ export type RelatorioData = {
   justificativa: string;
   comparacao?: unknown;
   relatorio_original_html?: string;
-  filtros_aplicados?: string[]; // 🔥 NOVO: categorias filtradas
+  filtros_aplicados?: string[];
+  // 🔥 NOVO: Scores por item com evolução para tabela no PDF
+  item_scores?: ItemScoreEvolucao[];
 };
 
 function formatDate(value: string | Date): string {
@@ -61,7 +74,6 @@ function dividirTexto(texto: string, maxChars: number): string[] {
       pedacos.push(resto);
       break;
     }
-    // Tenta cortar em quebra de linha ou espaço
     let corte = resto.lastIndexOf("\n", maxChars);
     if (corte <= maxChars * 0.3) {
       corte = resto.lastIndexOf(" ", maxChars);
@@ -118,14 +130,13 @@ function adicionarBlocoAoPDF(
   const imgWidth = pageWidth - marginX * 2;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-  // Se o bloco NÃO couber na página atual, pula para a próxima
   if (currentY + imgHeight > maxY) {
     pdf.addPage();
     currentY = MARGEM_PDF;
   }
 
   pdf.addImage(imgData, "PNG", marginX, currentY, imgWidth, imgHeight);
-  return currentY + imgHeight + 8; // +8px de espaçamento entre blocos
+  return currentY + imgHeight + 8;
 }
 
 function extrairComparativoHTML(comparacao: unknown): string {
@@ -165,14 +176,97 @@ function extrairComparativoHTML(comparacao: unknown): string {
   return partes.join("");
 }
 
+// =======================================================================
+// 🔥 NOVA FUNÇÃO: Gerar tabela de evolução por item para o PDF
+// =======================================================================
+function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[]): string {
+  if (!itemScores || itemScores.length === 0) return '';
+
+  // Ordena: mais impactantes primeiro (maior |delta|), depois alfabético
+  const ordenados = [...itemScores].sort((a, b) => {
+    if (Math.abs(b.delta) !== Math.abs(a.delta)) {
+      return Math.abs(b.delta) - Math.abs(a.delta);
+    }
+    return a.item.localeCompare(b.item, 'pt-BR');
+  }).slice(0, 15); // Limita a 15 itens para não poluir
+
+  const linhas = ordenados.map(item => {
+    const icon = item.trend === 'melhorou' ? '🟢' : 
+                 item.trend === 'piorou' ? '🔴' : 
+                 item.trend === 'novo' ? '🆕' : '🟡';
+    
+    const deltaStr = item.score_anterior !== null 
+      ? `${item.delta >= 0 ? '+' : ''}${item.delta}` 
+      : '—';
+    
+    const scoreAnterior = item.score_anterior !== null 
+      ? item.score_anterior 
+      : '—';
+    
+    const corDelta = item.delta >= 0 ? '#16a34a' : '#dc2626';
+
+    return `
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 8px 4px; font-size: 10px; font-weight: 600; color: #1e293b; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item.item)}</td>
+        <td style="padding: 8px 4px; font-size: 10px; text-align: center; color: #475569;">${scoreAnterior}</td>
+        <td style="padding: 8px 4px; font-size: 10px; text-align: center; font-weight: 700; color: #0f172a;">${item.score_atual}</td>
+        <td style="padding: 8px 4px; font-size: 10px; text-align: center; font-weight: 700; color: ${corDelta};">${deltaStr}</td>
+        <td style="padding: 8px 4px; font-size: 10px; text-align: center;">${icon}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // Calcula resumo para badge
+  const resumo = {
+    melhoraram: ordenados.filter(i => i.trend === 'melhorou').length,
+    pioraram: ordenados.filter(i => i.trend === 'piorou').length,
+    estaveis: ordenados.filter(i => i.trend === 'estavel').length,
+    novos: ordenados.filter(i => i.trend === 'novo').length
+  };
+
+  return `
+    <div style="margin: 20px 0; page-break-inside: avoid;" data-pdf-section="evolucao">
+      <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        <span>📈</span> Evolução dos Principais Itens
+      </div>
+      
+      <!-- Badge de resumo -->
+      <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+        ${resumo.melhoraram > 0 ? `<span style="background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🟢 ${resumo.melhoraram} melhoraram</span>` : ''}
+        ${resumo.estaveis > 0 ? `<span style="background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🟡 ${resumo.estaveis} estáveis</span>` : ''}
+        ${resumo.pioraram > 0 ? `<span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🔴 ${resumo.pioraram} pioraram</span>` : ''}
+        ${resumo.novos > 0 ? `<span style="background: #dbeafe; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🆕 ${resumo.novos} novos</span>` : ''}
+      </div>
+      
+      <div style="font-size: 9px; color: #64748b; margin-bottom: 8px; font-style: italic;">
+        Comparativo com exame anterior • 🟢 Melhorou (≥10 pts) • 🟡 Estável (±9 pts) • 🔴 Piorou (≤-10 pts) • 🆕 Novo
+      </div>
+      
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+        <thead>
+          <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+            <th style="padding: 8px 4px; text-align: left; font-weight: 700; color: #334155; width: 45%;">Item</th>
+            <th style="padding: 8px 4px; text-align: center; font-weight: 700; color: #334155; width: 12%;">Anterior</th>
+            <th style="padding: 8px 4px; text-align: center; font-weight: 700; color: #334155; width: 12%;">Atual</th>
+            <th style="padding: 8px 4px; text-align: center; font-weight: 700; color: #334155; width: 10%;">Δ</th>
+            <th style="padding: 8px 4px; text-align: center; font-weight: 700; color: #334155; width: 10%;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${linhas}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 export async function gerarRelatorioPDF(data: RelatorioData) {
-  // Container fora da viewport para renderização
   const container = document.createElement("div");
   container.style.cssText = `
     position: fixed;
     left: -9999px;
     top: 0;
-    width: 794px; /* A4 width in px at 96 DPI */
+    width: 794px;
     padding: 24px;
     background: #ffffff;
     box-sizing: border-box;
@@ -234,6 +328,16 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
         <ul style="margin:0;padding-left:18px;list-style-type:disc">${listaHTML}</ul>
       `, true)
     );
+  }
+
+  // =======================================================================
+  // 🔥 NOVO: TABELA DE EVOLUÇÃO POR ITEM (se houver item_scores)
+  // =======================================================================
+  if (data.item_scores && data.item_scores.length > 0) {
+    const tabelaHTML = gerarTabelaEvolucao(data.item_scores);
+    if (tabelaHTML) {
+      blocks.push(criarBlocoHTML(tabelaHTML, true));
+    }
   }
 
   // =======================================================================
@@ -326,7 +430,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   }
 
   // =======================================================================
-  // 7. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA (sempre visível, bloco destacado)
+  // 7. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA
   // =======================================================================
   const frequenciaTexto = data.frequencia_lunara && !/^[\s—\-–]+$/.test(data.frequencia_lunara)
     ? data.frequencia_lunara
@@ -349,7 +453,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   blocks.push(criarBlocoHTML(htmlFrequenciaEJustificativa));
 
   // =======================================================================
-  // 8. RODAPÉ (opcional: marca d'água discreta)
+  // 8. RODAPÉ
   // =======================================================================
   blocks.push(
     criarBlocoHTML(`
@@ -360,7 +464,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   );
 
   // =======================================================================
-  // RENDERIZAÇÃO FINAL: monta container, renderiza blocos, gera PDF
+  // RENDERIZAÇÃO FINAL
   // =======================================================================
   blocks.forEach((b) => container.appendChild(b));
   document.body.appendChild(container);

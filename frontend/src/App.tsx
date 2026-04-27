@@ -42,6 +42,17 @@ type DiagnosticoPdf = {
   }[];
 };
 
+// 🔥 NOVO: Tipo para evolução de itens no PDF
+type ItemScoreEvolucao = {
+  item: string;
+  categoria: string;
+  score_atual: number;
+  score_anterior: number | null;
+  delta: number;
+  trend: 'melhorou' | 'piorou' | 'estavel' | 'novo';
+  impacto: string;
+};
+
 // ==============================
 // HELPERS LEGADOS
 // ==============================
@@ -120,6 +131,61 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
       return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
     }),
     setoresAfetados: analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()))
+  };
+}
+
+// ==============================
+// 🔥 NOVO: CÁLCULO DE EVOLUÇÃO ENTRE EXAMES
+// ==============================
+
+function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
+  if (scoreAnterior === null) return 'novo';
+  const delta = scoreAtual - scoreAnterior;
+  if (delta >= 10) return 'melhorou';
+  if (delta <= -10) return 'piorou';
+  return 'estavel';
+}
+
+function gerarItemScoresComEvolucao(
+  itensAtuais: Array<{ item: string; categoria: string; score?: number; impacto: string }>,
+  examesAnteriores: ExameRow[]
+): ItemScoreEvolucao[] {
+  // Busca o exame anterior mais recente
+  const exameAnterior = examesAnteriores
+    .filter(e => e.indice_biosync?.item_scores)
+    .sort((a, b) => new Date(b.data_exame || b.created_at).getTime() - new Date(a.data_exame || a.created_at).getTime())[0];
+
+  const mapaAnterior = new Map(
+    (exameAnterior?.indice_biosync?.item_scores || []).map((i: any) => [i.item.toLowerCase(), i])
+  );
+
+  return itensAtuais.map(atual => {
+    const chave = atual.item.toLowerCase();
+    const anterior = mapaAnterior.get(chave);
+    const scoreAtual = atual.score ?? 50;
+    const scoreAnterior = anterior?.score ?? null;
+    const delta = scoreAnterior !== null ? scoreAtual - scoreAnterior : 0;
+    const trend = calcularTendenciaItem(scoreAtual, scoreAnterior);
+
+    return {
+      item: atual.item,
+      categoria: atual.categoria,
+      score_atual: scoreAtual,
+      score_anterior: scoreAnterior,
+      delta,
+      trend,
+      impacto: atual.impacto
+    };
+  });
+}
+
+function gerarResumoEvolucao(itens: ItemScoreEvolucao[]) {
+  return {
+    total: itens.length,
+    melhoraram: itens.filter(i => i.trend === 'melhorou').length,
+    pioraram: itens.filter(i => i.trend === 'piorou').length,
+    estaveis: itens.filter(i => i.trend === 'estavel').length,
+    novos: itens.filter(i => i.trend === 'novo').length
   };
 }
 
@@ -328,16 +394,29 @@ function getRelatorioOriginal(
   return undefined;
 }
 
-// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM SUPORTE A FILTROS
+// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM item_scores E EVOLUÇÃO
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
   data: AiStructuredData,
   comparacao?: any,
   motor?: AnaliseCompleta,
-  filtrosAtivos?: string[] // 🔥 NOVO: para mostrar filtros no PDF
+  filtrosAtivos?: string[],
+  examesAnteriores?: ExameRow[] // 🔥 NOVO: para calcular evolução
 ): RelatorioData {
   const meta = resultadoMeta(row);
+
+  // 🔥 Calcula item_scores com evolução se houver exames anteriores
+  let itemScoresEvolucao: ItemScoreEvolucao[] | undefined;
+  if (motor?.matches && examesAnteriores?.length) {
+    const itensAtuais = motor.matches.map((m: any) => ({
+      item: m.itemBase,
+      categoria: m.categoria,
+      score: m.score ?? 50,
+      impacto: m.impacto
+    }));
+    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores);
+  }
 
   return {
     clientName: paciente || "Cliente",
@@ -358,7 +437,9 @@ function buildRelatorioData(
     } : toDiagnostico(meta.diagnostico),
     comparacao,
     relatorio_original_html: getRelatorioOriginal(meta, row),
-    filtros_aplicados: filtrosAtivos && filtrosAtivos.length > 0 ? filtrosAtivos : undefined, // 🔥 NOVO
+    filtros_aplicados: filtrosAtivos && filtrosAtivos.length > 0 ? filtrosAtivos : undefined,
+    // 🔥 NOVO: item_scores com evolução para tabela no PDF
+    item_scores: itemScoresEvolucao
   };
 }
 
@@ -449,7 +530,7 @@ function App() {
     ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
     : analiseMotorRaw;
 
-  // 🔥 PASSA categoriasFiltro PARA buildRelatorioData
+  // 🔥 PASSA categoriasFiltro E examesAnteriores PARA buildRelatorioData
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -463,7 +544,8 @@ function App() {
       },
       comparativoExamesData,
       analiseMotor,
-      categoriasFiltro // 🔥 NOVO: passa os filtros ativos
+      categoriasFiltro,
+      examesPaciente.filter(e => e.id !== analiseSelecionada?.id) // 🔥 Exames anteriores para evolução
     )
     : null;
 
@@ -501,15 +583,10 @@ function App() {
       setAnaliseSelecionada(ultimo);
       setExamesPaciente(list);
       setTerapiasEditavel("");
-      
-      // 🔥 Resetar filtros de categoria
       setCategoriasFiltro([]);
-      
-      // 🔥 Resetar terapias ocultas: MARCAR TODAS como ocultas por padrão
       const todasOcultas = new Set<string>();
       list.forEach((_, i) => todasOcultas.add(String(i)));
       setTerapiasOcultas(todasOcultas);
-      
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -518,7 +595,6 @@ function App() {
     }
   }
 
-  // 🔥 EFEITO PRINCIPAL: AO CARREGAR TERAPIAS, MARCAR TODAS COMO OCULTAS
   useEffect(() => {
     (async () => {
       setHistoryError(null);
@@ -531,12 +607,9 @@ function App() {
         setTodosExames(examesData);
         setBaseAnalise(baseData);
         setTerapias(terapiasData);
-        
-        // 🔥 INICIALIZA COM TODAS AS TERAPIAS OCULTAS (checkbox marcado = oculta)
         const todasOcultas = new Set<string>();
         terapiasData.forEach((_, i) => todasOcultas.add(String(i)));
         setTerapiasOcultas(todasOcultas);
-        
       } catch (e: unknown) {
         setHistoryError(e instanceof Error ? e.message : "Erro ao carregar dados.");
       }
@@ -585,10 +658,7 @@ function App() {
     setHistoryError(null);
     setHistoryLoading(true);
     setTerapiasEditavel("");
-    
-    // 🔥 Resetar filtros de categoria
     setCategoriasFiltro([]);
-    
     try {
       const list = await listarExamesPorPaciente(nome);
       const listOrdenada = [...list].sort(
@@ -597,12 +667,9 @@ function App() {
           new Date(a.data_exame || a.created_at).getTime()
       );
       setExamesPaciente(listOrdenada);
-      
-      // 🔥 Ao selecionar paciente, marcar todas as terapias como ocultas por padrão
       const todasOcultas = new Set<string>();
       listOrdenada.forEach((_, i) => todasOcultas.add(String(i)));
       setTerapiasOcultas(todasOcultas);
-      
     } catch (e: unknown) {
       setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
     } finally {
@@ -710,12 +777,9 @@ function App() {
                               <button className="counter" onClick={() => { 
                                 setAnaliseSelecionada(a); 
                                 setTerapiasEditavel(""); 
-                                
-                                // 🔥 Ao abrir análise, marcar todas as terapias como ocultas
                                 const todasOcultas = new Set<string>();
                                 examesPaciente.forEach((_, i) => todasOcultas.add(String(i)));
                                 setTerapiasOcultas(todasOcultas);
-                                
                                 setCategoriasFiltro([]); 
                                 setModalOpen(true); 
                               }} style={{ marginBottom: 0 }}>
@@ -726,7 +790,8 @@ function App() {
                                 onClick={() => {
                                   setGerandoPdf(true);
                                   const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a), categoriasFiltro));
+                                  // 🔥 Passa examesAnteriores para calcular evolução no PDF
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id)));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
                                 disabled={gerandoPdf}
