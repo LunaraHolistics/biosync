@@ -25,7 +25,6 @@ import ComparativoExamesView from "../components/ComparativoExames";
 import GraficoEvolucao from "../components/GraficoEvolucao";
 
 // 🔥 CATEGORIAS DISPONÍVEIS PARA FILTRO
-const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
 
 export default function Dashboard() {
   const [exames, setExames] = useState<ExameRow[]>([]);
@@ -34,6 +33,7 @@ export default function Dashboard() {
   const [selecionado, setSelecionado] = useState<ExameRow | null>(null);
   const [mostrarGrafico, setMostrarGrafico] = useState(false);
 
+  const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
   // 🔥 FILTROS POR CATEGORIA
   const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
   const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
@@ -480,11 +480,6 @@ export default function Dashboard() {
             <h3>
               Detalhes — {analise.paciente.nome}
             </h3>
-            <div style={{ background: 'red', color: 'white', padding: '10px', marginBottom: '20px' }}>
-              SE VOCÊ ESTÁ LENDO ISSO, O MODAL ESTÁ RENDERIZANDO!
-              <br />
-              Filtros ativos: {JSON.stringify(categoriasFiltro)}
-            </div>
 
             {/* 🔥 FILTROS POR CATEGORIA */}
             <div style={{ marginBottom: 16, padding: '0.75rem', background: '#1e293b', borderRadius: 8 }}>
