@@ -1,7 +1,9 @@
-// backend/scripts/backfill-item-scores.ts
-import { supabase } from '../src/config/supabase';
-import { gerarAnaliseCompleta } from '../src/lib/motorSemantico';
-import { listarBaseAnaliseSaude, listarTerapias } from '../src/db';
+// backend/src/scripts/backfill-item-scores.ts
+
+// ✅ IMPORTS CORRETOS: relativo a src/scripts/
+import { supabase } from '../config/supabase';
+import { gerarAnaliseCompleta } from '../lib/motorSemantico';
+import { listarBaseAnaliseSaude, listarTerapias } from '../db';
 
 async function backfillItemScores(pacienteNome: string) {
   console.log(`🔄 Iniciando backfill para: ${pacienteNome}`);
@@ -78,7 +80,7 @@ async function backfillItemScores(pacienteNome: string) {
   console.log(`\n🎉 Backfill concluído: ${atualizados}/${exames.length} exames atualizados`);
 }
 
-// Executa se chamado diretamente
+// Executa se chamado diretamente via CLI
 if (require.main === module) {
   const paciente = process.argv[2] || 'Lucimara';
   backfillItemScores(paciente).catch(console.error);
