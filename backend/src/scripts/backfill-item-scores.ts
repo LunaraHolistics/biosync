@@ -2,10 +2,10 @@
 
 // ✅ IMPORTS CORRETOS baseados na estrutura real do backend
 import { supabase } from '../config/supabase';
-import { gerarAnaliseCompleta } from './lib/motorSemantico';
+import { gerarAnaliseCompleta } from '.frontend/src/lib/motorSemantico';
 // ✅ Importar funções específicas dos arquivos dentro de db/
-import { listarBaseAnaliseSaude } from './db/base-analise.repository';
-import { listarTerapias } from './db/terapias.repository';
+import { listarBaseAnaliseSaude } from './db/analises.repository';
+import { listarTerapias } from "./services/db";
 
 async function backfillItemScores(pacienteNome: string) {
   console.log(`🔄 Iniciando backfill para: ${pacienteNome}`);
