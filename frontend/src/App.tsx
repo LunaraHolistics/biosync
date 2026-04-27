@@ -330,16 +330,22 @@ Ozonioterapia — Quinzenal — Para oxigenação tecidual..."
 }
 
 // ==============================
-// CONVERSÃO: Motor Novo → AiStructuredData
+// 🔥 CONVERSÃO CORRIGIDA: Motor Novo → AiStructuredData COM FILTROS
 // ==============================
 
 function exameRowToAiData(
   row: ExameRow,
   base: BaseAnaliseSaudeRow[],
   terapias: TerapiaRow[],
-  terapiasManuais?: string
+  terapiasManuais?: string,
+  filtrosAtivos?: string[] // ← NOVO PARÂMETRO
 ): AiStructuredData {
-  const analise = gerarAnaliseCompleta(row, base, terapias);
+  const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
+  
+  // 🔥 APLICA FILTROS NA ANÁLISE ANTES DE CONVERTER
+  const analise = filtrosAtivos?.length 
+    ? filtrarAnalisePorCategoria(analiseRaw, filtrosAtivos)
+    : analiseRaw;
 
   const terapiasFormatadas = analise.terapias.map((t) => ({
     nome: t.nome,
@@ -514,15 +520,16 @@ function App() {
     return gerarComparativoInteligente(ordenados);
   }, [examesPaciente]);
 
+  // 🔥 CORREÇÃO PRINCIPAL: Passar categoriasFiltro para exameRowToAiData
   const analiseSelecionadaData = analiseSelecionada
-    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
+    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
     : null;
 
   const analiseMotorRaw = analiseSelecionada
     ? obterAnalise(analiseSelecionada)
     : undefined;
 
-  // 🔥 APLICA FILTRO À ANÁLISE
+  // 🔥 APLICA FILTRO À ANÁLISE (para Mapa Técnico)
   const analiseMotor = analiseMotorRaw && !todasCategoriasSelecionadas
     ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
     : analiseMotorRaw;
@@ -786,7 +793,7 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setGerandoPdf(true);
-                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
+                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
                                   // 🔥 Passa examesAnteriores para calcular evolução no PDF
                                   gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id)));
                                   setTimeout(() => setGerandoPdf(false), 3000);
@@ -872,7 +879,9 @@ function App() {
                           <div style={{ fontWeight: 900, marginBottom: 6 }}>SETORES AFETADOS</div>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {analiseMotor.setoresAfetados.map((s: string) => (
-                              <span key={s} style={{ background: "var(--border, #1e293b)", padding: "3px 10px", borderRadius: 6, fontSize: 13 }}>{s}</span>
+                              <span key={s} style={{ background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", padding: "3px 10px", borderRadius: 6, fontSize: 13, color: "#38bdf8" }}>
+                                {s}
+                              </span>
                             ))}
                           </div>
                         </div>
