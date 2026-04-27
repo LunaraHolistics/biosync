@@ -164,8 +164,13 @@ function gerarItemScoresComEvolucao(
   return itensAtuais.map(atual => {
     const chave = atual.item.toLowerCase();
     const anterior = mapaAnterior.get(chave);
+    
+    // ✅ Score atual vem do input (tem propriedade 'score')
     const scoreAtual = atual.score ?? 50;
-    const scoreAnterior = anterior?.score ?? null;
+    
+    // ✅ FIX: Score anterior vem do mapa (ItemScoreEvolucao tem 'score_atual', não 'score')
+    const scoreAnterior = anterior?.score_atual ?? null;
+    
     const delta = scoreAnterior !== null ? scoreAtual - scoreAnterior : 0;
     const trend = calcularTendenciaItem(scoreAtual, scoreAnterior);
 
