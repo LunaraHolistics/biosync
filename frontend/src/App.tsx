@@ -328,12 +328,14 @@ function getRelatorioOriginal(
   return undefined;
 }
 
+// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM SUPORTE A FILTROS
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
   data: AiStructuredData,
   comparacao?: any,
-  motor?: AnaliseCompleta
+  motor?: AnaliseCompleta,
+  filtrosAtivos?: string[] // 🔥 NOVO: para mostrar filtros no PDF
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -356,6 +358,7 @@ function buildRelatorioData(
     } : toDiagnostico(meta.diagnostico),
     comparacao,
     relatorio_original_html: getRelatorioOriginal(meta, row),
+    filtros_aplicados: filtrosAtivos && filtrosAtivos.length > 0 ? filtrosAtivos : undefined, // 🔥 NOVO
   };
 }
 
@@ -383,6 +386,8 @@ function App() {
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  
+  // 🔥 TERAPIAS OCULTAS: começa COM TODAS MARCADAS (ocultas por padrão)
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
   
   // 🔥 ESTADOS DO FILTRO POR CATEGORIA
@@ -444,6 +449,7 @@ function App() {
     ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
     : analiseMotorRaw;
 
+  // 🔥 PASSA categoriasFiltro PARA buildRelatorioData
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -456,7 +462,8 @@ function App() {
         justificativa: "",
       },
       comparativoExamesData,
-      analiseMotor
+      analiseMotor,
+      categoriasFiltro // 🔥 NOVO: passa os filtros ativos
     )
     : null;
 
@@ -494,8 +501,15 @@ function App() {
       setAnaliseSelecionada(ultimo);
       setExamesPaciente(list);
       setTerapiasEditavel("");
-      setTerapiasOcultas(new Set());
-      setCategoriasFiltro([]); // 🔥 Resetar filtros ao abrir nova análise
+      
+      // 🔥 Resetar filtros de categoria
+      setCategoriasFiltro([]);
+      
+      // 🔥 Resetar terapias ocultas: MARCAR TODAS como ocultas por padrão
+      const todasOcultas = new Set<string>();
+      list.forEach((_, i) => todasOcultas.add(String(i)));
+      setTerapiasOcultas(todasOcultas);
+      
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -504,6 +518,7 @@ function App() {
     }
   }
 
+  // 🔥 EFEITO PRINCIPAL: AO CARREGAR TERAPIAS, MARCAR TODAS COMO OCULTAS
   useEffect(() => {
     (async () => {
       setHistoryError(null);
@@ -516,6 +531,12 @@ function App() {
         setTodosExames(examesData);
         setBaseAnalise(baseData);
         setTerapias(terapiasData);
+        
+        // 🔥 INICIALIZA COM TODAS AS TERAPIAS OCULTAS (checkbox marcado = oculta)
+        const todasOcultas = new Set<string>();
+        terapiasData.forEach((_, i) => todasOcultas.add(String(i)));
+        setTerapiasOcultas(todasOcultas);
+        
       } catch (e: unknown) {
         setHistoryError(e instanceof Error ? e.message : "Erro ao carregar dados.");
       }
@@ -564,8 +585,10 @@ function App() {
     setHistoryError(null);
     setHistoryLoading(true);
     setTerapiasEditavel("");
-    setTerapiasOcultas(new Set());
-    setCategoriasFiltro([]); // 🔥 Resetar filtros
+    
+    // 🔥 Resetar filtros de categoria
+    setCategoriasFiltro([]);
+    
     try {
       const list = await listarExamesPorPaciente(nome);
       const listOrdenada = [...list].sort(
@@ -574,6 +597,12 @@ function App() {
           new Date(a.data_exame || a.created_at).getTime()
       );
       setExamesPaciente(listOrdenada);
+      
+      // 🔥 Ao selecionar paciente, marcar todas as terapias como ocultas por padrão
+      const todasOcultas = new Set<string>();
+      listOrdenada.forEach((_, i) => todasOcultas.add(String(i)));
+      setTerapiasOcultas(todasOcultas);
+      
     } catch (e: unknown) {
       setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
     } finally {
@@ -678,7 +707,18 @@ function App() {
                               {scoreMotor.statusScore} — {scoreMotor.scoreGeral}/100 ({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setTerapiasOcultas(new Set()); setCategoriasFiltro([]); setModalOpen(true); }} style={{ marginBottom: 0 }}>
+                              <button className="counter" onClick={() => { 
+                                setAnaliseSelecionada(a); 
+                                setTerapiasEditavel(""); 
+                                
+                                // 🔥 Ao abrir análise, marcar todas as terapias como ocultas
+                                const todasOcultas = new Set<string>();
+                                examesPaciente.forEach((_, i) => todasOcultas.add(String(i)));
+                                setTerapiasOcultas(todasOcultas);
+                                
+                                setCategoriasFiltro([]); 
+                                setModalOpen(true); 
+                              }} style={{ marginBottom: 0 }}>
                                 Ver
                               </button>
                               <button
@@ -686,7 +726,7 @@ function App() {
                                 onClick={() => {
                                   setGerandoPdf(true);
                                   const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a)));
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a), categoriasFiltro));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
                                 disabled={gerandoPdf}
@@ -903,7 +943,7 @@ function App() {
               </div>
             </div>
 
-            {/* 🔥 FILTROS POR CATEGORIA - NOVO BLOCO */}
+            {/* 🔥 FILTROS POR CATEGORIA */}
             <div style={{ marginBottom: 16, padding: 12, background: '#1e293b', borderRadius: 8 }}>
               <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.8, fontWeight: 600 }}>📊 Filtrar por categoria:</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
