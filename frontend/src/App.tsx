@@ -134,7 +134,6 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
   };
 }
 
-// ==============================
 // 🔥 NOVO: CÁLCULO DE EVOLUÇÃO ENTRE EXAMES
 // ==============================
 
@@ -150,13 +149,16 @@ function gerarItemScoresComEvolucao(
   itensAtuais: Array<{ item: string; categoria: string; score?: number; impacto: string }>,
   examesAnteriores: ExameRow[]
 ): ItemScoreEvolucao[] {
-  // Busca o exame anterior mais recente
+  // Busca o exame anterior mais recente que tenha item_scores
   const exameAnterior = examesAnteriores
-    .filter(e => e.indice_biosync?.item_scores)
-    .sort((a, b) => new Date(b.data_exame || b.created_at).getTime() - new Date(a.data_exame || a.created_at).getTime())[0];
+    .filter(e => e.indice_biosync?.item_scores && Array.isArray(e.indice_biosync.item_scores))
+    .sort((a, b) => new Date(b.data_exame || b.created_at).getTime() - new Date(a.data_exame || b.created_at).getTime())[0];
 
+  // ✅ Type assertion segura para o array de item_scores
+  const itensAnteriores = (exameAnterior?.indice_biosync?.item_scores as ItemScoreEvolucao[] | undefined) || [];
+  
   const mapaAnterior = new Map(
-    (exameAnterior?.indice_biosync?.item_scores || []).map((i: any) => [i.item.toLowerCase(), i])
+    itensAnteriores.map((i: ItemScoreEvolucao) => [i.item.toLowerCase(), i])
   );
 
   return itensAtuais.map(atual => {
@@ -177,16 +179,6 @@ function gerarItemScoresComEvolucao(
       impacto: atual.impacto
     };
   });
-}
-
-function gerarResumoEvolucao(itens: ItemScoreEvolucao[]) {
-  return {
-    total: itens.length,
-    melhoraram: itens.filter(i => i.trend === 'melhorou').length,
-    pioraram: itens.filter(i => i.trend === 'piorou').length,
-    estaveis: itens.filter(i => i.trend === 'estavel').length,
-    novos: itens.filter(i => i.trend === 'novo').length
-  };
 }
 
 // ==============================
