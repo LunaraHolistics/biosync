@@ -122,7 +122,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
 
   return {
     ...analise,
-    pontosCriticos: analise.pontosCriticos.filter((p: string) => 
+    pontosCriticos: analise.pontosCriticos.filter((p: string) =>
       CATEGORIAS_DISPONIVEIS.some(cat => categoriasFiltro.includes(cat) && p.toLowerCase().includes(cat))
     ),
     matches: analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria)),
@@ -156,7 +156,7 @@ function gerarItemScoresComEvolucao(
 
   // ✅ Type assertion segura para o array de item_scores
   const itensAnteriores = (exameAnterior?.indice_biosync?.item_scores as ItemScoreEvolucao[] | undefined) || [];
-  
+
   const mapaAnterior = new Map(
     itensAnteriores.map((i: ItemScoreEvolucao) => [i.item.toLowerCase(), i])
   );
@@ -164,13 +164,13 @@ function gerarItemScoresComEvolucao(
   return itensAtuais.map(atual => {
     const chave = atual.item.toLowerCase();
     const anterior = mapaAnterior.get(chave);
-    
+
     // ✅ Score atual vem do input (tem propriedade 'score')
     const scoreAtual = atual.score ?? 50;
-    
+
     // ✅ FIX: Score anterior vem do mapa (ItemScoreEvolucao tem 'score_atual', não 'score')
     const scoreAnterior = anterior?.score_atual ?? null;
-    
+
     const delta = scoreAnterior !== null ? scoreAtual - scoreAnterior : 0;
     const trend = calcularTendenciaItem(scoreAtual, scoreAnterior);
 
@@ -341,9 +341,9 @@ function exameRowToAiData(
   filtrosAtivos?: string[] // ← NOVO PARÂMETRO
 ): AiStructuredData {
   const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
-  
+
   // 🔥 APLICA FILTROS NA ANÁLISE ANTES DE CONVERTER
-  const analise = filtrosAtivos?.length 
+  const analise = filtrosAtivos?.length
     ? filtrarAnalisePorCategoria(analiseRaw, filtrosAtivos)
     : analiseRaw;
 
@@ -472,19 +472,20 @@ function App() {
 
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
+  const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
-  
+
   // 🔥 TERAPIAS OCULTAS: começa COM TODAS MARCADAS (ocultas por padrão)
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
-  
+
   // 🔥 ESTADOS DO FILTRO POR CATEGORIA
   const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
   const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
 
   const toggleCategoria = (cat: string) => {
-    setCategoriasFiltro(prev => 
+    setCategoriasFiltro(prev =>
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
     );
   };
@@ -783,14 +784,14 @@ function App() {
                               {scoreMotor.statusScore} — {scoreMotor.scoreGeral}/100 ({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button className="counter" onClick={() => { 
-                                setAnaliseSelecionada(a); 
-                                setTerapiasEditavel(""); 
+                              <button className="counter" onClick={() => {
+                                setAnaliseSelecionada(a);
+                                setTerapiasEditavel("");
                                 const todasOcultas = new Set<string>();
                                 examesPaciente.forEach((_, i) => todasOcultas.add(String(i)));
                                 setTerapiasOcultas(todasOcultas);
-                                setCategoriasFiltro([]); 
-                                setModalOpen(true); 
+                                setCategoriasFiltro([]);
+                                setModalOpen(true);
                               }} style={{ marginBottom: 0 }}>
                                 Ver
                               </button>
