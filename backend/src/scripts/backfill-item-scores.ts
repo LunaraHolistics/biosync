@@ -1,9 +1,9 @@
 // backend/src/scripts/backfill-item-scores.ts
 
-// ✅ IMPORTS CORRETOS: caminhos relativos a src/scripts/
+// ✅ IMPORTS CORRETOS baseados na estrutura real
 import { supabase } from '../config/supabase';
 import { gerarAnaliseCompleta } from '../lib/motorSemantico';
-// ✅ Importar funções específicas do db, não o módulo inteiro
+// ✅ Importar das funções específicas dentro da pasta db
 import { listarBaseAnaliseSaude, listarTerapias } from '../db';
 
 async function backfillItemScores(pacienteNome: string) {
