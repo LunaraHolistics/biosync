@@ -1,15 +1,16 @@
 // backend/src/scripts/backfill-item-scores.ts
 
-// ✅ IMPORTS CORRETOS: relativo a src/scripts/
+// ✅ IMPORTS CORRETOS: caminhos relativos a src/scripts/
 import { supabase } from '../config/supabase';
 import { gerarAnaliseCompleta } from '../lib/motorSemantico';
+// ✅ Importar funções específicas do db, não o módulo inteiro
 import { listarBaseAnaliseSaude, listarTerapias } from '../db';
 
 async function backfillItemScores(pacienteNome: string) {
   console.log(`🔄 Iniciando backfill para: ${pacienteNome}`);
   
   // Busca exames do paciente
-  const { data: exames, error } = await supabase
+  const {  exames, error } = await supabase
     .from('exames')
     .select('id, nome_paciente, resultado_json, indice_biosync')
     .ilike('nome_paciente', `%${pacienteNome}%`)
@@ -20,6 +21,7 @@ async function backfillItemScores(pacienteNome: string) {
     return;
   }
 
+  // Carrega bases de dados
   const [base, terapias] = await Promise.all([
     listarBaseAnaliseSaude(),
     listarTerapias()
@@ -35,14 +37,14 @@ async function backfillItemScores(pacienteNome: string) {
     }
 
     try {
-      // Re-processa a análise
+      // Re-processa a análise com os dados do exame
       const analise = gerarAnaliseCompleta(
         { ...exame, resultado_json: exame.resultado_json || {} } as any,
         base,
         terapias
       );
 
-      // Mapeia matches para item_scores
+      // Mapeia matches para estrutura de item_scores
       const itemScores = analise.matches?.map((m: any) => ({
         item: m.itemBase,
         categoria: m.categoria,
@@ -52,7 +54,7 @@ async function backfillItemScores(pacienteNome: string) {
         impacto_fitness: m.impacto_fitness
       })) || [];
 
-      // Atualiza o exame
+      // Atualiza o exame no Supabase
       const { error: updateError } = await supabase
         .from('exames')
         .update({
@@ -69,7 +71,7 @@ async function backfillItemScores(pacienteNome: string) {
       console.log(`✅ Atualizado: ${exame.id} (${itemScores.length} itens)`);
       atualizados++;
 
-      // Delay para não sobrecarregar
+      // Delay para não sobrecarregar a API
       await new Promise(resolve => setTimeout(resolve, 500));
 
     } catch (err: any) {
