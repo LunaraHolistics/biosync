@@ -331,13 +331,34 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   }
 
   // =======================================================================
-  // 🔥 NOVO: TABELA DE EVOLUÇÃO POR ITEM (se houver item_scores)
+  // 🔥 NOVO: TABELA DE EVOLUÇÃO POR ITEM (com fallback se não houver dados)
   // =======================================================================
   if (data.item_scores && data.item_scores.length > 0) {
+    // ← Tabela normal com evolução
     const tabelaHTML = gerarTabelaEvolucao(data.item_scores);
     if (tabelaHTML) {
       blocks.push(criarBlocoHTML(tabelaHTML, true));
     }
+  } else {
+    // ← FALLBACK: Mensagem amigável quando não há histórico para comparar
+    blocks.push(
+      criarBlocoHTML(`
+        <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 12px; border: 2px dashed #cbd5e1;">
+          <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
+          <div style="font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">
+            Evolução dos Itens
+          </div>
+          <div style="font-size: 11px; color: #64748b; line-height: 1.5;">
+            Para visualizar a evolução comparativa, é necessário ter pelo menos <b>2 exames com análise completa</b> deste paciente.
+            <br/><br/>
+            <span style="color: #0284c7; font-weight: 600;">✨ Próximo exame já incluirá:</span>
+            <br/>• Comparativo automático de scores por item
+            <br/>• Indicadores de melhora/estabilidade/piora
+            <br/>• Badge de resumo da evolução
+          </div>
+        </div>
+      `, true)
+    );
   }
 
   // =======================================================================
