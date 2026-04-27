@@ -1,16 +1,17 @@
 // backend/src/scripts/backfill-item-scores.ts
 
-// ✅ IMPORTS CORRETOS baseados na estrutura real
+// ✅ IMPORTS CORRETOS baseados na estrutura real do backend
 import { supabase } from '../config/supabase';
 import { gerarAnaliseCompleta } from '../lib/motorSemantico';
-// ✅ Importar das funções específicas dentro da pasta db
-import { listarBaseAnaliseSaude, listarTerapias } from '../db';
+// ✅ Importar funções específicas dos arquivos dentro de db/
+import { listarBaseAnaliseSaude } from '../db/base-analise.repository';
+import { listarTerapias } from '../db/terapias.repository';
 
 async function backfillItemScores(pacienteNome: string) {
   console.log(`🔄 Iniciando backfill para: ${pacienteNome}`);
   
-  // Busca exames do paciente
-  const {  exames, error } = await supabase
+  // ✅ CORREÇÃO: Supabase retorna { data, error }, não { exames, error }
+  const {  data: exames, error } = await supabase
     .from('exames')
     .select('id, nome_paciente, resultado_json, indice_biosync')
     .ilike('nome_paciente', `%${pacienteNome}%`)
@@ -18,6 +19,11 @@ async function backfillItemScores(pacienteNome: string) {
 
   if (error) {
     console.error('❌ Erro ao buscar exames:', error);
+    return;
+  }
+
+  if (!exames || exames.length === 0) {
+    console.log(`⚠️ Nenhum exame encontrado para: ${pacienteNome}`);
     return;
   }
 
