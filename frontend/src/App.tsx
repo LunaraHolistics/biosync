@@ -386,10 +386,8 @@ function exameRowToAiData(
   };
 }
 
-// 🔥 CORREÇÃO PRINCIPAL: Passar categoriasFiltro para exameRowToAiData
-const analiseSelecionadaData = analiseSelecionada
-  ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
-  : null;
+// ✅ CORREÇÃO: Esta declaração FORA da função App() foi REMOVIDA para evitar erro de escopo
+// A declaração correta está DENTRO da função App() abaixo
 
 function getRelatorioOriginal(
   meta: Record<string, unknown>,
@@ -472,17 +470,15 @@ function App() {
 
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
+  // ✅ CORREÇÃO: categoriasFiltro declarado APENAS UMA VEZ
   const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
+  const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
   // 🔥 TERAPIAS OCULTAS: começa COM TODAS MARCADAS (ocultas por padrão)
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
-
-  // 🔥 ESTADOS DO FILTRO POR CATEGORIA
-  const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
-  const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
 
   const toggleCategoria = (cat: string) => {
     setCategoriasFiltro(prev =>
@@ -526,7 +522,7 @@ function App() {
     return gerarComparativoInteligente(ordenados);
   }, [examesPaciente]);
 
-  // 🔥 CORREÇÃO PRINCIPAL: Passar categoriasFiltro para exameRowToAiData
+  // 🔥 CORREÇÃO: analiseSelecionadaData declarado DENTRO da função App() (CORRETO)
   const analiseSelecionadaData = analiseSelecionada
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
     : null;
