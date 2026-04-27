@@ -24,6 +24,11 @@ import {
 } from "./lib/motorSemantico";
 
 // ==============================
+// 🔥 CATEGORIAS PARA FILTRO
+// ==============================
+const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
+
+// ==============================
 // TIPOS LOCAIS
 // ==============================
 
@@ -99,6 +104,26 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 }
 
 // ==============================
+// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA
+// ==============================
+function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
+  if (categoriasFiltro.length === 0) return analise;
+
+  return {
+    ...analise,
+    pontosCriticos: analise.pontosCriticos.filter((p: string) => 
+      CATEGORIAS_DISPONIVEIS.some(cat => categoriasFiltro.includes(cat) && p.toLowerCase().includes(cat))
+    ),
+    matches: analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria)),
+    terapias: analise.terapias.filter((t: any) => {
+      const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
+      return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
+    }),
+    setoresAfetados: analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()))
+  };
+}
+
+// ==============================
 // SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX E RESTAURAÇÃO)
 // ==============================
 
@@ -137,7 +162,6 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
               const idx = String(i);
               const isOculta = ocultas?.has(idx) || false;
 
-              // 🔥 NOVO COMPORTAMENTO: SE ESTIVER OCULTA, MOSTRA RISCADA PARA RESTAURAR
               if (isOculta) {
                 return (
                   <div
@@ -172,7 +196,6 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                 );
               }
 
-              // COMPORTAMENTO NORMAL (ATIVA)
               return (
                 <div
                   key={i}
@@ -361,6 +384,19 @@ function App() {
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
+  
+  // 🔥 ESTADOS DO FILTRO POR CATEGORIA
+  const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
+  const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
+
+  const toggleCategoria = (cat: string) => {
+    setCategoriasFiltro(prev => 
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const estaSelecionado = (cat: string) => todasCategoriasSelecionadas || categoriasFiltro.includes(cat);
+
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
@@ -399,12 +435,15 @@ function App() {
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
     : null;
 
-  // 🔥 DECLARAÇÃO ÚNICA E CORRETA AQUI
-  const analiseMotor = analiseSelecionada
+  const analiseMotorRaw = analiseSelecionada
     ? obterAnalise(analiseSelecionada)
     : undefined;
 
-  // 🔥 DECLARAÇÃO ÚNICA E CORRETA AQUI
+  // 🔥 APLICA FILTRO À ANÁLISE
+  const analiseMotor = analiseMotorRaw && !todasCategoriasSelecionadas
+    ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
+    : analiseMotorRaw;
+
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -456,6 +495,7 @@ function App() {
       setExamesPaciente(list);
       setTerapiasEditavel("");
       setTerapiasOcultas(new Set());
+      setCategoriasFiltro([]); // 🔥 Resetar filtros ao abrir nova análise
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -525,6 +565,7 @@ function App() {
     setHistoryLoading(true);
     setTerapiasEditavel("");
     setTerapiasOcultas(new Set());
+    setCategoriasFiltro([]); // 🔥 Resetar filtros
     try {
       const list = await listarExamesPorPaciente(nome);
       const listOrdenada = [...list].sort(
@@ -637,7 +678,7 @@ function App() {
                               {scoreMotor.statusScore} — {scoreMotor.scoreGeral}/100 ({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setTerapiasOcultas(new Set()); setModalOpen(true); }} style={{ marginBottom: 0 }}>
+                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setTerapiasOcultas(new Set()); setCategoriasFiltro([]); setModalOpen(true); }} style={{ marginBottom: 0 }}>
                                 Ver
                               </button>
                               <button
@@ -684,14 +725,13 @@ function App() {
                         </ul>
                       </div>
 
-                      {/* 🔥 NOVO BLOCO: IMPACTO FITNESS NO PREVIEW */}
                       {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
                         <div>
                           <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             {analiseMotor.matches
                               .filter((m: any) => m.impacto_fitness)
-                              .slice(0, 10) // Limita a 10 para não poluir a tela
+                              .slice(0, 10)
                               .map((m: any, i: number) => (
                                 <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
                                   <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
@@ -818,7 +858,6 @@ function App() {
                     <span>Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore}</span>
                     <span>{analiseMotor.itensAlterados.length} alterados | {analiseMotor.terapias.length} terapias</span>
 
-                    {/* 🔥 NOVO BADGE DE IMC PARA O PERSONAL TRAINER */}
                     {analiseMotor.paciente.imc && (
                       <span style={{
                         background: analiseMotor.paciente.imc >= 25 ? "rgba(239, 68, 68, 0.2)" : "rgba(34, 197, 94, 0.2)",
@@ -864,6 +903,30 @@ function App() {
               </div>
             </div>
 
+            {/* 🔥 FILTROS POR CATEGORIA - NOVO BLOCO */}
+            <div style={{ marginBottom: 16, padding: 12, background: '#1e293b', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.8, fontWeight: 600 }}>📊 Filtrar por categoria:</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {CATEGORIAS_DISPONIVEIS.map(cat => (
+                  <label key={cat} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', cursor: 'pointer',
+                    borderRadius: 6, fontSize: 12, background: estaSelecionado(cat) ? '#0ea5e9' : '#334155',
+                    border: estaSelecionado(cat) ? '1px solid #38bdf8' : '1px solid transparent', transition: 'all 0.2s'
+                  }}>
+                    <input type="checkbox" checked={categoriasFiltro.includes(cat)} onChange={() => toggleCategoria(cat)}
+                      style={{ accentColor: '#0ea5e9', width: 14, height: 14, margin: 0 }} />
+                    <span>{cat === 'emotional' ? 'Emocional' : cat}</span>
+                  </label>
+                ))}
+                {categoriasFiltro.length > 0 && (
+                  <button onClick={() => setCategoriasFiltro([])}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12, textDecoration: 'underline', marginLeft: 'auto' }}>
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+
             {!analiseSelecionada ? (
               <div style={{ opacity: 0.85 }}>Nenhum exame selecionado.</div>
             ) : !analiseSelecionadaData ? (
@@ -886,7 +949,6 @@ function App() {
                   </ul>
                 </div>
 
-                {/* 🔥 AQUI ESTÁ O IMPACTO FITNESS NO LUGAR CERTO */}
                 {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
                   <div>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
