@@ -28,13 +28,13 @@ import {
 // ==============================
 const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
 
-// 🔥 MAPEAMENTO: categoria → palavras-chave para filtrar texto
+// 🔥 MAPEAMENTO: categoria → palavras-chave para filtrar texto (expandido)
 const PALAVRAS_CHAVE_POR_CATEGORIA: Record<string, string[]> = {
-  fitness: ['fisico', 'fitness', 'performance', 'treino', 'musculo', 'forca', 'energia', 'metabolismo', 'peso', 'gordura', 'colesterol', 'viscosidade', 'circulacao', 'coracao', 'vascular', 'miocardio', 'perfusao', 'oxigenio', 'aerobico', 'fadiga', 'resistencia'],
-  emotional: ['emocional', 'emotional', 'emocao', 'sentimento', 'ansiedade', 'depressao', 'medo', 'culpa', 'vergonha', 'raiva', 'tristeza', 'luto', 'apego', 'magoa', 'estresse', 'humor', 'instabilidade', 'afetivo'],
-  sono: ['sono', 'insomnia', 'insonia', 'dormir', 'descanso', 'repouso', 'letargia', 'cansaco', 'exaustao', 'fadiga', 'acordar', 'noite', 'melatonina'],
-  imunidade: ['imunidade', 'imune', 'defesa', 'alergia', 'alergeno', 'inflamacao', 'infeccao', 'virus', 'bacteria', 'fungo', 'parasita', 'linfonodo', 'amigdala', 'bao', 'timo', 'imunoglobulina', 'respiratorio', 'gastrointestinal', 'mucosa'],
-  mental: ['mental', 'cognitivo', 'pensamento', 'memoria', 'concentracao', 'foco', 'razao', 'logica', 'aprendizado', 'nevoa', 'brain fog', 'confusao', 'clareza', 'neurologico', 'cerebro', 'cerebral', 'nervoso', 'sinapse']
+  fitness: ['fisico', 'fitness', 'performance', 'treino', 'musculo', 'forca', 'energia', 'metabolismo', 'peso', 'gordura', 'colesterol', 'viscosidade', 'circulacao', 'coracao', 'vascular', 'miocardio', 'perfusao', 'oxigenio', 'aerobico', 'fadiga', 'resistencia', 'capacidade', 'exercicio', 'atletico', 'cardio', 'respiratorio', 'pulmao', 'sangue', 'arteria', 'veia'],
+  emotional: ['emocional', 'emotional', 'emocao', 'sentimento', 'ansiedade', 'depressao', 'medo', 'culpa', 'vergonha', 'raiva', 'tristeza', 'luto', 'apego', 'magoa', 'estresse', 'humor', 'instabilidade', 'afetivo', 'psicologico', 'trauma', 'frustracao', 'desanimo', 'apatia', 'melancolia', 'saudade', 'solidao', 'rejeicao', 'abandono'],
+  sono: ['sono', 'insomnia', 'insonia', 'dormir', 'descanso', 'repouso', 'letargia', 'cansaco', 'exaustao', 'fadiga', 'acordar', 'noite', 'melatonina', 'despertar', 'ciclo', 'ritmo', 'circadiano', 'sonolencia', 'vigilia', 'cochilo'],
+  imunidade: ['imunidade', 'imune', 'defesa', 'alergia', 'alergeno', 'inflamacao', 'infeccao', 'virus', 'bacteria', 'fungo', 'parasita', 'linfonodo', 'amigdala', 'bao', 'timo', 'imunoglobulina', 'respiratorio', 'gastrointestinal', 'mucosa', 'anticorpo', 'leucocito', 'linfocito', 'resistencia', 'protecao', 'vacina', 'imunizacao'],
+  mental: ['mental', 'cognitivo', 'pensamento', 'memoria', 'concentracao', 'foco', 'razao', 'logica', 'aprendizado', 'nevoa', 'brain fog', 'confusao', 'clareza', 'neurologico', 'cerebro', 'cerebral', 'nervoso', 'sinapse', 'intelecto', 'raciocinio', 'julgamento', 'decisao', 'intuicao', 'percepcao', 'consciencia', 'mente']
 };
 
 // ==============================
@@ -129,9 +129,10 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
   if (categoriasFiltro.length === 0) return analise;
 
-  // Coletar todas as palavras-chave dos filtros ativos
+  // Coletar todas as palavras-chave dos filtros ativos (incluindo a categoria em si)
   const palavrasChaveAtivas = new Set<string>();
   for (const cat of categoriasFiltro) {
+    palavrasChaveAtivas.add(cat.toLowerCase()); // Adiciona a categoria em si
     const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
     palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
   }
@@ -142,35 +143,51 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     return Array.from(palavrasChaveAtivas).some(palavra => textoLower.includes(palavra));
   };
 
+  // 🔥 Filtrar interpretação: dividir por seções (títulos em maiúsculas) e manter apenas as relevantes
+  let interpretacaoFiltrada = analise.interpretacao;
+  if (categoriasFiltro.length > 0) {
+    // Divide por seções baseadas em títulos em CAIXA ALTA seguidos de dois pontos ou ponto
+    const secoes = analise.interpretacao.split(/(?=[A-ZÀ-Ú][A-ZÀ-Ú\s]+[:.]\s*)/);
+    const secoesFiltradas = secoes.filter(secao => {
+      if (!secao.trim()) return false;
+      // Mantém a seção se contiver palavra-chave ativa OU se for a introdução/conclusão
+      const ehIntroducaoConclusao = /foram identificados|conclusao|recomenda-se/i.test(secao);
+      return ehIntroducaoConclusao || textoCorrespondeFiltro(secao);
+    });
+    
+    if (secoesFiltradas.length > 0) {
+      interpretacaoFiltrada = secoesFiltradas.join('').trim() || analise.interpretacao;
+    }
+  }
+
+  // 🔥 Filtrar pontos críticos: manter apenas os que correspondem às categorias
+  const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) => 
+    categoriasFiltro.some(cat => {
+      const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+      const textoLower = p.toLowerCase();
+      return textoLower.includes(cat) || palavras.some(palavra => textoLower.includes(palavra));
+    })
+  );
+
+  // 🔥 Filtrar matches por categoria exata
+  const matchesFiltrados = analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria));
+
+  // 🔥 Filtrar terapias por categoria ou tags
+  const terapiasFiltradas = analise.terapias.filter((t: any) => {
+    const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
+    return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
+  });
+
+  // 🔥 Filtrar setores afetados
+  const setoresFiltrados = analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()));
+
   return {
     ...analise,
-    // 🔥 Filtrar interpretação: manter apenas frases que contenham palavras-chave dos filtros
-    interpretacao: categoriasFiltro.length > 0
-      ? analise.interpretacao
-          .split(/(?<=[.!?])\s+/) // Divide por frases
-          .filter(frase => textoCorrespondeFiltro(frase) || categoriasFiltro.some(cat => frase.toLowerCase().includes(cat)))
-          .join(' ') || analise.interpretacao // Fallback: se tudo for filtrado, mantém original
-      : analise.interpretacao,
-
-    // 🔥 Filtrar pontos críticos: manter apenas os que correspondem às categorias
-    pontosCriticos: analise.pontosCriticos.filter((p: string) => 
-      categoriasFiltro.some(cat => {
-        const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
-        return palavras.some(palavra => p.toLowerCase().includes(palavra)) || p.toLowerCase().includes(cat);
-      })
-    ),
-
-    // 🔥 Filtrar matches por categoria exata
-    matches: analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria)),
-
-    // 🔥 Filtrar terapias por categoria ou tags
-    terapias: analise.terapias.filter((t: any) => {
-      const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
-      return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
-    }),
-
-    // 🔥 Filtrar setores afetados
-    setoresAfetados: analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()))
+    interpretacao: interpretacaoFiltrada,
+    pontosCriticos: pontosCriticosFiltrados.length > 0 ? pontosCriticosFiltrados : analise.pontosCriticos, // Fallback: mantém todos se nenhum passar
+    matches: matchesFiltrados,
+    terapias: terapiasFiltradas,
+    setoresAfetados: setoresFiltrados
   };
 }
 
@@ -261,7 +278,7 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
             <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {p.terapias.map((item, i: number) => {
+            {p.terapias.map((item: any, i: number) => {
               const idx = String(i);
               const isOculta = ocultas?.has(idx) || false;
 
@@ -386,7 +403,7 @@ function exameRowToAiData(
     ? filtrarAnalisePorCategoria(analiseRaw, filtrosAtivos)
     : analiseRaw;
 
-  const terapiasFormatadas = analise.terapias.map((t) => ({
+  const terapiasFormatadas = analise.terapias.map((t: any) => ({
     nome: t.nome,
     frequencia: (t as any).frequencia || t.frequencia_recomendada || "Conforme necessidade",
     descricao: t.descricao || t.indicacoes || "",
@@ -477,7 +494,7 @@ function buildRelatorioData(
     frequencia_lunara: data.frequencia_lunara || "",
     justificativa: data.justificativa || "",
     diagnostico: motor ? {
-      problemas: motor.matches.map((m) => ({
+      problemas: motor.matches.map((m: any) => ({
         sistema: m.categoria,
         item: m.itemBase,
         status: m.gravidade,
