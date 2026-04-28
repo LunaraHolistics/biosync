@@ -28,6 +28,15 @@ import {
 // ==============================
 const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
 
+// 🔥 MAPEAMENTO: categoria → palavras-chave para filtrar texto
+const PALAVRAS_CHAVE_POR_CATEGORIA: Record<string, string[]> = {
+  fitness: ['fisico', 'fitness', 'performance', 'treino', 'musculo', 'forca', 'energia', 'metabolismo', 'peso', 'gordura', 'colesterol', 'viscosidade', 'circulacao', 'coracao', 'vascular', 'miocardio', 'perfusao', 'oxigenio', 'aerobico', 'fadiga', 'resistencia'],
+  emotional: ['emocional', 'emotional', 'emocao', 'sentimento', 'ansiedade', 'depressao', 'medo', 'culpa', 'vergonha', 'raiva', 'tristeza', 'luto', 'apego', 'magoa', 'estresse', 'humor', 'instabilidade', 'afetivo'],
+  sono: ['sono', 'insomnia', 'insonia', 'dormir', 'descanso', 'repouso', 'letargia', 'cansaco', 'exaustao', 'fadiga', 'acordar', 'noite', 'melatonina'],
+  imunidade: ['imunidade', 'imune', 'defesa', 'alergia', 'alergeno', 'inflamacao', 'infeccao', 'virus', 'bacteria', 'fungo', 'parasita', 'linfonodo', 'amigdala', 'bao', 'timo', 'imunoglobulina', 'respiratorio', 'gastrointestinal', 'mucosa'],
+  mental: ['mental', 'cognitivo', 'pensamento', 'memoria', 'concentracao', 'foco', 'razao', 'logica', 'aprendizado', 'nevoa', 'brain fog', 'confusao', 'clareza', 'neurologico', 'cerebro', 'cerebral', 'nervoso', 'sinapse']
+};
+
 // ==============================
 // TIPOS LOCAIS
 // ==============================
@@ -115,21 +124,52 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 }
 
 // ==============================
-// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA
+// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA (CORRIGIDA E ROBUSTA)
 // ==============================
 function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
   if (categoriasFiltro.length === 0) return analise;
 
+  // Coletar todas as palavras-chave dos filtros ativos
+  const palavrasChaveAtivas = new Set<string>();
+  for (const cat of categoriasFiltro) {
+    const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+    palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
+  }
+
+  // Função auxiliar para verificar se texto contém palavra-chave ativa
+  const textoCorrespondeFiltro = (texto: string): boolean => {
+    const textoLower = texto.toLowerCase();
+    return Array.from(palavrasChaveAtivas).some(palavra => textoLower.includes(palavra));
+  };
+
   return {
     ...analise,
-    pontosCriticos: analise.pontosCriticos.filter((p: string) =>
-      CATEGORIAS_DISPONIVEIS.some(cat => categoriasFiltro.includes(cat) && p.toLowerCase().includes(cat))
+    // 🔥 Filtrar interpretação: manter apenas frases que contenham palavras-chave dos filtros
+    interpretacao: categoriasFiltro.length > 0
+      ? analise.interpretacao
+          .split(/(?<=[.!?])\s+/) // Divide por frases
+          .filter(frase => textoCorrespondeFiltro(frase) || categoriasFiltro.some(cat => frase.toLowerCase().includes(cat)))
+          .join(' ') || analise.interpretacao // Fallback: se tudo for filtrado, mantém original
+      : analise.interpretacao,
+
+    // 🔥 Filtrar pontos críticos: manter apenas os que correspondem às categorias
+    pontosCriticos: analise.pontosCriticos.filter((p: string) => 
+      categoriasFiltro.some(cat => {
+        const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+        return palavras.some(palavra => p.toLowerCase().includes(palavra)) || p.toLowerCase().includes(cat);
+      })
     ),
+
+    // 🔥 Filtrar matches por categoria exata
     matches: analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria)),
+
+    // 🔥 Filtrar terapias por categoria ou tags
     terapias: analise.terapias.filter((t: any) => {
       const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
       return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
     }),
+
+    // 🔥 Filtrar setores afetados
     setoresAfetados: analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()))
   };
 }
@@ -191,7 +231,7 @@ function gerarItemScoresComEvolucao(
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-  data: AiStructuredData;
+   AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -289,8 +329,7 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                       {item.descricao || "—"}
                     </div>
                     <div style={{ fontSize: 12, opacity: 0.85 }}>
-                      <b>Justificativa:</b> {item.justificativa || "—"}
-                    </div>
+                      <b>Justificativa:</b> {item.justificativa || "—"}</div>
                   </div>
                 </div>
               );
@@ -374,6 +413,11 @@ function exameRowToAiData(
 
   const frequencia_lunara = analise.frequencia_lunara || "";
 
+  // 🔥 CORREÇÃO: Justificativa mostra apenas setores filtrados
+  const setoresParaJustificativa = filtrosAtivos?.length && filtrosAtivos.length > 0
+    ? analise.setoresAfetados.filter(s => filtrosAtivos.includes(s.toLowerCase()))
+    : analise.setoresAfetados;
+
   return {
     interpretacao: analise.interpretacao,
     pontos_criticos: analise.pontosCriticos,
@@ -382,7 +426,7 @@ function exameRowToAiData(
       terapias: terapiasFormatadas,
     },
     frequencia_lunara: frequencia_lunara,
-    justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ") || "nenhum"}.`,
+    justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${setoresParaJustificativa.join(", ") || "nenhum"}.`,
   };
 }
 
@@ -404,7 +448,7 @@ function getRelatorioOriginal(
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  data: AiStructuredData,
+   AiStructuredData,
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
