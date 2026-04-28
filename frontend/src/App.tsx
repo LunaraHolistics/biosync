@@ -465,7 +465,7 @@ function getRelatorioOriginal(
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  AiStructuredData,  // ← CORRETO: parâmetro "data" do tipo AiStructuredData
+  data: AiStructuredData,  // ← ✅ CORRETO: nome "data", tipo "AiStructuredData"
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
