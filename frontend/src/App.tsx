@@ -154,14 +154,14 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
       const ehIntroducaoConclusao = /foram identificados|conclusao|recomenda-se/i.test(secao);
       return ehIntroducaoConclusao || textoCorrespondeFiltro(secao);
     });
-    
+
     if (secoesFiltradas.length > 0) {
       interpretacaoFiltrada = secoesFiltradas.join('').trim() || analise.interpretacao;
     }
   }
 
   // 🔥 Filtrar pontos críticos: manter apenas os que correspondem às categorias
-  const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) => 
+  const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) =>
     categoriasFiltro.some(cat => {
       const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
       const textoLower = p.toLowerCase();
@@ -248,7 +248,7 @@ function gerarItemScoresComEvolucao(
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-   AiStructuredData;
+  data: AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -465,11 +465,11 @@ function getRelatorioOriginal(
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-   AiStructuredData,
+  AiStructuredData,  // ← CORRETO: parâmetro "data" do tipo AiStructuredData
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
-  examesAnteriores?: ExameRow[] // 🔥 NOVO: para calcular evolução
+  examesAnteriores?: ExameRow[]
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
