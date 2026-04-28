@@ -137,12 +137,6 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
   }
 
-  // Função auxiliar para verificar se texto contém palavra-chave ativa
-  const textoCorrespondeFiltro = (texto: string): boolean => {
-    const textoLower = texto.toLowerCase();
-    return Array.from(palavrasChaveAtivas).some(palavra => textoLower.includes(palavra));
-  };
-
   // 🔥 Filtrar interpretação: dividir por títulos de seção conhecidos
   let interpretacaoFiltrada = analise.interpretacao;
   if (categoriasFiltro.length > 0) {
