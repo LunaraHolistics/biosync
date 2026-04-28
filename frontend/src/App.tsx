@@ -129,10 +129,25 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
   if (categoriasFiltro.length === 0) return analise;
 
+  // 🔥 Lista explícita de títulos de seção para divisão confiável
+  const TITULOS_SECAO = [
+    'MINERAIS', 'NIVEL DE CONSCIENCIA HUMANA', 'CARDIOVASCULAR E CEREBROVASCULAR',
+    'ACUPUNTURA', 'ALERGENOS', 'COLAGENO', 'PELE', 'VITAMINAS', 'AMINOACIDOS',
+    'SISTEMA IMUNOLOGICO', 'GINECOLOGIA', 'OLHOS', 'METAIS PESADOS', 'SISTEMA ENDOCRINO',
+    'PULSO DO CORACAO E CEREBRO', 'FUNCAO GASTROINTESTINAL', 'FUNCAO DO FIGADO',
+    'COENZIMA', 'LIPIDIOS SANGUE', 'LECITINA', 'FUNCAO DA VESICULA BILIAR',
+    'FUNCAO PULMONAR', 'SISTEMA NERVOSO', 'DENSIDADE MINERAL OSSEA',
+    'DOENCAS OSSEA REUMATOIDE', 'SEIOS', 'INDICE DE CRESCIMENTO OSSEO',
+    'IMUNIDADE HUMANA', 'FUNCAO RENAL', 'DOENCAS OSSEAS', 'AVALIACAO FISICA BASICA',
+    'OBESIDADE', 'GRANDE FUNCAO DO INTESTINO', 'TIROIDE', 'HORMONA MASCULINA',
+    'CICLO MENSTRUAL', 'ACIDO GORDO', 'FUNCAO PANCREATICA', 'ACUCAR NO SANGUE',
+    'TOXINA HUMANA', 'ACIDO GORDO ESSENCIAL', 'FUNCAO RESPIRATORIA', 'FUNCAO SEXUAL MASCULINA'
+  ];
+
   // Coletar todas as palavras-chave dos filtros ativos (incluindo a categoria em si)
   const palavrasChaveAtivas = new Set<string>();
   for (const cat of categoriasFiltro) {
-    palavrasChaveAtivas.add(cat.toLowerCase()); // Adiciona a categoria em si
+    palavrasChaveAtivas.add(cat.toLowerCase());
     const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
     palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
   }
@@ -143,31 +158,55 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     return Array.from(palavrasChaveAtivas).some(palavra => textoLower.includes(palavra));
   };
 
-  // 🔥 Filtrar interpretação: dividir por seções (títulos em maiúsculas) e manter apenas as relevantes
+  // 🔥 Filtrar interpretação: dividir por títulos de seção conhecidos
   let interpretacaoFiltrada = analise.interpretacao;
   if (categoriasFiltro.length > 0) {
-    // Divide por seções baseadas em títulos em CAIXA ALTA seguidos de dois pontos ou ponto
-    const secoes = analise.interpretacao.split(/(?=[A-ZÀ-Ú][A-ZÀ-Ú\s]+[:.]\s*)/);
-    const secoesFiltradas = secoes.filter(secao => {
+    // Extrair introdução (antes do primeiro título) e conclusão (após o último conteúdo)
+    const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS|LECITINA|FUNCAO DA VESICULA|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL|DOENCAS OSSEA|SEIOS|INDICE DE CRESCIMENTO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA|OBESIDADE|GRANDE FUNCAO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL))/i);
+    const intro = introMatch?.[1]?.trim() || '';
+    
+    // Dividir por títulos de seção
+    const secoesRaw = analise.interpretacao.split(/(?=^(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR E CEREBROVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO E CEREBRO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS SANGUE|LECITINA|FUNCAO DA VESICULA BILIAR|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL OSSEA|DOENCAS OSSEA REUMATOIDE|SEIOS|INDICE DE CRESCIMENTO OSSEO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA BASICA|OBESIDADE|GRANDE FUNCAO DO INTESTINO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL MASCULINA)\b)/im);
+    
+    // Filtrar seções que contêm palavras-chave dos filtros ativos
+    const secoesFiltradas = secoesRaw.filter(secao => {
       if (!secao.trim()) return false;
-      // Mantém a seção se contiver palavra-chave ativa OU se for a introdução/conclusão
-      const ehIntroducaoConclusao = /foram identificados|conclusao|recomenda-se/i.test(secao);
-      return ehIntroducaoConclusao || textoCorrespondeFiltro(secao);
+      // Extrair título da seção (primeira linha em maiúsculas)
+      const tituloMatch = secao.match(/^([A-ZÀ-Ú][A-ZÀ-Ú\s]+(?:E\s+[A-ZÀ-Ú][A-ZÀ-Ú\s]+)*)/);
+      const titulo = tituloMatch?.[1]?.trim() || '';
+      
+      // Manter se o título ou conteúdo contiver palavra-chave ativa
+      return textoCorrespondeFiltro(titulo) || textoCorrespondeFiltro(secao);
     });
-
-    if (secoesFiltradas.length > 0) {
-      interpretacaoFiltrada = secoesFiltradas.join('').trim() || analise.interpretacao;
-    }
+    
+    // Extrair conclusão (último parágrafo que contenha "Conclusao" ou "Recomenda-se")
+    const conclusaoMatch = analise.interpretacao.match(/(Conclusao[\s\S]*$)/i);
+    const conclusao = conclusaoMatch?.[1]?.trim() || '';
+    
+    // Montar interpretação filtrada
+    const partes = [];
+    if (intro) partes.push(intro);
+    if (secoesFiltradas.length > 0) partes.push(...secoesFiltradas);
+    if (conclusao) partes.push(conclusao);
+    
+    interpretacaoFiltrada = partes.join('\n\n').trim() || analise.interpretacao;
   }
 
   // 🔥 Filtrar pontos críticos: manter apenas os que correspondem às categorias
-  const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) =>
-    categoriasFiltro.some(cat => {
+  const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) => {
+    // Extrair item (antes dos dois pontos) para filtragem mais precisa
+    const itemMatch = p.match(/^·?\s*([^:：]+):/);
+    const item = itemMatch?.[1]?.trim() || p;
+    
+    return categoriasFiltro.some(cat => {
       const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
       const textoLower = p.toLowerCase();
-      return textoLower.includes(cat) || palavras.some(palavra => textoLower.includes(palavra));
-    })
-  );
+      const itemLower = item.toLowerCase();
+      // Filtrar se a categoria, o item ou qualquer palavra-chave estiver presente
+      return itemLower.includes(cat) || 
+             palavras.some(palavra => textoLower.includes(palavra) || itemLower.includes(palavra));
+    });
+  });
 
   // 🔥 Filtrar matches por categoria exata
   const matchesFiltrados = analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria));
@@ -184,7 +223,10 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
   return {
     ...analise,
     interpretacao: interpretacaoFiltrada,
-    pontosCriticos: pontosCriticosFiltrados.length > 0 ? pontosCriticosFiltrados : analise.pontosCriticos, // Fallback: mantém todos se nenhum passar
+    // 🔥 Fallback inteligente: se nenhum ponto crítico passar, mostra mensagem indicando filtragem
+    pontosCriticos: pontosCriticosFiltrados.length > 0 
+      ? pontosCriticosFiltrados 
+      : ['Nenhum ponto crítico identificado para as categorias selecionadas.'],
     matches: matchesFiltrados,
     terapias: terapiasFiltradas,
     setoresAfetados: setoresFiltrados
@@ -856,8 +898,14 @@ function App() {
                                 className="counter"
                                 onClick={() => {
                                   setGerandoPdf(true);
+
+                                  // 🔥 LOGS DE DEBUG - ABRA O CONSOLE DO NAVEGADOR (F12)
+                                  console.log('🔍 [DEBUG] Filtros ativos:', categoriasFiltro);
+                                  console.log('🔍 [DEBUG] Pontos críticos filtrados:', analiseSelecionadaData?.pontos_criticos);
+                                  console.log('🔍 [DEBUG] Setores filtrados:', analiseMotor?.setoresAfetados);
+                                  console.log('🔍 [DEBUG] Matches filtrados:', analiseMotor?.matches?.map(m => m.categoria));
+
                                   const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
-                                  // 🔥 Passa examesAnteriores para calcular evolução no PDF
                                   gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id)));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
