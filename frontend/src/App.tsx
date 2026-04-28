@@ -129,21 +129,6 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
   if (categoriasFiltro.length === 0) return analise;
 
-  // 🔥 Lista explícita de títulos de seção para divisão confiável
-  const TITULOS_SECAO = [
-    'MINERAIS', 'NIVEL DE CONSCIENCIA HUMANA', 'CARDIOVASCULAR E CEREBROVASCULAR',
-    'ACUPUNTURA', 'ALERGENOS', 'COLAGENO', 'PELE', 'VITAMINAS', 'AMINOACIDOS',
-    'SISTEMA IMUNOLOGICO', 'GINECOLOGIA', 'OLHOS', 'METAIS PESADOS', 'SISTEMA ENDOCRINO',
-    'PULSO DO CORACAO E CEREBRO', 'FUNCAO GASTROINTESTINAL', 'FUNCAO DO FIGADO',
-    'COENZIMA', 'LIPIDIOS SANGUE', 'LECITINA', 'FUNCAO DA VESICULA BILIAR',
-    'FUNCAO PULMONAR', 'SISTEMA NERVOSO', 'DENSIDADE MINERAL OSSEA',
-    'DOENCAS OSSEA REUMATOIDE', 'SEIOS', 'INDICE DE CRESCIMENTO OSSEO',
-    'IMUNIDADE HUMANA', 'FUNCAO RENAL', 'DOENCAS OSSEAS', 'AVALIACAO FISICA BASICA',
-    'OBESIDADE', 'GRANDE FUNCAO DO INTESTINO', 'TIROIDE', 'HORMONA MASCULINA',
-    'CICLO MENSTRUAL', 'ACIDO GORDO', 'FUNCAO PANCREATICA', 'ACUCAR NO SANGUE',
-    'TOXINA HUMANA', 'ACIDO GORDO ESSENCIAL', 'FUNCAO RESPIRATORIA', 'FUNCAO SEXUAL MASCULINA'
-  ];
-
   // Coletar todas as palavras-chave dos filtros ativos (incluindo a categoria em si)
   const palavrasChaveAtivas = new Set<string>();
   for (const cat of categoriasFiltro) {
@@ -161,34 +146,43 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
   // 🔥 Filtrar interpretação: dividir por títulos de seção conhecidos
   let interpretacaoFiltrada = analise.interpretacao;
   if (categoriasFiltro.length > 0) {
-    // Extrair introdução (antes do primeiro título) e conclusão (após o último conteúdo)
-    const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS|LECITINA|FUNCAO DA VESICULA|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL|DOENCAS OSSEA|SEIOS|INDICE DE CRESCIMENTO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA|OBESIDADE|GRANDE FUNCAO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL))/i);
+    // Extrair introdução (antes do primeiro título)
+    const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=\b(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR|ACUPUNTURA|ALERGENOS)\b)/i);
     const intro = introMatch?.[1]?.trim() || '';
-    
-    // Dividir por títulos de seção
-    const secoesRaw = analise.interpretacao.split(/(?=^(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR E CEREBROVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO E CEREBRO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS SANGUE|LECITINA|FUNCAO DA VESICULA BILIAR|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL OSSEA|DOENCAS OSSEA REUMATOIDE|SEIOS|INDICE DE CRESCIMENTO OSSEO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA BASICA|OBESIDADE|GRANDE FUNCAO DO INTESTINO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL MASCULINA)\b)/im);
-    
+
+    // Dividir por títulos de seção (regex com títulos embutidos)
+    const regexTitulos = /(?=\b(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR E CEREBROVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO E CEREBRO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS SANGUE|LECITINA|FUNCAO DA VESICULA BILIAR|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL OSSEA|DOENCAS OSSEA REUMATOIDE|SEIOS|INDICE DE CRESCIMENTO OSSEO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA BASICA|OBESIDADE|GRANDE FUNCAO DO INTESTINO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL MASCULINA)\b)/i;
+
+    const secoesRaw = analise.interpretacao.split(regexTitulos);
+
     // Filtrar seções que contêm palavras-chave dos filtros ativos
     const secoesFiltradas = secoesRaw.filter(secao => {
       if (!secao.trim()) return false;
-      // Extrair título da seção (primeira linha em maiúsculas)
-      const tituloMatch = secao.match(/^([A-ZÀ-Ú][A-ZÀ-Ú\s]+(?:E\s+[A-ZÀ-Ú][A-ZÀ-Ú\s]+)*)/);
+      // Extrair título da seção (primeira palavra em maiúsculas)
+      const tituloMatch = secao.match(/^\b([A-ZÀ-Ú][A-ZÀ-Ú\s]+)\b/);
       const titulo = tituloMatch?.[1]?.trim() || '';
-      
-      // Manter se o título ou conteúdo contiver palavra-chave ativa
-      return textoCorrespondeFiltro(titulo) || textoCorrespondeFiltro(secao);
+
+      // Manter se o título OU o conteúdo contiver palavra-chave ativa
+      const textoLower = secao.toLowerCase();
+      const corresponde = categoriasFiltro.some(cat => {
+        const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+        return titulo.toLowerCase().includes(cat) ||
+          palavras.some(p => textoLower.includes(p.toLowerCase()));
+      });
+
+      return corresponde;
     });
-    
-    // Extrair conclusão (último parágrafo que contenha "Conclusao" ou "Recomenda-se")
+
+    // Extrair conclusão (último parágrafo com "Conclusao" ou "Recomenda-se")
     const conclusaoMatch = analise.interpretacao.match(/(Conclusao[\s\S]*$)/i);
     const conclusao = conclusaoMatch?.[1]?.trim() || '';
-    
+
     // Montar interpretação filtrada
     const partes = [];
     if (intro) partes.push(intro);
     if (secoesFiltradas.length > 0) partes.push(...secoesFiltradas);
     if (conclusao) partes.push(conclusao);
-    
+
     interpretacaoFiltrada = partes.join('\n\n').trim() || analise.interpretacao;
   }
 
@@ -197,14 +191,14 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     // Extrair item (antes dos dois pontos) para filtragem mais precisa
     const itemMatch = p.match(/^·?\s*([^:：]+):/);
     const item = itemMatch?.[1]?.trim() || p;
-    
+
     return categoriasFiltro.some(cat => {
       const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
       const textoLower = p.toLowerCase();
       const itemLower = item.toLowerCase();
       // Filtrar se a categoria, o item ou qualquer palavra-chave estiver presente
-      return itemLower.includes(cat) || 
-             palavras.some(palavra => textoLower.includes(palavra) || itemLower.includes(palavra));
+      return itemLower.includes(cat) ||
+        palavras.some(palavra => textoLower.includes(palavra) || itemLower.includes(palavra));
     });
   });
 
@@ -224,8 +218,8 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     ...analise,
     interpretacao: interpretacaoFiltrada,
     // 🔥 Fallback inteligente: se nenhum ponto crítico passar, mostra mensagem indicando filtragem
-    pontosCriticos: pontosCriticosFiltrados.length > 0 
-      ? pontosCriticosFiltrados 
+    pontosCriticos: pontosCriticosFiltrados.length > 0
+      ? pontosCriticosFiltrados
       : ['Nenhum ponto crítico identificado para as categorias selecionadas.'],
     matches: matchesFiltrados,
     terapias: terapiasFiltradas,
