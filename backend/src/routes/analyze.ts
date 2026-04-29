@@ -60,10 +60,25 @@ function converterParaEngineBioSync(dadosProcessados: ItemProcessado[]) {
       console.log(`🔄 [CONVERT] "${item.item?.substring(0, 20)}..." → "${nomeLimpo}" = ${Math.round(percentual)}%`);
     }
 
+    // 🔥 NORMALIZAR CATEGORIA PARA GARANTIR MATCH COM PESOS EMOCIONAIS
+    let categoria = (item as any).categoria || item.sistema || 'Geral';
+    const catLower = categoria.toLowerCase().trim();
+    
+    // Mapear variações de "Nível de Consciência Humana" para "emotional"
+    if (
+      catLower.includes('consciencia') || 
+      catLower.includes('consciência') || 
+      catLower.includes('emocional') ||
+      catLower.includes('emotional') ||
+      catLower.includes('nivel de consciencia')
+    ) {
+      categoria = 'emotional';
+    }
+
     return {
       nome: nomeLimpo,
       percentual: Math.min(100, Math.max(0, Math.round(percentual))),
-      categoria: (item as any).categoria || item.sistema || 'Geral',
+      categoria, // ← Categoria normalizada
       status: item.status,
       valor_original: item.valor,
       // ✅ Campos obrigatórios para RawDeviceItem (usado pela engine)
@@ -116,8 +131,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     console.log(`✅ Parser: ${dadosProcessados.length} itens extraídos`);
 
     console.log("🔍 [DEBUG] Primeiros itens do parser:");
-    dadosProcessados.slice(0, 3).forEach((item, i: number) => {
-      console.log(`   [${i + 1}] item="${item.item}" | valor=${item.valor} | status=${item.status}`);
+    dadosProcessados.slice(0, 5).forEach((item, i: number) => {
+      console.log(`   [${i + 1}] item="${item.item}" | sistema="${item.sistema}" | valor=${item.valor} | status=${item.status}`);
     });
 
     // -------------------------------------------------------------------------
@@ -136,11 +151,11 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     if (itensValidos.length === 0) {
       console.warn("⚠️ Nenhum item válido após filtragem:");
       itemsConvertidos.slice(0, 5).forEach((i: any, idx: number) => {
-        console.log(`   [${idx + 1}] nome="${i.nome}" | length=${i.nome?.length}`);
+        console.log(`   [${idx + 1}] nome="${i.nome}" | categoria="${i.categoria}" | length=${i.nome?.length}`);
       });
     }
 
-    console.log(`📊 Amostra: ${itensValidos.slice(0, 3).map((i: any) => `${i.nome}:${i.percentual}%`).join(', ')}`);
+    console.log(`📊 Amostra: ${itensValidos.slice(0, 5).map((i: any) => `${i.nome}[${i.categoria}]:${i.percentual}%`).join(', ')}`);
 
     // -------------------------------------------------------------------------
     // 3️⃣ PROCESSAMENTO DA ENGINE BIOSYNC
@@ -160,8 +175,16 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       console.log(`📊 Scores: ${JSON.stringify(biosyncResult.category_scores)}`);
       console.log(`🚨 Alerts: ${biosyncResult.critical_alerts?.length || 0} críticos`);
       
+      // 🔥 DEBUG: Verificar matches retornados
       if (biosyncResult.matches?.length) {
-        console.log(`📈 [Engine] matches disponíveis para histórico: ${biosyncResult.matches.length} itens`);
+        console.log(`📈 [Engine] matches disponíveis: ${biosyncResult.matches.length} itens`);
+        console.log(`📈 [Engine] Amostra de matches:`, JSON.stringify(biosyncResult.matches.slice(0, 3), null, 2));
+        
+        // Verificar se os matches têm scores calculados
+        const matchesComScore = biosyncResult.matches.filter((m: any) => typeof m.score === 'number');
+        console.log(`📈 [Engine] Matches com score calculado: ${matchesComScore.length}/${biosyncResult.matches.length}`);
+      } else {
+        console.warn("⚠️ [Engine] Nenhum match retornado - item_scores ficará vazio");
       }
 
     } catch (engineError: any) {
@@ -200,21 +223,32 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     console.log(`✅ Diagnóstico: ${diagnostico.problemas.length} problemas | ${plano_terapeutico.terapias.length} terapias`);
 
     // -------------------------------------------------------------------------
-    // 🔥 NOVO: MAPEAR MATCHES PARA ITEM_SCORES (ESTRUTURA ESPERADA PELO FRONTEND)
+    // 🔥 MAPEAR MATCHES PARA ITEM_SCORES (ESTRUTURA ESPERADA PELO FRONTEND)
     // -------------------------------------------------------------------------
-    const itemScores = (biosyncResult.matches || []).map((m: any) => ({
-      item: m.itemBase || m.itemExame || 'Item desconhecido',
-      categoria: m.categoria || 'Outros',
-      score_atual: typeof m.score === 'number' ? m.score : 50, // Usa score calculado com fallback emocional
-      score_anterior: null, // Será preenchido quando houver histórico comparável
-      delta: 0,
-      trend: 'novo' as const,
-      impacto: m.impacto || m.descricaoTecnica || ''
-    }));
+    const itemScores = (biosyncResult.matches || []).map((m: any) => {
+      // Garantir que score seja número válido
+      const scoreCalculado = typeof m.score === 'number' && !isNaN(m.score) ? m.score : 50;
+      
+      return {
+        item: m.itemBase || m.itemExame || 'Item desconhecido',
+        categoria: m.categoria || 'Outros',
+        score_atual: scoreCalculado,
+        score_anterior: null,
+        delta: 0,
+        trend: 'novo' as const,
+        impacto: m.impacto || m.descricaoTecnica || ''
+      };
+    });
 
     console.log(`📊 [DEBUG] item_scores gerados: ${itemScores.length} itens`);
     if (itemScores.length > 0) {
-      console.log(`   Amostra: ${JSON.stringify(itemScores.slice(0, 2))}`);
+      // Log de amostra com scores variados para confirmar cálculo
+      const amostra = itemScores.slice(0, 5).map(is => `${is.item}[${is.categoria}]:${is.score_atual}`);
+      console.log(`   Amostra: [${amostra.join(', ')}]`);
+      
+      // Verificar distribuição de scores
+      const scoresUnicos = [...new Set(itemScores.map(is => is.score_atual))];
+      console.log(`   Scores únicos encontrados: [${scoresUnicos.join(', ')}]`);
     }
 
     // -------------------------------------------------------------------------
