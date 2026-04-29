@@ -292,7 +292,7 @@ function extrairGeneroPaciente(nomePaciente: string): 'masculino' | 'feminino' |
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-   AiStructuredData;
+  data: AiStructuredData;  // ← ✅ CORREÇÃO: nome da prop primeiro, tipo depois
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -454,7 +454,7 @@ function exameRowToAiData(
   terapias: TerapiaRow[],
   terapiasManuais?: string,
   filtrosAtivos?: string[]
-): { AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {
+): { data: AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {  // ← ✅ CORREÇÃO: nome da prop primeiro
   const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
 
   // 🔥 APLICA FILTROS NA ANÁLISE ANTES DE CONVERTER
@@ -509,7 +509,7 @@ function exameRowToAiData(
     justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${setoresParaJustificativa.join(", ") || "nenhum"}.`,
   };
 
-  return { analiseData, pacienteGenero };
+  return { data: analiseData, pacienteGenero };  // ← ✅ CORREÇÃO: nome da prop primeiro
 }
 
 // ==============================
@@ -519,7 +519,7 @@ function exameRowToAiData(
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-   AiStructuredData,  // ← 3º parâmetro
+  data: AiStructuredData,  // ← ✅ CORREÇÃO: nome da prop primeiro, tipo depois
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
@@ -543,7 +543,7 @@ function buildRelatorioData(
   return {
     clientName: paciente || "Cliente",
     createdAt: new Date(row.data_exame || row.created_at),
-    interpretacao: data.interpretacao || "",
+    interpretacao: data.interpretacao || "",  // ← ✅ CORREÇÃO: 'data' agora é reconhecido
     pontos_criticos: data.pontos_criticos ?? [],
     plano_terapeutico: data.plano_terapeutico,
     frequencia_lunara: data.frequencia_lunara || "",
@@ -657,9 +657,9 @@ function App() {
   // 🔥 CORREÇÃO: analiseSelecionadaData declarado DENTRO da função App() (CORRETO)
   const analiseResult = analiseSelecionada
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
-    : { analiseData: null, pacienteGenero: undefined };
+    : { data: null, pacienteGenero: undefined };  // ← ✅ CORREÇÃO: nome da prop 'data'
 
-  const analiseSelecionadaData = analiseResult.analiseData;
+  const analiseSelecionadaData = analiseResult.data;  // ← ✅ CORREÇÃO: acessar .data
   const generoSelecionado = analiseResult.pacienteGenero;
 
   const analiseMotorRaw = analiseSelecionada
@@ -676,7 +676,7 @@ function App() {
     ? buildRelatorioData(
       analiseSelecionada,
       pacienteSelecionado || clientName.trim() || "Cliente",
-      analiseSelecionadaData ?? {
+      analiseSelecionadaData ?? {  // ← ✅ CORREÇÃO: analiseSelecionadaData é do tipo AiStructuredData
         interpretacao: "",
         pontos_criticos: [],
         plano_terapeutico: { tipo: "mensal", terapias: [] },
@@ -1007,7 +1007,7 @@ function App() {
                       )}
 
                       <SecaoPlanoTerapeutico
-                        data={analiseSelecionadaData}
+                        data={analiseSelecionadaData}  // ← ✅ CORREÇÃO: prop 'data'
                         editavel={terapiasEditavel}
                         onChangeEditavel={setTerapiasEditavel}
                         ocultas={terapiasOcultas}
@@ -1233,7 +1233,7 @@ function App() {
                 )}
 
                 <SecaoPlanoTerapeutico
-                  data={analiseSelecionadaData}
+                  data={analiseSelecionadaData}  // ← ✅ CORREÇÃO: prop 'data'
                   editavel={terapiasEditavel}
                   onChangeEditavel={setTerapiasEditavel}
                   ocultas={terapiasOcultas}
