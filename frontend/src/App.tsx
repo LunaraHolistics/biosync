@@ -221,7 +221,8 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
   };
 }
 
-// 🔥 NOVO: CÁLCULO DE EVOLUÇÃO ENTRE EXAMES
+// ==============================
+// 🔥 NOVO: CÁLCULO DE EVOLUÇÃO ENTRE EXAMES COM FALLBACK DE SCORES DO BANCO
 // ==============================
 
 function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
@@ -232,10 +233,39 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
   return 'estavel';
 }
 
+// 🔥 NOVO: Função para extrair scores do indice_biosync como fallback
+function extrairScoresDoBanco(row: ExameRow): Map<string, number> {
+  const scoresMap = new Map<string, number>();
+  
+  try {
+    const indiceBiosync = row.indice_biosync;
+    if (indiceBiosync && typeof indiceBiosync === 'object' && 'item_scores' in indiceBiosync) {
+      const itemScores = (indiceBiosync as any).item_scores;
+      if (Array.isArray(itemScores)) {
+        for (const item of itemScores) {
+          if (item?.item && typeof item.score_atual === 'number') {
+            // Normalizar nome para comparação
+            const nomeNormalizado = item.item.trim().replace(/[:：]$/, '').toLowerCase();
+            scoresMap.set(nomeNormalizado, item.score_atual);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Erro ao extrair scores do banco:', e);
+  }
+  
+  return scoresMap;
+}
+
 function gerarItemScoresComEvolucao(
   itensAtuais: Array<{ item: string; categoria: string; score?: number; impacto: string }>,
-  examesAnteriores: ExameRow[]
+  examesAnteriores: ExameRow[],
+  rowAtual?: ExameRow // ← NOVO: Para fallback de scores do banco
 ): ItemScoreEvolucao[] {
+  // 🔥 Fallback: extrair scores do banco se disponíveis
+  const scoresDoBanco = rowAtual ? extrairScoresDoBanco(rowAtual) : new Map<string, number>();
+  
   // Busca o exame anterior mais recente que tenha item_scores
   const exameAnterior = examesAnteriores
     .filter(e => e.indice_biosync?.item_scores && Array.isArray(e.indice_biosync.item_scores))
@@ -243,15 +273,22 @@ function gerarItemScoresComEvolucao(
 
   // ✅ Se não houver exame anterior com scores, retorna itens atuais sem comparação
   if (!exameAnterior) {
-    return itensAtuais.map(atual => ({
-      item: atual.item,
-      categoria: atual.categoria,
-      score_atual: atual.score ?? 50,
-      score_anterior: null,
-      delta: 0,
-      trend: 'novo' as const,
-      impacto: atual.impacto
-    }));
+    return itensAtuais.map(atual => {
+      // 🔥 Usar score do banco se disponível, senão fallback para 50
+      const nomeNormalizado = atual.item.trim().replace(/[:：]$/, '').toLowerCase();
+      const scoreDoBanco = scoresDoBanco.get(nomeNormalizado);
+      const scoreFinal = atual.score ?? scoreDoBanco ?? 50;
+      
+      return {
+        item: atual.item,
+        categoria: atual.categoria,
+        score_atual: scoreFinal,
+        score_anterior: null,
+        delta: 0,
+        trend: 'novo' as const,
+        impacto: atual.impacto
+      };
+    });
   }
 
   const itensAnteriores = (exameAnterior?.indice_biosync?.item_scores as ItemScoreEvolucao[] | undefined) || [];
@@ -260,7 +297,12 @@ function gerarItemScoresComEvolucao(
   return itensAtuais.map(atual => {
     const chave = atual.item.toLowerCase();
     const anterior = mapaAnterior.get(chave);
-    const scoreAtual = atual.score ?? 50;
+    
+    // 🔥 Prioridade: score do motor > score do banco > fallback 50
+    const nomeNormalizado = atual.item.trim().replace(/[:：]$/, '').toLowerCase();
+    const scoreDoBanco = scoresDoBanco.get(nomeNormalizado);
+    const scoreAtual = atual.score ?? scoreDoBanco ?? 50;
+    
     const scoreAnterior = anterior?.score_atual ?? null;
     const delta = scoreAnterior !== null ? scoreAtual - scoreAnterior : 0;
     const trend = calcularTendenciaItem(scoreAtual, scoreAnterior);
@@ -292,7 +334,7 @@ function extrairGeneroPaciente(nomePaciente: string): 'masculino' | 'feminino' |
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-  data: AiStructuredData;  // ← ✅ CORREÇÃO: nome da prop primeiro, tipo depois
+  data: AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -454,7 +496,7 @@ function exameRowToAiData(
   terapias: TerapiaRow[],
   terapiasManuais?: string,
   filtrosAtivos?: string[]
-): { data: AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {  // ← ✅ CORREÇÃO: nome da prop primeiro
+): { data: AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {
   const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
 
   // 🔥 APLICA FILTROS NA ANÁLISE ANTES DE CONVERTER
@@ -509,11 +551,11 @@ function exameRowToAiData(
     justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${setoresParaJustificativa.join(", ") || "nenhum"}.`,
   };
 
-  return { data: analiseData, pacienteGenero };  // ← ✅ CORREÇÃO: nome da prop primeiro
+  return { data: analiseData, pacienteGenero };
 }
 
 // ==============================
-// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM item_scores, EVOLUÇÃO E GÊNERO
+// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM FALLBACK DE SCORES DO BANCO
 // ==============================
 function buildRelatorioData(
   row: ExameRow,
@@ -530,7 +572,7 @@ function buildRelatorioData(
   // 🔥 Calcula item_scores com evolução se houver exames anteriores
   let itemScoresEvolucao: ItemScoreEvolucao[] | undefined;
   
-  // Verificar se motor tem matches COM scores
+  // Verificar se motor tem matches
   if (motor?.matches && motor.matches.length > 0) {
     console.log('📊 [buildRelatorioData] Motor matches:', motor.matches.length);
     console.log('📊 [buildRelatorioData] Amostra:', motor.matches.slice(0, 2));
@@ -538,16 +580,43 @@ function buildRelatorioData(
     const itensAtuais = motor.matches.map((m: any) => ({
       item: m.itemBase,
       categoria: m.categoria,
-      score: m.score ?? 50,  // ← Aqui deve vir o score calculado!
+      score: m.score, // ← Pode ser undefined, fallback será aplicado em gerarItemScoresComEvolucao
       impacto: m.impacto || 'Desequilíbrio bioenergético identificado'
     }));
     
-    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || []);
+    // 🔥 PASSAR rowAtual para fallback de scores do banco
+    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || [], row);
     
     console.log('📊 [buildRelatorioData] item_scores gerados:', itemScoresEvolucao?.length);
-    console.log('📊 [buildRelatorioData] Amostra:', itemScoresEvolucao?.slice(0, 2));
+    console.log('📊 [buildRelatorioData] Amostra de scores:', itemScoresEvolucao?.slice(0, 3).map(is => ({
+      item: is.item,
+      score: is.score_atual,
+      trend: is.trend
+    })));
   } else {
     console.warn('⚠️ [buildRelatorioData] motor.matches vazio ou undefined');
+    
+    // 🔥 Fallback extremo: tentar criar item_scores diretamente do indice_biosync
+    try {
+      const indiceBiosync = row.indice_biosync;
+      if (indiceBiosync && typeof indiceBiosync === 'object' && 'item_scores' in indiceBiosync) {
+        const itemScoresDoBanco = (indiceBiosync as any).item_scores;
+        if (Array.isArray(itemScoresDoBanco) && itemScoresDoBanco.length > 0) {
+          console.log('📊 [buildRelatorioData] Usando fallback: scores direto do banco');
+          itemScoresEvolucao = itemScoresDoBanco.map((is: any) => ({
+            item: is.item,
+            categoria: is.categoria || 'geral',
+            score_atual: is.score_atual ?? 50,
+            score_anterior: is.score_anterior ?? null,
+            delta: is.delta ?? 0,
+            trend: is.trend ?? 'novo',
+            impacto: is.impacto || 'Desequilíbrio bioenergético identificado'
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ [buildRelatorioData] Erro no fallback extremo:', e);
+    }
   }
 
   return {
@@ -667,9 +736,9 @@ function App() {
   // 🔥 CORREÇÃO: analiseSelecionadaData declarado DENTRO da função App() (CORRETO)
   const analiseResult = analiseSelecionada
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
-    : { data: null, pacienteGenero: undefined };  // ← ✅ CORREÇÃO: nome da prop 'data'
+    : { data: null, pacienteGenero: undefined };
 
-  const analiseSelecionadaData = analiseResult.data;  // ← ✅ CORREÇÃO: acessar .data
+  const analiseSelecionadaData = analiseResult.data;
   const generoSelecionado = analiseResult.pacienteGenero;
 
   const analiseMotorRaw = analiseSelecionada
@@ -682,7 +751,6 @@ function App() {
     : analiseMotorRaw;
 
   // 🔥 PASSA categoriasFiltro, examesAnteriores E pacienteGenero PARA buildRelatorioData
-
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -702,22 +770,14 @@ function App() {
     )
     : null;
 
-  // 🔥 DEBUG: Verificar se item_scores estão sendo gerados
-  if (relatorioDataHistorico) {
-    console.log('📊 [DEBUG] relatorioDataHistorico.item_scores:', {
-      count: relatorioDataHistorico.item_scores?.length || 0,
-      amostra: relatorioDataHistorico.item_scores?.slice(0, 3),
-      analiseMotorMatches: analiseMotor?.matches?.length || 0,
-      examesAnteriores: examesPaciente.filter(e => e.id !== analiseSelecionada?.id).length
-    });
-
-    // Verificar se matches têm scores
-    if (analiseMotor?.matches) {
-      const matchesComScore = analiseMotor.matches.filter(m => m.score !== undefined && m.score !== null);
-      console.log('📊 [DEBUG] Matches com score:', `${matchesComScore.length}/${analiseMotor.matches.length}`);
-      console.log('📊 [DEBUG] Amostra de matches:', analiseMotor.matches.slice(0, 3));
+  // 🔥 DEBUG AVANÇADO: Verificar scores no console
+  useEffect(() => {
+    if (relatorioDataHistorico?.item_scores) {
+      const scoresUnicos = [...new Set(relatorioDataHistorico.item_scores.map(is => is.score_atual))];
+      console.log('📊 [DEBUG FINAL] Scores únicos no PDF:', scoresUnicos.sort((a, b) => a - b));
+      console.log('📊 [DEBUG FINAL] Itens com score < 60:', relatorioDataHistorico.item_scores.filter(is => is.score_atual < 60).map(is => `${is.item}: ${is.score_atual}`));
     }
-  }
+  }, [relatorioDataHistorico]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -1035,7 +1095,7 @@ function App() {
                       )}
 
                       <SecaoPlanoTerapeutico
-                        data={analiseSelecionadaData}  // ← ✅ CORREÇÃO: prop 'data'
+                        data={analiseSelecionadaData}
                         editavel={terapiasEditavel}
                         onChangeEditavel={setTerapiasEditavel}
                         ocultas={terapiasOcultas}
@@ -1261,7 +1321,7 @@ function App() {
                 )}
 
                 <SecaoPlanoTerapeutico
-                  data={analiseSelecionadaData}  // ← ✅ CORREÇÃO: prop 'data'
+                  data={analiseSelecionadaData}
                   editavel={terapiasEditavel}
                   onChangeEditavel={setTerapiasEditavel}
                   ocultas={terapiasOcultas}
