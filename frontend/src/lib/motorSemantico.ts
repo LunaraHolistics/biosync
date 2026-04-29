@@ -346,8 +346,7 @@ function calcularScoreParaItem(
   itemBase: string,
   categoria: string,
   gravidade: Gravidade,
-  base: BaseAnaliseSaudeRow[]
-): number {
+  ): number {
   // 1. Fallback: usar pesos emocionais padrão se for categoria emotional
   if (categoria.toLowerCase() === 'emotional' || categoria.toLowerCase() === 'emocional') {
     const itemNorm = normalizarTexto(itemBase);
