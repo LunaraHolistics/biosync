@@ -33,29 +33,6 @@ type AiStructuredData = {
   diagnostico?: Diagnostico;
 };
 
-// 🔥 NOVO: Tipagem para resposta de debug da rota /api/analyze
-type AnalyzeDebugResponse = {
-  success: boolean;
-  data: AiStructuredData;
-  meta: {
-    total_items: number;
-    valid_items: number;
-    processing_time_ms: number;
-    modo: string;
-    request_id: string;
-  };
-  debug: {
-    parser_ok: boolean;
-    engine_ok: boolean;
-    saved: boolean;
-    matches_count: number;
-    item_scores_count: number;
-    scores_varied: boolean;
-    html_fallback_used: boolean;
-    [key: string]: any;
-  };
-};
-
 // --- Fallback ---
 function fallbackData(): AiStructuredData {
   return {
@@ -333,11 +310,11 @@ app.get("/api/exames", async (_, res) => {
 app.use(uploadRouter);
 app.use(analyzeRoute);
 
-// 🔥 HEALTH CHECK EXPANDIDO
+// 🔥 HEALTH CHECK EXPANDIDO (CORRIGIDO)
 app.get("/health", async (req, res) => {
   try {
-    // Testar conexão com Supabase
-    const {  healthCheck, error } = await supabase
+    // Testar conexão com Supabase - CORREÇÃO: usar .data
+    const { data, error } = await supabase
       .from('exames')
       .select('id')
       .limit(1);
@@ -358,46 +335,6 @@ app.get("/health", async (req, res) => {
       status: "error", 
       error: err.message,
       timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// 🔥 ROTA DE DEBUG PARA TESTAR /api/analyze DIRETAMENTE
-app.post("/api/debug/analyze", async (req: Request, res: Response) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  console.log(`🔧 [${requestId}] Rota de debug acionada`);
-  
-  try {
-    // Validar payload
-    const { valido, erros } = validarPayloadAnalyze(req.body);
-    if (!valido) {
-      console.warn(`⚠️ [${requestId}] Payload inválido:`, erros);
-      return res.status(400).json({ 
-        error: "Payload inválido", 
-        erros,
-        requestId 
-      });
-    }
-    
-    // Encaminhar para a rota principal de análise
-    // Isso permite testar /api/analyze com logs detalhados
-    req.path = '/api/analyze';
-    req.url = '/api/analyze';
-    
-    // Chamar o router de analyze manualmente
-    analyzeRoute.handle(req, res, (err: any) => {
-      if (err) {
-        console.error(`❌ [${requestId}] Erro no debug:`, err);
-        res.status(500).json({ error: err.message, requestId });
-      }
-    });
-    
-  } catch (error: any) {
-    console.error(`❌ [${requestId}] Erro no debug:`, error);
-    res.status(500).json({ 
-      error: "Erro interno no debug", 
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      requestId 
     });
   }
 });
@@ -431,7 +368,6 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Backend BioSync rodando em http://localhost:${PORT}`);
   console.log(`🔗 Endpoint: http://localhost:${PORT}/api/analyze`);
-  console.log(`🔧 Debug: http://localhost:${PORT}/api/debug/analyze`);
   console.log(`🏥 Health: http://localhost:${PORT}/health`);
 });
 
