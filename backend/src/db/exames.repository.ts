@@ -50,6 +50,8 @@ export async function atualizarExameComBioSync(
       impacto: string;
       impacto_fitness?: ItemScoreEvolucao['impacto_fitness'];
     }>;
+    // 🔥 NOVO: item_scores pré-calculados (opcional - se já vierem do analyze.ts)
+    item_scores?: ItemScoreEvolucao[];
   }
 ) {
   try {
@@ -60,8 +62,8 @@ export async function atualizarExameComBioSync(
     console.log(`📊 [Supabase JS] category_scores: ${JSON.stringify(biosyncResult.category_scores)}`);
     console.log(`🚨 [Supabase JS] critical_alerts count: ${biosyncResult.critical_alerts?.length || 0}`);
 
-    // 🔥 NOVO: Calcular item_scores para histórico de evolução
-    const itemScores = biosyncResult.matches?.map((m) => ({
+    // 🔥 NOVO: Calcular item_scores para histórico de evolução (se não vierem prontos)
+    const itemScores = biosyncResult.item_scores || biosyncResult.matches?.map((m) => ({
       item: m.itemBase,
       categoria: m.categoria,
       score: m.score ?? 50, // Se não tiver score calculado, usa 50 como base neutra

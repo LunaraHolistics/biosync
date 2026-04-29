@@ -348,16 +348,7 @@ function calcularScoreParaItem(
   gravidade: Gravidade,
   base: BaseAnaliseSaudeRow[]
 ): number {
-  // 1. Tentar encontrar na base com peso definido
-  const itemNaBase = base.find(b => 
-    normalizarTexto(decodificarMojibake(b.item ?? "")) === normalizarTexto(itemBase)
-  );
-  
-  if (itemNaBase && typeof itemNaBase.peso === 'number' && itemNaBase.peso > 0) {
-    return itemNaBase.peso;
-  }
-
-  // 2. Fallback: usar pesos emocionais padrão se for categoria emotional
+  // 1. Fallback: usar pesos emocionais padrão se for categoria emotional
   if (categoria.toLowerCase() === 'emotional' || categoria.toLowerCase() === 'emocional') {
     const itemNorm = normalizarTexto(itemBase);
     for (const [key, peso] of Object.entries(PESOS_EMOCIONAIS_PADRAO)) {
@@ -369,7 +360,7 @@ function calcularScoreParaItem(
     return 50;
   }
 
-  // 3. Fallback genérico baseado na gravidade
+  // 2. Fallback genérico baseado na gravidade
   switch (gravidade) {
     case 'critica': return 25;
     case 'moderada': return 40;
