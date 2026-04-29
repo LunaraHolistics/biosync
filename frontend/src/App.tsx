@@ -241,23 +241,27 @@ function gerarItemScoresComEvolucao(
     .filter(e => e.indice_biosync?.item_scores && Array.isArray(e.indice_biosync.item_scores))
     .sort((a, b) => new Date(b.data_exame || b.created_at).getTime() - new Date(a.data_exame || b.created_at).getTime())[0];
 
-  // ✅ Type assertion segura para o array de item_scores
-  const itensAnteriores = (exameAnterior?.indice_biosync?.item_scores as ItemScoreEvolucao[] | undefined) || [];
+  // ✅ Se não houver exame anterior com scores, retorna itens atuais sem comparação
+  if (!exameAnterior) {
+    return itensAtuais.map(atual => ({
+      item: atual.item,
+      categoria: atual.categoria,
+      score_atual: atual.score ?? 50,
+      score_anterior: null,
+      delta: 0,
+      trend: 'novo' as const,
+      impacto: atual.impacto
+    }));
+  }
 
-  const mapaAnterior = new Map(
-    itensAnteriores.map((i: ItemScoreEvolucao) => [i.item.toLowerCase(), i])
-  );
+  const itensAnteriores = (exameAnterior?.indice_biosync?.item_scores as ItemScoreEvolucao[] | undefined) || [];
+  const mapaAnterior = new Map(itensAnteriores.map((i: ItemScoreEvolucao) => [i.item.toLowerCase(), i]));
 
   return itensAtuais.map(atual => {
     const chave = atual.item.toLowerCase();
     const anterior = mapaAnterior.get(chave);
-
-    // ✅ Score atual vem do input (tem propriedade 'score')
     const scoreAtual = atual.score ?? 50;
-
-    // ✅ FIX: Score anterior vem do mapa (ItemScoreEvolucao tem 'score_atual', não 'score')
     const scoreAnterior = anterior?.score_atual ?? null;
-
     const delta = scoreAnterior !== null ? scoreAtual - scoreAnterior : 0;
     const trend = calcularTendenciaItem(scoreAtual, scoreAnterior);
 

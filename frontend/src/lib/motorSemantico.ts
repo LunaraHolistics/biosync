@@ -38,6 +38,7 @@ export type MatchClinico = {
   setores: string[];
   scoreConfianca: number;
   gravidade: Gravidade;
+  score?: number; // 🔥 NOVO: score calculado para item_scores
 };
 
 export type TerapiaSugerida = TerapiaRow & {
@@ -50,10 +51,10 @@ export type AnaliseCompleta = {
     nome: string;
     sexo: string;
     idade: string;
-    peso: string;           // 🔥 NOVO
-    altura: string;         // 🔥 NOVO
-    imc: number | null;     // 🔥 NOVO
-    classificacaoImc: string; // 🔥 NOVO
+    peso: string;
+    altura: string;
+    imc: number | null;
+    classificacaoImc: string;
     figura: string;
     periodoTeste: string;
   };
@@ -64,10 +65,23 @@ export type AnaliseCompleta = {
   terapias: TerapiaSugerida[];
   scoreGeral: number;
   statusScore: string;
-  percentual: number; // 🔥 NOVO
+  percentual: number;
   setoresAfetados: string[];
   resumoCategorias: Record<string, { total: number; criticos: number }>;
   frequencia_lunara: string;
+};
+
+// ==============================
+// 🔥 PESOS EMOCIONAIS PADRÃO (FALLBACK PARA ITENS SEM BASE)
+// ==============================
+const PESOS_EMOCIONAIS_PADRAO: Record<string, number> = {
+  'amor': 75, 'alegria': 70, 'paz': 65, 'iluminismo': 50,
+  'vergonha': 30, 'culpa': 25, 'apatia': 20, 'medo': 35,
+  'desejo': 45, 'raiva': 40, 'orgulho': 55, 'coragem': 60,
+  'neutralidade': 50, 'vontade': 65, 'aceitacao': 70, 'razao': 75,
+  'tristeza': 35, 'ansiedade': 30, 'depressao': 25, 'estresse': 35,
+  'frustracao': 40, 'inseguranca': 35, 'solidao': 30, 'luto': 25,
+  'confianca': 70, 'esperanca': 75, 'gratidao': 80, 'compaixao': 75
 };
 
 // ==============================
@@ -134,7 +148,6 @@ export function parsearPaciente(nomePaciente: string): AnaliseCompleta["paciente
   const sexo = extrair(/Sexo:\s*([^\dI]+)/);
   const idade = extrair(/Idade:\s*(\d+)/);
 
-  // 🔥 EXTRAÇÃO DE PESO, ALTURA E IMC
   const pesoStr = extrair(/Peso:\s*([\d.,]+)\s*kg/i) || "";
   const alturaStr = extrair(/Altura:\s*([\d.,]+)\s*m/i) || "";
 
@@ -197,7 +210,6 @@ function classificarGravidade(resultado: string): {
 // 5. EXTRATOR DE ITENS ALTERADOS (CORRIGIDO)
 // ==============================
 
-// 🔥 Agora decodifica mojibake ANTES de classificar
 function ehNormal(resultado: string): boolean {
   const decodificado = decodificarMojibake(resultado);
   const lower = decodificado.toLowerCase().trim();
@@ -298,7 +310,7 @@ export function extrairItensAlterados(
 }
 
 // ==============================
-// 6. MATCH SEMÂNTICO COM BASE CLÍNICA
+// 6. MATCH SEMÂNTICO COM BASE CLÍNICA (CORRIGIDO)
 // ==============================
 
 function calcularSimilaridade(
@@ -327,6 +339,44 @@ function calcularSimilaridade(
   if (total === 0) return 0;
 
   return Math.round((comuns / total) * 100);
+}
+
+// 🔥 FUNÇÃO AUXILIAR: Calcular score para um item (com fallback emocional)
+function calcularScoreParaItem(
+  itemBase: string,
+  categoria: string,
+  gravidade: Gravidade,
+  base: BaseAnaliseSaudeRow[]
+): number {
+  // 1. Tentar encontrar na base com peso definido
+  const itemNaBase = base.find(b => 
+    normalizarTexto(decodificarMojibake(b.item ?? "")) === normalizarTexto(itemBase)
+  );
+  
+  if (itemNaBase && typeof itemNaBase.peso === 'number' && itemNaBase.peso > 0) {
+    return itemNaBase.peso;
+  }
+
+  // 2. Fallback: usar pesos emocionais padrão se for categoria emotional
+  if (categoria.toLowerCase() === 'emotional' || categoria.toLowerCase() === 'emocional') {
+    const itemNorm = normalizarTexto(itemBase);
+    for (const [key, peso] of Object.entries(PESOS_EMOCIONAIS_PADRAO)) {
+      if (itemNorm.includes(key) || key.includes(itemNorm)) {
+        return peso;
+      }
+    }
+    // Default para emocional sem match específico
+    return 50;
+  }
+
+  // 3. Fallback genérico baseado na gravidade
+  switch (gravidade) {
+    case 'critica': return 25;
+    case 'moderada': return 40;
+    case 'leve': return 60;
+    case 'reducao': return 55;
+    default: return 50;
+  }
 }
 
 function buscarMatches(
@@ -377,9 +427,18 @@ function buscarMatches(
         scoreFinal >= 50
       ) {
         melhorScore = scoreFinal;
+        
+        // 🔥 Calcular score para este match (com fallback emocional)
+        const scoreCalculado = calcularScoreParaItem(
+          b.item ?? item.item,
+          b.categoria ?? 'Outros',
+          item.gravidade,
+          base
+        );
+
         melhorMatch = {
           itemExame: item.item,
-          itemBase: b.item,
+          itemBase: b.item ?? item.item,
           categoria: b.categoria || "Outros",
           descricaoTecnica: b.descricao_tecnica || "",
           impacto: b.impacto || "",
@@ -388,11 +447,32 @@ function buscarMatches(
           ),
           scoreConfianca: scoreFinal,
           gravidade: item.gravidade,
+          score: scoreCalculado, // 🔥 INCLUÍDO para item_scores
         };
       }
     }
 
-    if (melhorMatch) {
+    // 🔥 Se não encontrou match na base, cria um match genérico com score fallback
+    if (!melhorMatch) {
+      const scoreFallback = calcularScoreParaItem(
+        item.item,
+        'Outros',
+        item.gravidade,
+        base
+      );
+
+      matches.push({
+        itemExame: item.item,
+        itemBase: item.item,
+        categoria: "Outros",
+        descricaoTecnica: "",
+        impacto: item.resultadoOriginal,
+        setores: [],
+        scoreConfianca: 50,
+        gravidade: item.gravidade,
+        score: scoreFallback, // 🔥 INCLUÍDO para item_scores
+      });
+    } else {
       matches.push(melhorMatch);
     }
   }
@@ -403,7 +483,7 @@ function buscarMatches(
 }
 
 // ==============================
-// 7. GERADOR DE INTERPRETAÇÃO (SWEET SPOT: Rico, mas Escaneável)
+// 7. GERADOR DE INTERPRETAÇÃO
 // ==============================
 function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): string {
   if (matches.length === 0) {
@@ -412,7 +492,6 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
 
   const secoes: string[] = [];
 
-  // 1. RESUMO INICIAL (Contextualização)
   const setoresFormatados = setoresTop.length > 1
     ? setoresTop.slice(0, -1).join(", ") + " e " + setoresTop[setoresTop.length - 1]
     : setoresTop[0] || "geral";
@@ -421,8 +500,6 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
     `Foram identificados desequilíbrios relevantes com maior impacto nos sistemas ${setoresFormatados}. A análise abaixo detalha os principais pontos de atenção agrupados por área.`
   );
 
-  // 2. DETALHAMENTO POR CATEGORIA (O coração do relatório)
-  // Agrupa os matches, ignorando a caixa "Outros" genérica no texto principal
   const grupos: Record<string, MatchClinico[]> = {};
   for (const m of matches) {
     const cat = m.categoria;
@@ -431,7 +508,6 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
     grupos[cat].push(m);
   }
 
-  // Pega as top 5 categorias com mais ocorrências
   const categoriasTop = Object.entries(grupos)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 5);
@@ -439,7 +515,6 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
   for (const [categoria, itens] of categoriasTop) {
     let textoCat = `\n► ${categoria.toUpperCase()}\n`;
 
-    // Pega os top 3 itens mais graves/relevantes DENTRO desta categoria
     const itensRelevantes = itens
       .sort((a, b) => b.scoreConfianca - a.scoreConfianca)
       .slice(0, 3);
@@ -447,7 +522,6 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
     for (const item of itensRelevantes) {
       const gravidadeTag = (item.gravidade === "critica" || item.gravidade === "moderada") ? "⚠️ " : "• ";
 
-      // Se tiver impacto na base, mostra. Senão, mostra o resultado do exame.
       const detalhe = item.impacto
         ? `${item.itemBase}: ${item.impacto}`
         : `${item.itemBase} apresentando alteração (${item.gravidade}).`;
@@ -458,7 +532,6 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
     secoes.push(textoCat);
   }
 
-  // 3. FECHAMENTO CLÍNICO (Call to Action)
   secoes.push(
     `\nConclusão: Recomenda-se abordagem terapêutica integrativa focada no reequilíbrio dos sistemas supracitados, priorizando a modulação do estresse fisiológico e a correção dos desvios identificados.`
   );
@@ -467,12 +540,11 @@ function gerarInterpretacao(matches: MatchClinico[], setoresTop: string[]): stri
 }
 
 // ==============================
-// 8. GERADOR DE PONTOS CRÍTICOS (Ajustado para 7)
+// 8. GERADOR DE PONTOS CRÍTICOS
 // ==============================
 function gerarPontosCriticos(matches: MatchClinico[], itensAlterados: ItemAlterado[]): string[] {
   const pontos: string[] = [];
 
-  // Prioriza o que tem descrição de impacto e é grave
   const comImpacto = matches
     .filter((m) => m.impacto)
     .sort((a, b) => {
@@ -481,12 +553,10 @@ function gerarPontosCriticos(matches: MatchClinico[], itensAlterados: ItemAltera
       return pb - pa;
     });
 
-  // Aumentei para 7 para dar mais "carne" ao relatório sem explodir
   for (const m of comImpacto.slice(0, 7)) {
     pontos.push(`${m.itemBase}: ${m.impacto}`);
   }
 
-  // Itens sem match na base, mas que estão muito alterados
   const semMatch = itensAlterados.filter(
     (ia) => !matches.some((m) => m.itemExame === ia.item) && ia.scoreGravidade >= 3
   );
@@ -506,7 +576,6 @@ function sugerirTerapias(
   matches: MatchClinico[],
   terapias: TerapiaRow[]
 ): TerapiaSugerida[] {
-  // 🔥 Coletar TODOS os setores dos itens alterados (não só dos matches)
   const setoresComPeso = new Map<string, number>();
 
   for (const m of matches) {
@@ -524,8 +593,6 @@ function sugerirTerapias(
     }
   }
 
-  // 🔥 Se não achou nada pelos matches, usar setores genéricos
-  // 🚫 Se não há setores, não sugerir terapias corretivas
   if (setoresComPeso.size === 0) {
     return [];
   }
@@ -535,7 +602,6 @@ function sugerirTerapias(
   for (const terapia of terapias) {
     if (!terapia.ativo) continue;
 
-    // 🔥 Normalizar tudo para comparação
     const tagsNorm = new Set(
       (terapia.tags ?? []).map((t) => normalizarTexto(t))
     );
@@ -543,7 +609,6 @@ function sugerirTerapias(
       (terapia.setores_alvo ?? []).map((s) => normalizarTexto(s))
     );
 
-    // Combinar tags + setores como alvos
     const alvos = new Set([...tagsNorm, ...setoresNorm]);
 
     let scoreTotal = 0;
@@ -552,14 +617,12 @@ function sugerirTerapias(
     for (const [setor, peso] of setoresComPeso.entries()) {
       const setorNorm = normalizarTexto(setor);
 
-      // Match exato
       if (alvos.has(setorNorm)) {
         scoreTotal += peso;
         motivos.push(setor);
         continue;
       }
 
-      // Match parcial (substring)
       for (const alvo of alvos) {
         if (
           alvo.length > 3 &&
@@ -583,8 +646,6 @@ function sugerirTerapias(
     }
   }
 
-  // 🔥 Se ainda não achou nada, retornar as 5 terapias de maior prioridade
-  // 🚫 Sem correspondência real → sem terapias corretivas
   if (resultados.length === 0) {
     return [];
   }
@@ -599,13 +660,12 @@ function sugerirTerapias(
 // ==============================
 export function calcularScoreGeral(
   itensAlterados: ItemAlterado[],
-  totalScanned: number = 300 // Base padrão do aparelho
+  totalScanned: number = 300
 ): { score: number; status: string; percentual: number } {
   if (itensAlterados.length === 0) {
     return { score: 100, status: "Ótimo", percentual: 0 };
   }
 
-  // 1. Calcula o peso real da doença (Leve=1, Moderado=2, Crítico=3)
   let pesoDoenca = 0;
   for (const item of itensAlterados) {
     switch (item.gravidade) {
@@ -616,12 +676,9 @@ export function calcularScoreGeral(
     }
   }
 
-  // 2. Transforma em porcentagem (Máximo teórico = todos os 300 itens com gravidade máxima)
   const pesoMaximo = totalScanned * 3;
   const porcentagemImpacto = Math.min(1, pesoDoenca / pesoMaximo);
 
-  // 3. CURVA SUAVIZANTE: Fórmula exponencial (potência 1.2)
-  // Se 43% estiver doente, o score não será 57 (ruim), será 66 (ameno)
   const score = Math.max(0, Math.round(100 - (Math.pow(porcentagemImpacto, 1.2) * 100)));
 
   let status: string;
@@ -729,7 +786,6 @@ export function gerarAnaliseCompleta(
 
   const frequenciaSugerida = sugerirFrequenciaSolfeggio(setoresAfetados);
 
-  // 🔥 RETURN ÚNICO E CORRETO (O outro return foi apagado para não quebrar)
   return {
     paciente,
     itensAlterados,
@@ -739,7 +795,7 @@ export function gerarAnaliseCompleta(
     terapias: terapiasSugeridas,
     scoreGeral,
     statusScore,
-    percentual, // 🔥 ADICIONE AQUI
+    percentual,
     setoresAfetados,
     resumoCategorias,
     frequencia_lunara: frequenciaSugerida,
@@ -760,12 +816,10 @@ type ImpactoFitnessType = {
 function mapearImpactoFitness(categoria: string, gravidade: Gravidade, imc: number | null): ImpactoFitnessType {
   const catNorm = normalizarTexto(categoria);
 
-  // 🔥 VARIÁVEL DE GATILHO DO PERSONAL TRAINER (Declarada no início correto)
   const focarEmagrecimento = imc !== null && imc >= 25;
 
   if (catNorm.includes('metabolismo') || catNorm.includes('gordura') || catNorm.includes('obesidade')) {
     return {
-      // Se o IMC for de obesidade, o texto fica muito mais agressivo/vendedor
       emagrecimento: focarEmagrecimento
         ? `IMC de ${imc?.toFixed(1)} indica sobrepeso/obesidade. Metabolismo severamente comprometido. Necessidade urgente de déficit calórico aliado a treino HIIT para ativar a lipólise.`
         : gravidade === 'critica'
@@ -812,7 +866,7 @@ function mapearImpactoFitness(categoria: string, gravidade: Gravidade, imc: numb
     };
   }
 
-  return null; // Para coisas muito específicas tipo "Acupuntura" ou "Alergenos", não gera fitness
+  return null;
 }
 
 // ==============================
@@ -822,42 +876,34 @@ function sugerirFrequenciaSolfeggio(setoresAfetados: string[]): string {
   const setoresNorm = setoresAfetados.map(s => normalizarTexto(s));
   const frequenciasEscolhidas = new Set<string>();
 
-  // 1. MAPEAMENTO INTELIGENTE: Quais setores pedem quais frequências?
   for (const setor of setoresNorm) {
-    // Emocional / Mental / Nível de Consciência (Medo, Culpa, Apatia)
     if (setor.includes('emocional') || setor.includes('mental') || setor.includes('consciencia')) {
-      frequenciasEscolhidas.add("396"); // Liberta medo/culpa
-      frequenciasEscolhidas.add("432"); // Ancoramento emocional
+      frequenciasEscolhidas.add("396");
+      frequenciasEscolhidas.add("432");
     }
 
-    // Físico / Imunológico / Metabolismo / Cardiovascular / Digestivo
     if (setor.includes('fisico') || setor.includes('imunologico') || setor.includes('metabolismo') || setor.includes('cardiovascular') || setor.includes('digestivo')) {
-      frequenciasEscolhidas.add("528"); // Reparo celular e imunidade
+      frequenciasEscolhidas.add("528");
     }
 
-    // Endócrino / Hormonal / Ginecológico
     if (setor.includes('endocrino') || setor.includes('hormonal') || setor.includes('ginecologico')) {
-      frequenciasEscolhidas.add("639"); // Reconexão e equilíbrio relacional/hormonal
+      frequenciasEscolhidas.add("639");
     }
 
-    // Espiritual
     if (setor.includes('espiritual')) {
-      frequenciasEscolhidas.add("852"); // Intuição
-      frequenciasEscolhidas.add("963"); // Conexão divina / Pineal
+      frequenciasEscolhidas.add("852");
+      frequenciasEscolhidas.add("963");
     }
 
-    // Desintoxicação / Fígado / Rins
     if (setor.includes('desintox') || setor.includes('figado') || setor.includes('renal')) {
-      frequenciasEscolhidas.add("741"); // Desintoxicação e limpeza
+      frequenciasEscolhidas.add("741");
     }
   }
 
-  // 2. FALLBACK DE SEGURANÇA: Se o aparelho não bater em nenhuma palavra-chave
   if (frequenciasEscolhidas.size === 0) {
     frequenciasEscolhidas.add("432");
   }
 
-  // 3. BANCO DE DADOS CLÍNICAS DAS FREQUÊNCIAS
   const mapDescricoes: Record<string, string> = {
     "396": "396Hz (Libertação) — Transforma sentimentos de medo, culpa e desamparo em poder pessoal. Base para liberação emocional profunda.",
     "432": "432Hz (Ancoramento) — Acalma o sistema nervoso central, reduz ansiedade e abre os canais de aceitação da terapia.",
@@ -868,12 +914,11 @@ function sugerirFrequenciaSolfeggio(setoresAfetados: string[]): string {
     "963": "963Hz (Conexão Divina) — Ativa a glândula pineal, estimulando estados de consciência elevada e ordem neurológica superior."
   };
 
-  // 4. GERA O TEXTO FINAL (Separado por quebra de linha para o PDF/Preview)
   return Array.from(frequenciasEscolhidas).map(hz => `🎵 ${mapDescricoes[hz]}`).join("\n");
 }
 
 // ==============================
-// COMPARATIVO INTELIGENTE (Sem alterações necessárias aqui, estava perfeito)
+// COMPARATIVO INTELIGENTE
 // ==============================
 export type ItemComparativo = {
   sistema: string;
@@ -936,7 +981,7 @@ export function gerarComparativoInteligente(exames: ExameRow[]): ComparativoInte
 
     if (itemAntes) {
       const diff = itemDepois.scoreGravidade - itemAntes.scoreGravidade;
-      if (diff === 0) continue; // Ignora estáveis para não poluir gráfico
+      if (diff === 0) continue;
 
       const comp: ItemComparativo = {
         sistema: "Geral", item: itemDepois.item,
@@ -960,7 +1005,6 @@ export function gerarComparativoInteligente(exames: ExameRow[]): ComparativoInte
     }
   }
 
-  // Limites do gráfico
   resultado.melhoraram = resultado.melhoraram.sort((a, b) => (a.variacao || 0) - (b.variacao || 0)).slice(0, 10);
   resultado.pioraram = resultado.pioraram.sort((a, b) => (b.variacao || 0) - (a.variacao || 0)).slice(0, 10);
   resultado.novos_problemas = resultado.novos_problemas.slice(0, 5);

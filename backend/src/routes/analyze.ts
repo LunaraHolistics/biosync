@@ -104,7 +104,6 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // -------------------------------------------------------------------------
     console.log("\n🔍 [1/5] Executando parser HTML...");
     
-    // ✅ parseBioressonancia agora retorna ItemProcessado[] diretamente
     const dadosProcessados: ItemProcessado[] = parseBioressonancia(prompt);
 
     if (!Array.isArray(dadosProcessados) || dadosProcessados.length === 0) {
@@ -126,7 +125,6 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     // -------------------------------------------------------------------------
     console.log("\n🔄 [2/5] Convertendo e limpando dados...");
     
-    // ✅ dadosProcessados já é ItemProcessado[] → compatível com converterParaEngineBioSync
     const itemsConvertidos = converterParaEngineBioSync(dadosProcessados);
 
     const itensValidos = itemsConvertidos.filter((i: any) =>
@@ -151,7 +149,6 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
 
     let biosyncResult: any;
     try {
-      // ✅ itensValidos vem de converterParaEngineBioSync → já tem estrutura compatível
       biosyncResult = await processBioSyncData(
         itensValidos,
         modo_analise as any,
@@ -163,7 +160,6 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       console.log(`📊 Scores: ${JSON.stringify(biosyncResult.category_scores)}`);
       console.log(`🚨 Alerts: ${biosyncResult.critical_alerts?.length || 0} críticos`);
       
-      // 🔍 Debug: verificar se matches está presente
       if (biosyncResult.matches?.length) {
         console.log(`📈 [Engine] matches disponíveis para histórico: ${biosyncResult.matches.length} itens`);
       }
@@ -180,7 +176,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         imc_status: null,
         translated_items: [],
         suggested_protocol: { therapies: [], checklist: [], timeline: '' },
-        matches: [] // ✅ Garantir matches vazio no fallback
+        matches: []
       };
     }
 
@@ -204,6 +200,24 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     console.log(`✅ Diagnóstico: ${diagnostico.problemas.length} problemas | ${plano_terapeutico.terapias.length} terapias`);
 
     // -------------------------------------------------------------------------
+    // 🔥 NOVO: MAPEAR MATCHES PARA ITEM_SCORES (ESTRUTURA ESPERADA PELO FRONTEND)
+    // -------------------------------------------------------------------------
+    const itemScores = (biosyncResult.matches || []).map((m: any) => ({
+      item: m.itemBase || m.itemExame || 'Item desconhecido',
+      categoria: m.categoria || 'Outros',
+      score_atual: typeof m.score === 'number' ? m.score : 50, // Usa score calculado com fallback emocional
+      score_anterior: null, // Será preenchido quando houver histórico comparável
+      delta: 0,
+      trend: 'novo' as const,
+      impacto: m.impacto || m.descricaoTecnica || ''
+    }));
+
+    console.log(`📊 [DEBUG] item_scores gerados: ${itemScores.length} itens`);
+    if (itemScores.length > 0) {
+      console.log(`   Amostra: ${JSON.stringify(itemScores.slice(0, 2))}`);
+    }
+
+    // -------------------------------------------------------------------------
     // 5️⃣ MONTAGEM DA RESPOSTA
     // -------------------------------------------------------------------------
     console.log("\n📤 [5/5] Montando resposta...");
@@ -224,7 +238,7 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     };
 
     // -------------------------------------------------------------------------
-    // 💾 SALVAMENTO NO SUPABASE (opcional)
+    // 💾 SALVAMENTO NO SUPABASE (COM ITEM_SCORES)
     // -------------------------------------------------------------------------
     if (exame_id) {
       try {
@@ -234,10 +248,11 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
           scores: biosyncResult.category_scores,
           alerts: biosyncResult.critical_alerts?.length,
           imc: biosyncResult.imc_value,
-          matches_count: biosyncResult.matches?.length || 0
+          matches_count: biosyncResult.matches?.length || 0,
+          item_scores_count: itemScores.length
         });
 
-        // 🔥 NOVO: Passar matches para salvar item_scores no histórico
+        // 🔥 SALVA TANTO matches (para motor) QUANTO item_scores (para histórico/evolução)
         await atualizarExameComBioSync(exame_id, {
           modo_selecionado: biosyncResult.modo_selecionado,
           category_scores: biosyncResult.category_scores,
@@ -247,8 +262,10 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
           imc_status: biosyncResult.imc_status,
           suggested_protocol: biosyncResult.suggested_protocol,
           translated_items: biosyncResult.translated_items || [],
-          // 🔥 NOVO: matches para histórico de evolução por item
-          matches: biosyncResult.matches || []
+          // 🔥 NOVO: matches para o motor semântico
+          matches: biosyncResult.matches || [],
+          // 🔥 NOVO: item_scores para histórico de evolução no frontend/PDF
+          item_scores: itemScores
         });
 
         console.log("✅ Supabase: exame atualizado com sucesso");
@@ -284,7 +301,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         engine_ok: !!biosyncResult?.category_scores,
         saved: !!exame_id,
         html_fallback_used: dadosProcessados.some((d: any) => d.item?.includes('<TABLE')),
-        matches_saved: !!(biosyncResult.matches?.length && exame_id)
+        matches_saved: !!(biosyncResult.matches?.length && exame_id),
+        item_scores_saved: !!(itemScores.length && exame_id)
       }
     });
 
