@@ -178,6 +178,15 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
   const startTime = Date.now();
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+  // 🔥 LOG FORÇADO - DEVE APARECER SEMPRE QUE UMA REQUISIÇÃO CHEGAR
+  console.log(`\n🔥 [${requestId}] === REQUISIÇÃO RECEBIDA ===`);
+  console.log(`🔥 [${requestId}] URL: ${req.url}`);
+  console.log(`🔥 [${requestId}] Method: ${req.method}`);
+  console.log(`🔥 [${requestId}] Body keys: ${Object.keys(req.body).join(', ')}`);
+  console.log(`🔥 [${requestId}] exame_id: ${req.body.exame_id}`);
+  console.log(`🔥 [${requestId}] modo_analise: ${req.body.modo_analise}`);
+  console.log(`🔥 [${requestId}] prompt length: ${req.body.prompt?.length || 0} chars`);
+
   try {
     const {
       prompt,

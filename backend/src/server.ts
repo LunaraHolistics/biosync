@@ -9,7 +9,7 @@ import cors from "cors";
 import { createHash } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import multer from "multer";
-import { Request } from "express";
+import { Request, Response, NextFunction } from "express";
 
 // ✅ Import do cliente Supabase configurado (com IPv4 fix + singleton)
 import { supabase } from './config/supabase';
@@ -31,6 +31,29 @@ type AiStructuredData = {
   justificativa: string;
   plano_terapeutico: any;
   diagnostico?: Diagnostico;
+};
+
+// 🔥 NOVO: Tipagem para resposta de debug da rota /api/analyze
+type AnalyzeDebugResponse = {
+  success: boolean;
+  data: AiStructuredData;
+  meta: {
+    total_items: number;
+    valid_items: number;
+    processing_time_ms: number;
+    modo: string;
+    request_id: string;
+  };
+  debug: {
+    parser_ok: boolean;
+    engine_ok: boolean;
+    saved: boolean;
+    matches_count: number;
+    item_scores_count: number;
+    scores_varied: boolean;
+    html_fallback_used: boolean;
+    [key: string]: any;
+  };
 };
 
 // --- Fallback ---
@@ -75,24 +98,100 @@ function gerarHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+// 🔥 VALIDAÇÃO DE PAYLOAD PARA /api/analyze
+function validarPayloadAnalyze(body: any): { valido: boolean; erros: string[] } {
+  const erros: string[] = [];
+  
+  if (!body.prompt || typeof body.prompt !== 'string') {
+    erros.push('prompt ausente ou inválido');
+  } else if (body.prompt.trim().length < 50) {
+    erros.push('prompt muito curto (mínimo 50 caracteres)');
+  }
+  
+  if (body.exame_id && typeof body.exame_id !== 'string') {
+    erros.push('exame_id deve ser string');
+  }
+  
+  if (body.modo_analise && !['fitness', 'weight_loss', 'emotional_sleep', 'immunity', 'mental'].includes(body.modo_analise)) {
+    erros.push('modo_analise inválido');
+  }
+  
+  return { valido: erros.length === 0, erros };
+}
+
 // --- APP ---
 const app = express();
 
 // 🔥 MIDDLEWARES ESSENCIAIS (ORDEM IMPORTANTE!)
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL?.split(',') || ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// 🔍 DEBUG MIDDLEWARE (remova em produção)
-app.use((req, res, next) => {
-  if (req.path.includes('/api/analyze')) {
-    console.log(`📥 [${new Date().toISOString()}] POST ${req.path}`);
-    console.log(`📦 Headers:`, req.headers['content-type']);
-    console.log(`🔑 Body keys:`, Object.keys(req.body || {}));
-    if (req.body?.prompt) {
-      console.log(`📝 Prompt length: ${req.body.prompt.length} chars`);
+// 🔍 DEBUG MIDDLEWARE EXPANDIDO
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  
+  // Log para rotas de análise
+  if (req.path.includes('/api/analyze') || req.path.includes('/api/upload')) {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    (req as any).requestId = requestId;
+    
+    console.log(`\n🆔 [${requestId}] === NOVA REQUISIÇÃO ===`);
+    console.log(`📥 [${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log(`🌐 Origin: ${req.headers.origin || 'N/A'}`);
+    console.log(`📦 Content-Type: ${req.headers['content-type']}`);
+    
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(`🔑 Body keys: ${Object.keys(req.body).join(', ')}`);
+      if (req.body.exame_id) console.log(`🆔 exame_id: ${req.body.exame_id}`);
+      if (req.body.modo_analise) console.log(`🎯 modo_analise: ${req.body.modo_analise}`);
+      if (req.body.prompt) console.log(`📝 Prompt length: ${req.body.prompt.length} chars`);
+      if (req.body.peso_cliente) console.log(`⚖️ peso: ${req.body.peso_cliente}kg`);
+      if (req.body.altura_cliente_metros) console.log(`📏 altura: ${req.body.altura_cliente_metros}m`);
     }
   }
+  
+  // Override do res.json para logar resposta
+  const originalJson = res.json.bind(res);
+  res.json = function(data: any) {
+    if (req.path.includes('/api/analyze') || req.path.includes('/api/upload')) {
+      const duration = Date.now() - start;
+      const requestId = (req as any).requestId || 'N/A';
+      
+      console.log(`📤 [${requestId}] Resposta em ${duration}ms`);
+      
+      // Log de debug específico para /api/analyze
+      if (req.path.includes('/api/analyze') && data?.debug) {
+        const debug = data.debug;
+        console.log(`🔍 [${requestId}] Debug da análise:`);
+        console.log(`   • parser_ok: ${debug.parser_ok}`);
+        console.log(`   • engine_ok: ${debug.engine_ok}`);
+        console.log(`   • saved: ${debug.saved}`);
+        console.log(`   • matches_count: ${debug.matches_count}`);
+        console.log(`   • item_scores_count: ${debug.item_scores_count}`);
+        console.log(`   • scores_varied: ${debug.scores_varied}`);
+        console.log(`   • html_fallback_used: ${debug.html_fallback_used}`);
+        
+        // Alerta se scores não estiverem variados
+        if (!debug.scores_varied && debug.item_scores_count > 0) {
+          console.warn(`⚠️ [${requestId}] ALERTA: Todos os scores são 50! Verificar lógica de cálculo.`);
+        }
+      }
+      
+      // Log de erro se houver
+      if (data?.error) {
+        console.error(`❌ [${requestId}] Erro na resposta:`, data.error);
+        if (data.details) console.error(`📋 Details:`, data.details);
+      }
+    }
+    return originalJson(data);
+  };
+  
   next();
 });
 
@@ -234,9 +333,97 @@ app.get("/api/exames", async (_, res) => {
 app.use(uploadRouter);
 app.use(analyzeRoute);
 
-// 🔥 HEALTH CHECK
-app.get("/health", (_, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+// 🔥 HEALTH CHECK EXPANDIDO
+app.get("/health", async (req, res) => {
+  try {
+    // Testar conexão com Supabase
+    const {  healthCheck, error } = await supabase
+      .from('exames')
+      .select('id')
+      .limit(1);
+    
+    const supabaseStatus = error ? '❌ Falha' : '✅ OK';
+    
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      services: {
+        supabase: supabaseStatus,
+        gemini: process.env.GEMINI_API_KEY ? '✅ Configurado' : '❌ Ausente'
+      },
+      uptime: process.uptime()
+    });
+  } catch (err: any) {
+    res.status(500).json({ 
+      status: "error", 
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 🔥 ROTA DE DEBUG PARA TESTAR /api/analyze DIRETAMENTE
+app.post("/api/debug/analyze", async (req: Request, res: Response) => {
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  console.log(`🔧 [${requestId}] Rota de debug acionada`);
+  
+  try {
+    // Validar payload
+    const { valido, erros } = validarPayloadAnalyze(req.body);
+    if (!valido) {
+      console.warn(`⚠️ [${requestId}] Payload inválido:`, erros);
+      return res.status(400).json({ 
+        error: "Payload inválido", 
+        erros,
+        requestId 
+      });
+    }
+    
+    // Encaminhar para a rota principal de análise
+    // Isso permite testar /api/analyze com logs detalhados
+    req.path = '/api/analyze';
+    req.url = '/api/analyze';
+    
+    // Chamar o router de analyze manualmente
+    analyzeRoute.handle(req, res, (err: any) => {
+      if (err) {
+        console.error(`❌ [${requestId}] Erro no debug:`, err);
+        res.status(500).json({ error: err.message, requestId });
+      }
+    });
+    
+  } catch (error: any) {
+    console.error(`❌ [${requestId}] Erro no debug:`, error);
+    res.status(500).json({ 
+      error: "Erro interno no debug", 
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      requestId 
+    });
+  }
+});
+
+// 🔥 ERROR HANDLER GLOBAL
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  const requestId = (req as any).requestId || 'N/A';
+  console.error(`❌ [${requestId}] ERRO GLOBAL:`, {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method
+  });
+  
+  res.status(500).json({
+    error: "Erro interno no servidor",
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    requestId,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 🔥 404 HANDLER
+app.use((req, res) => {
+  console.log(`⚠️ Rota não encontrada: ${req.method} ${req.path}`);
+  res.status(404).json({ error: "Rota não encontrada", path: req.path });
 });
 
 const PORT = process.env.PORT || 10000;
@@ -244,6 +431,8 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Backend BioSync rodando em http://localhost:${PORT}`);
   console.log(`🔗 Endpoint: http://localhost:${PORT}/api/analyze`);
+  console.log(`🔧 Debug: http://localhost:${PORT}/api/debug/analyze`);
+  console.log(`🏥 Health: http://localhost:${PORT}/health`);
 });
 
 export { app };
