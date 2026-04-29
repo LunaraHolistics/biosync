@@ -515,11 +515,10 @@ function exameRowToAiData(
 // ==============================
 // 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM item_scores, EVOLUÇÃO E GÊNERO
 // ==============================
-
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  data: AiStructuredData,  // ← ✅ CORREÇÃO: nome da prop primeiro, tipo depois
+  data: AiStructuredData,
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
@@ -530,20 +529,31 @@ function buildRelatorioData(
 
   // 🔥 Calcula item_scores com evolução se houver exames anteriores
   let itemScoresEvolucao: ItemScoreEvolucao[] | undefined;
-  if (motor?.matches && examesAnteriores?.length) {
+  
+  // Verificar se motor tem matches COM scores
+  if (motor?.matches && motor.matches.length > 0) {
+    console.log('📊 [buildRelatorioData] Motor matches:', motor.matches.length);
+    console.log('📊 [buildRelatorioData] Amostra:', motor.matches.slice(0, 2));
+    
     const itensAtuais = motor.matches.map((m: any) => ({
       item: m.itemBase,
       categoria: m.categoria,
-      score: m.score ?? 50,
-      impacto: m.impacto
+      score: m.score ?? 50,  // ← Aqui deve vir o score calculado!
+      impacto: m.impacto || 'Desequilíbrio bioenergético identificado'
     }));
-    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores);
+    
+    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || []);
+    
+    console.log('📊 [buildRelatorioData] item_scores gerados:', itemScoresEvolucao?.length);
+    console.log('📊 [buildRelatorioData] Amostra:', itemScoresEvolucao?.slice(0, 2));
+  } else {
+    console.warn('⚠️ [buildRelatorioData] motor.matches vazio ou undefined');
   }
 
   return {
     clientName: paciente || "Cliente",
     createdAt: new Date(row.data_exame || row.created_at),
-    interpretacao: data.interpretacao || "",  // ← ✅ CORREÇÃO: 'data' agora é reconhecido
+    interpretacao: data.interpretacao || "",
     pontos_criticos: data.pontos_criticos ?? [],
     plano_terapeutico: data.plano_terapeutico,
     frequencia_lunara: data.frequencia_lunara || "",
@@ -672,11 +682,12 @@ function App() {
     : analiseMotorRaw;
 
   // 🔥 PASSA categoriasFiltro, examesAnteriores E pacienteGenero PARA buildRelatorioData
+
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
       pacienteSelecionado || clientName.trim() || "Cliente",
-      analiseSelecionadaData ?? {  // ← ✅ CORREÇÃO: analiseSelecionadaData é do tipo AiStructuredData
+      analiseSelecionadaData ?? {
         interpretacao: "",
         pontos_criticos: [],
         plano_terapeutico: { tipo: "mensal", terapias: [] },
@@ -686,10 +697,27 @@ function App() {
       comparativoExamesData,
       analiseMotor,
       categoriasFiltro,
-      examesPaciente.filter(e => e.id !== analiseSelecionada?.id), // 🔥 Exames anteriores para evolução
-      generoSelecionado // 🔥 NOVO: Passar gênero para filtragem no PDF
+      examesPaciente.filter(e => e.id !== analiseSelecionada?.id),
+      generoSelecionado
     )
     : null;
+
+  // 🔥 DEBUG: Verificar se item_scores estão sendo gerados
+  if (relatorioDataHistorico) {
+    console.log('📊 [DEBUG] relatorioDataHistorico.item_scores:', {
+      count: relatorioDataHistorico.item_scores?.length || 0,
+      amostra: relatorioDataHistorico.item_scores?.slice(0, 3),
+      analiseMotorMatches: analiseMotor?.matches?.length || 0,
+      examesAnteriores: examesPaciente.filter(e => e.id !== analiseSelecionada?.id).length
+    });
+
+    // Verificar se matches têm scores
+    if (analiseMotor?.matches) {
+      const matchesComScore = analiseMotor.matches.filter(m => m.score !== undefined && m.score !== null);
+      console.log('📊 [DEBUG] Matches com score:', `${matchesComScore.length}/${analiseMotor.matches.length}`);
+      console.log('📊 [DEBUG] Amostra de matches:', analiseMotor.matches.slice(0, 3));
+    }
+  }
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

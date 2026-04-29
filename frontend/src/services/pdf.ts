@@ -190,7 +190,7 @@ function filtrarPorGenero(item: string, genero?: 'masculino' | 'feminino'): bool
 }
 
 // =======================================================================
-// 🔥 DETECÇÃO DE ITENS RELACIONADOS A SONO/INSÔNIA
+// 🔥 DETECÇÃO DE ITENS RELACIONADOS A SONO/INSÔNIA E EMOÇÕES
 // =======================================================================
 
 function isItemSono(item: string): boolean {
@@ -203,6 +203,16 @@ function isItemSono(item: string): boolean {
     'serotonina', 'adrenalina', 'sistema nervoso', 'neurotransmissor'
   ];
   return palavrasSono.some(p => itemClean.includes(p));
+}
+
+function isItemEmocional(item: string): boolean {
+  const itemClean = normalizarNomeItem(item).toLowerCase();
+  const emocoes = [
+    'amor', 'alegria', 'paz', 'iluminismo', 'vergonha', 'culpa', 'apatia',
+    'dor', 'medo', 'desejo', 'raiva', 'orgulho', 'coragem', 'neutralidade',
+    'vontade', 'aceitação', 'razão', 'nível de consciência', 'consciencia humana'
+  ];
+  return emocoes.some(e => itemClean.includes(e));
 }
 
 // =======================================================================
@@ -270,16 +280,28 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
   
   if (filtrados.length === 0) return '';
 
-  // 🔥 3. Ordenar: sono primeiro → maior impacto → score mais crítico → alfabético
+  // 🔥 3. Ordenar: sono/emoções primeiro → maior impacto → score mais crítico → alfabético
   const temSono = filtrados.some(is => isItemSono(is.item));
+  const temEmocional = filtrados.some(is => isItemEmocional(is.item));
+  
   const ordenados = [...filtrados].sort((a, b) => {
+    // 1. Itens de sono primeiro
     if (temSono) {
-      const aSono = isItemSono(a.item) ? 1 : 0;
-      const bSono = isItemSono(b.item) ? 1 : 0;
+      const aSono = isItemSono(a.item) ? 2 : 0;
+      const bSono = isItemSono(b.item) ? 2 : 0;
       if (aSono !== bSono) return bSono - aSono;
     }
+    // 2. Itens emocionais em segundo
+    if (temEmocional) {
+      const aEmo = isItemEmocional(a.item) ? 1 : 0;
+      const bEmo = isItemEmocional(b.item) ? 1 : 0;
+      if (aEmo !== bEmo) return bEmo - aEmo;
+    }
+    // 3. Depois por impacto (maior |delta|)
     if (Math.abs(b.delta) !== Math.abs(a.delta)) return Math.abs(b.delta) - Math.abs(a.delta);
+    // 4. Depois por score atual (mais crítico primeiro)
     if (a.score_atual !== b.score_atual) return a.score_atual - b.score_atual;
+    // 5. Finalmente alfabético
     return normalizarNomeItem(a.item).localeCompare(normalizarNomeItem(b.item), 'pt-BR');
   }).slice(0, 15);
 
@@ -291,6 +313,10 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
     const destaqueSono = isItemSono(item.item) 
       ? 'background: #fef3c7; border-left: 3px solid #f59e0b; padding-left: 6px;' 
       : '';
+    const destaqueEmocional = isItemEmocional(item.item) && !isItemSono(item.item)
+      ? 'background: #f0f9ff; border-left: 3px solid #3b82f6; padding-left: 6px;'
+      : '';
+    const destaque = destaqueSono || destaqueEmocional;
 
     const deltaStr = item.score_anterior !== null
       ? `${item.delta >= 0 ? '+' : ''}${item.delta}`
@@ -300,10 +326,12 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
     const corDelta = item.delta >= 0 ? '#16a34a' : '#dc2626';
     const corScore = item.score_atual >= 70 ? '#16a34a' : item.score_atual >= 50 ? '#ca8a04' : '#dc2626';
 
+    const emoji = isItemSono(item.item) ? '😴 ' : isItemEmocional(item.item) ? '💙 ' : '';
+
     return `
-      <tr style="border-bottom: 1px solid #f1f5f9; ${destaqueSono}">
+      <tr style="border-bottom: 1px solid #f1f5f9; ${destaque}">
         <td style="padding: 8px 4px; font-size: 10px; font-weight: 600; color: #1e293b; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          ${isItemSono(item.item) ? '😴 ' : ''}${escapeHtml(item.item)}
+          ${emoji}${escapeHtml(item.item)}
         </td>
         <td style="padding: 8px 4px; font-size: 10px; text-align: center; color: #475569;">${scoreAnterior}</td>
         <td style="padding: 8px 4px; font-size: 10px; text-align: center; font-weight: 700; color: ${corScore};">${item.score_atual}</td>
@@ -320,11 +348,14 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
     novos: ordenados.filter(i => i.trend === 'novo').length
   };
 
+  const badgeSono = temSono ? '<span style="margin-left: 8px; font-size: 10px; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: 600;">😴 Sono</span>' : '';
+  const badgeEmocional = temEmocional && !temSono ? '<span style="margin-left: 8px; font-size: 10px; background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-weight: 600;">💙 Emoções</span>' : '';
+
   return `
     <div style="margin: 20px 0; page-break-inside: avoid;" data-pdf-section="evolucao">
       <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
         <span>📈</span> Evolução dos Principais Itens
-        ${temSono ? '<span style="margin-left: 8px; font-size: 10px; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: 600;">😴 Sono em foco</span>' : ''}
+        ${badgeSono}${badgeEmocional}
       </div>
       <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
         ${resumo.melhoraram > 0 ? `<span style="background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🟢 ${resumo.melhoraram} melhoraram</span>` : ''}
@@ -347,6 +378,181 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
         </thead>
         <tbody>${linhas}</tbody>
       </table>
+    </div>
+  `;
+}
+
+// =======================================================================
+// 🔥 FUNÇÃO AUXILIAR: Seção Explicativa de Itens Prioritários
+// =======================================================================
+
+function gerarSecaoExplicativa(itemScores: ItemScoreEvolucao[]): string {
+  if (!itemScores || itemScores.length === 0) return '';
+  
+  // Filtrar itens críticos (score < 60) relacionados a sono, emoções ou bem-estar
+  const itensCriticos = itemScores
+    .filter(is => is.score_atual < 60 && (isItemSono(is.item) || isItemEmocional(is.item)))
+    .sort((a, b) => a.score_atual - b.score_atual)
+    .slice(0, 5);
+  
+  if (itensCriticos.length === 0) return '';
+  
+  // 🔥 Base de conhecimento explicativa EXPANDIDA
+  const explicacoes: Record<string, {titulo: string; explicacao: string; recomendacao: string}> = {
+    // Sono e relaxamento
+    'Magnésio': {
+      titulo: 'Magnésio (Relaxamento e Sono)',
+      explicacao: 'O magnésio é essencial para o relaxamento muscular, produção de melatonina e regulação do sistema nervoso. Deficiência causa insônia, ansiedade, tensão muscular, cãibras e fadiga crônica.',
+      recomendacao: 'Suplementação com magnésio quelado (300-400mg/dia), alimentos ricos (castanhas, espinafre, abacate), banhos de sal grosso, evitar café após 14h.'
+    },
+    'Triptofano': {
+      titulo: 'Triptofano',
+      explicacao: 'Aminoácido precursor da serotonina e melatonina. Essencial para indução e qualidade do sono. Baixos níveis causam insônia, depressão e ansiedade.',
+      recomendacao: 'Alimentos ricos (banana, aveia, leite, peru, castanhas), suplementação (500-1000mg antes de dormir), evitar proteínas pesadas à noite.'
+    },
+    'Fadiga visual': {
+      titulo: 'Fadiga Visual',
+      explicacao: 'Cansaço mental e ocular que prejudica o ciclo sono-vigília. Excesso de telas, luz azul e esforço visual constante ativam o sistema nervoso simpático, dificultando o relaxamento noturno.',
+      recomendacao: 'Regra 20-20-20 (a cada 20min, olhar 20 pés por 20 seg), filtro de luz azul após 18h, óleos essenciais de lavanda, pausas ativas.'
+    },
+    'Equilíbrio Hepático': {
+      titulo: 'Equilíbrio Hepático (Metabolismo e Sono)',
+      explicacao: 'Fígado sobrecarregado prejudica desintoxicação noturna, metabolismo de hormônios e produção de bile. Sono entre 23h-3h é crucial para regeneração hepática.',
+      recomendacao: 'Evitar álcool e alimentos processados, chás digestivos (boldo, carqueja), jantar leve até 19h, dormir antes de 23h.'
+    },
+    'Função de secreção de bílis': {
+      titulo: 'Função Biliar',
+      explicacao: 'Bile inadequada prejudica digestão de gorduras, absorção de vitaminas lipossolúveis (D, E, K) e desintoxicação. Impacta qualidade do sono e energia.',
+      recomendacao: 'Gorduras saudáveis (azeite, abacate), limão em jejum, chás de boldo ou dente-de-leão, evitar frituras.'
+    },
+    'Sistema Nervoso': {
+      titulo: 'Sistema Nervoso',
+      explicacao: 'Hiperatividade do sistema nervoso simpático (luta/fuga) impede relaxamento necessário para dormir. Estresse crônico eleva cortisol noturno.',
+      recomendacao: 'Técnicas de respiração (4-7-8), meditação, yoga, evitar notícias à noite, rotina de sono consistente.'
+    },
+    // Emoções / Nível de Consciência
+    'Amor': {
+      titulo: 'Amor (Nível de Consciência)',
+      explicacao: 'Estado emocional de conexão, compaixão e aceitação. Score baixo indica bloqueios emocionais, dificuldade em se conectar ou ressentimentos não resolvidos.',
+      recomendacao: 'Práticas de gratidão, terapia de perdão, meditação do coração, journaling emocional, flores de Bach (Walnut, Holly).'
+    },
+    'Alegria': {
+      titulo: 'Alegria (Nível de Consciência)',
+      explicacao: 'Capacidade de experimentar prazer, leveza e entusiasmo. Score baixo sugere depressão leve, apatia ou dificuldade em celebrar a vida.',
+      recomendacao: 'Atividades prazerosas diárias, música alegre, dança, terapia cognitivo-comportamental, suplementação com vitamina D e ômega-3.'
+    },
+    'Paz': {
+      titulo: 'Paz (Nível de Consciência)',
+      explicacao: 'Estado de serenidade interior e equilíbrio emocional. Score baixo indica ansiedade, agitação mental ou conflitos internos não resolvidos.',
+      recomendacao: 'Meditação mindfulness, respiração diafragmática, chás calmantes (camomila, erva-cidreira), ambiente tranquilo para descanso.'
+    },
+    'Vergonha': {
+      titulo: 'Vergonha (Nível de Consciência)',
+      explicacao: 'Emoção de baixa vibração que gera isolamento e autocrítica excessiva. Score muito baixo indica trauma, baixa autoestima ou padrões de autossabotagem.',
+      recomendacao: 'Terapia de aceitação e compromisso (ACT), afirmações positivas, trabalho com sombra, apoio profissional especializado.'
+    },
+    'Medo': {
+      titulo: 'Medo (Nível de Consciência)',
+      explicacao: 'Emoção de proteção que, em excesso, paralisa e limita. Score baixo indica ansiedade generalizada, fobias ou insegurança crônica.',
+      recomendacao: 'Exposição gradual, técnicas de grounding, florais de Bach (Mimulus, Rock Rose), suplementação com magnésio e L-teanina.'
+    },
+    'Raiva': {
+      titulo: 'Raiva (Nível de Consciência)',
+      explicacao: 'Emoção de defesa que, quando reprimida ou explosiva, causa desequilíbrio. Score baixo indica frustração acumulada, limites não estabelecidos ou injustiça percebida.',
+      recomendacao: 'Expressão saudável da raiva (escrita, arte, exercício), assertividade, florais (Holly, Vine), técnicas de liberação emocional.'
+    },
+    'Culpa': {
+      titulo: 'Culpa (Nível de Consciência)',
+      explicacao: 'Sentimento de responsabilidade excessiva por eventos passados. Score baixo indica autocrítica rígida, dificuldade em perdoar a si mesmo ou padrões de vitimização.',
+      recomendacao: 'Terapia de perdão, reestruturação cognitiva, práticas de autocompaixão, florais (Pine, Crab Apple).'
+    },
+    // Minerais e nutrientes
+    'Potássio': {
+      titulo: 'Potássio',
+      explicacao: 'Mineral essencial para função muscular, nervosa e equilíbrio eletrolítico. Deficiência causa cãibras, fadiga, arritmias e sono fragmentado.',
+      recomendacao: 'Alimentos ricos (banana, batata-doce, abacate, espinafre, feijão), evitar diuréticos em excesso.'
+    },
+    'Manganês': {
+      titulo: 'Manganês',
+      explicacao: 'Cofator enzimático para metabolismo, formação óssea e antioxidante. Deficiência afeta qualidade do sono e recuperação muscular.',
+      recomendacao: 'Castanhas, grãos integrais, folhas verdes, chá verde.'
+    },
+    // Saúde geral
+    'Metais Pesados': {
+      titulo: 'Metais Pesados',
+      explicacao: 'Acúmulo de chumbo, mercúrio, cádmio e alumínio causa toxicidade sistêmica, fadiga crônica, névoa mental e distúrbios do sono.',
+      recomendacao: 'Desintoxicação com coentro, chlorella, zeolita, sauna, evitar peixes contaminados, panelas de alumínio.'
+    },
+    'Cardiovascular e Cerebrovascular': {
+      titulo: 'Circulação Cardiovascular',
+      explicacao: 'Má circulação cerebral e cardíaca prejudica oxigenação, cognição, qualidade do sono e recuperação noturna.',
+      recomendacao: 'Exercícios aeróbicos, ginkgo biloba, ômega-3, hidratação, evitar sedentarismo.'
+    },
+    'Olhos': {
+      titulo: 'Saúde Ocular',
+      explicacao: 'Fadiga visual, olheiras e tensão ocular refletem estresse, sono inadequado e sobrecarga de telas.',
+      recomendacao: 'Pausas ativas, compressas mornas, ômega-3, vitamina A (cenoura, abóbora).'
+    },
+    'Seios': {
+      titulo: 'Saúde Mamária',
+      explicacao: 'Desequilíbrios hormonais (estrogênio/progesterona) podem causar sensibilidade, cistos e desconforto. Impacta qualidade do sono e bem-estar.',
+      recomendacao: 'Autoexame mensal, evitar cafeína, semente de linhaça, soutien adequado, acompanhamento médico.'
+    },
+    'Afrouxamento e queda': {
+      titulo: 'Saúde Capilar',
+      explicacao: 'Queda e enfraquecimento capilar indicam deficiências nutricionais (ferro, zinco, biotina), estresse e desequilíbrios hormonais.',
+      recomendacao: 'Biotina, zinco, ferro, proteínas, massagem capilar, evitar químicas agressivas.'
+    }
+  };
+  
+  const htmlExplicacoes = itensCriticos.map(is => {
+    const nome = normalizarNomeItem(is.item);
+    const info = explicacoes[nome] || {
+      titulo: nome,
+      explicacao: isItemEmocional(nome) 
+        ? 'Estado emocional que influencia qualidade de vida, sono e bem-estar. Score baixo indica necessidade de trabalho emocional e autocuidado.'
+        : 'Desequilíbrio bioenergético que impacta sono, energia e bem-estar geral.',
+      recomendacao: 'Avaliação profissional recomendada para protocolo personalizado.'
+    };
+    
+    const corBadge = is.score_atual < 30 ? '#dc2626' : is.score_atual < 50 ? '#f97316' : '#ca8a04';
+    const labelScore = is.score_atual < 30 ? 'Crítico' : is.score_atual < 50 ? 'Atenção' : 'Moderado';
+    
+    return `
+      <div style="margin-bottom: 12px; padding: 12px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b; border-radius: 6px;">
+        <div style="font-weight: 800; color: #92400e; font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          ${isItemSono(nome) ? '😴' : isItemEmocional(nome) ? '💙' : '⚠️'} ${info.titulo} 
+          <span style="background: ${corBadge}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+            Score: ${is.score_atual} • ${labelScore}
+          </span>
+        </div>
+        <div style="font-size: 10px; color: #78350f; margin-bottom: 6px; line-height: 1.5;">
+          <b style="color: #92400e;">O que é:</b> ${info.explicacao}
+        </div>
+        <div style="font-size: 10px; color: #78350f; line-height: 1.5;">
+          <b style="color: #92400e;">Recomendações:</b> ${info.recomendacao}
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div style="margin: 24px 0; page-break-inside: avoid;" data-pdf-section="explicacoes">
+      <div style="font-size: 14px; font-weight: 900; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 20px;">🔍</span> 
+        Por Que Estes Itens Estão Destacados?
+      </div>
+      <div style="font-size: 10px; color: #64748b; margin-bottom: 12px; font-style: italic; padding: 8px; background: #f8fafc; border-radius: 6px;">
+        Itens relacionados ao sono, emoções e bem-estar com score crítico (< 60) que requerem atenção prioritária:
+      </div>
+      ${htmlExplicacoes}
+      <div style="margin-top: 12px; padding: 10px; background: #dbeafe; border-radius: 6px; border-left: 4px solid #3b82f6;">
+        <div style="font-size: 10px; color: #1e40af; font-weight: 700; margin-bottom: 4px;">💡 Dica Importante:</div>
+        <div style="font-size: 10px; color: #1e40af;">
+          A correção destes desequilíbrios pode levar de 2 a 8 semanas com protocolo adequado. 
+          Priorize sono antes de 23h, alimentação limpa, gerenciamento de estresse e acompanhamento profissional.
+        </div>
+      </div>
     </div>
   `;
 }
@@ -410,7 +616,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // 🔥 3. PONTOS CRÍTICOS — COM FILTRO, DEDUPLICAÇÃO E DESTAQUE PARA SONO
+  // 🔥 3. PONTOS CRÍTICOS — COM FILTRO, DEDUPLICAÇÃO E DESTAQUE PARA SONO/EMOÇÕES
   if (data.pontos_criticos.length > 0) {
     let pontosFiltrados = data.pontos_criticos
       .filter(p => filtrarPorGenero(p, data.pacienteGenero))
@@ -419,27 +625,33 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     // Remover duplicatas mantendo primeira ocorrência
     pontosFiltrados = [...new Set(pontosFiltrados)];
     
-    // Destacar itens de sono no topo
+    // Destacar itens de sono e emocionais no topo
     const pontosSono = pontosFiltrados.filter(p => isItemSono(p));
-    const pontosOutros = pontosFiltrados.filter(p => !isItemSono(p));
-    const listaOrdenada = [...pontosSono, ...pontosOutros].slice(0, 8);
+    const pontosEmocionais = pontosFiltrados.filter(p => isItemEmocional(p) && !isItemSono(p));
+    const pontosOutros = pontosFiltrados.filter(p => !isItemSono(p) && !isItemEmocional(p));
+    const listaOrdenada = [...pontosSono, ...pontosEmocionais, ...pontosOutros].slice(0, 8);
     
     if (listaOrdenada.length > 0) {
       const listaHTML = listaOrdenada
         .map(p => {
-          const destaque = isItemSono(p) ? 'style="color: #92400e; font-weight: 600;"' : '';
-          const emoji = isItemSono(p) ? '😴 ' : '';
+          const destaque = isItemSono(p) ? 'style="color: #92400e; font-weight: 600;"' : 
+                          isItemEmocional(p) ? 'style="color: #1e40af; font-weight: 600;"' : '';
+          const emoji = isItemSono(p) ? '😴 ' : isItemEmocional(p) ? '💙 ' : '';
           return `<li ${destaque} style="margin-bottom:3px;font-size:11px;color:#334155">${emoji}${escapeHtml(p)}</li>`;
         })
         .join("");
       
-      const tituloSono = pontosSono.length > 0 
+      const temSono = pontosSono.length > 0;
+      const temEmocional = pontosEmocionais.length > 0;
+      const tituloDestaque = temSono 
         ? '⚠️ Pontos Críticos <span style="font-size:10px;color:#92400e;font-weight:400">(Sono em destaque)</span>' 
-        : '⚠️ Pontos Críticos';
+        : temEmocional
+          ? '⚠️ Pontos Críticos <span style="font-size:10px;color:#1e40af;font-weight:400">(Emoções em destaque)</span>'
+          : '⚠️ Pontos Críticos';
       
       blocks.push(
         criarBlocoHTML(`
-          <div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:6px">${tituloSono}</div>
+          <div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:6px">${tituloDestaque}</div>
           <ul style="margin:0;padding-left:18px;list-style-type:disc">${listaHTML}</ul>
         `, true)
       );
@@ -451,6 +663,12 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     const tabelaHTML = gerarTabelaEvolucao(data.item_scores, data.pacienteGenero);
     if (tabelaHTML) {
       blocks.push(criarBlocoHTML(tabelaHTML, true));
+    }
+    
+    // 🔥 NOVO: Adicionar seção explicativa APÓS a tabela
+    const explicacoesHTML = gerarSecaoExplicativa(data.item_scores);
+    if (explicacoesHTML) {
+      blocks.push(criarBlocoHTML(explicacoesHTML, true));
     }
   } else {
     blocks.push(
@@ -574,19 +792,22 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // 🔥 8. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA — COM DESTAQUE PARA SONO
+  // 🔥 8. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA — COM DESTAQUE PARA SONO/EMOÇÕES
   const temInsônia = data.pontos_criticos?.some(p => isItemSono(p)) || 
                      data.item_scores?.some(is => isItemSono(is.item) && is.score_atual < 50);
+  const temEmocionalCritico = data.item_scores?.some(is => isItemEmocional(is.item) && is.score_atual < 50);
   
   const frequenciaTexto = data.frequencia_lunara && !/^[\s—\-–]+$/.test(data.frequencia_lunara)
     ? data.frequencia_lunara
     : temInsônia 
       ? "🌙 Recomendação para Sono: 432Hz (ancoramento) + 528Hz (reparo) antes de dormir. Evitar telas 1h antes. Chá de camomila ou melissa."
-      : "Recomendação: Utilizar frequências Solfeggio (ex: 432Hz harmonização, 528Hz reparação) durante a sessão.";
+      : temEmocionalCritico
+        ? "💙 Recomendação Emocional: 417Hz (liberação) + 639Hz (conexão) durante meditação. Journaling e respiração consciente."
+        : "Recomendação: Utilizar frequências Solfeggio (ex: 432Hz harmonização, 528Hz reparação) durante a sessão.";
 
   let htmlFrequenciaEJustificativa = `
     <div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:6px">🎵 Frequência para Sessão</div>
-    <div style="color:#334155;margin-bottom:12px;background:#f8fafc;padding:10px;border-radius:6px;border-left:4px solid ${temInsônia ? '#f59e0b' : '#8b5cf6'};font-size:11px">
+    <div style="color:#334155;margin-bottom:12px;background:#f8fafc;padding:10px;border-radius:6px;border-left:4px solid ${temInsônia ? '#f59e0b' : temEmocionalCritico ? '#3b82f6' : '#8b5cf6'};font-size:11px">
       ${escapeHtml(frequenciaTexto)}
     </div>
   `;
