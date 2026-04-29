@@ -4,6 +4,7 @@ import { gerarDiagnostico } from "../services/diagnostico.service";
 import { processBioSyncData } from "../services/engine-processor";
 import { atualizarExameComBioSync } from "../db/exames.repository";
 import type { ItemProcessado } from "../utils/parserBio";
+import type { ItemScoreEvolucao } from "../db/exames.repository";
 
 const router = Router();
 
@@ -243,11 +244,11 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     console.log(`📊 [DEBUG] item_scores gerados: ${itemScores.length} itens`);
     if (itemScores.length > 0) {
       // Log de amostra com scores variados para confirmar cálculo
-      const amostra = itemScores.slice(0, 5).map(is => `${is.item}[${is.categoria}]:${is.score_atual}`);
+      const amostra = itemScores.slice(0, 5).map((is: ItemScoreEvolucao) => `${is.item}[${is.categoria}]:${is.score_atual}`);
       console.log(`   Amostra: [${amostra.join(', ')}]`);
       
       // Verificar distribuição de scores
-      const scoresUnicos = [...new Set(itemScores.map(is => is.score_atual))];
+      const scoresUnicos = [...new Set(itemScores.map((is: ItemScoreEvolucao) => is.score_atual))];
       console.log(`   Scores únicos encontrados: [${scoresUnicos.join(', ')}]`);
     }
 
