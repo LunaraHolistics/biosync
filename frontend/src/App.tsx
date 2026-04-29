@@ -603,7 +603,7 @@ function buildRelatorioData(
       console.log('📊 [DEBUG] Scores únicos no banco:', scoresUnicos);
       console.log('📊 [DEBUG] Itens com score < 60:', itemScoresEvolucao.filter(is => is.score_atual < 60).slice(0, 5).map(is => `${is.item}: ${is.score_atual}`));
     } else {
-      console.warn('⚠️ [DEBUG] row.indice_biosync.item_scores está vazio ou não é array');
+      console.warn('⚠️ [DEBUG] row.item_scores está vazio ou não é array');
     }
   } else {
     console.warn('⚠️ [DEBUG] row.indice_biosync não existe ou não é objeto');
@@ -653,9 +653,6 @@ function buildRelatorioData(
     pacienteGenero
   };
 }
-
-// ✅ CORREÇÃO: Esta declaração FORA da função App() foi REMOVIDA para evitar erro de escopo
-// A declaração correta está DENTRO da função App() abaixo
 
 function getRelatorioOriginal(
   meta: Record<string, unknown>,
