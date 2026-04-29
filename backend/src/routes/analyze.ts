@@ -2,14 +2,14 @@ import { Router, Request, Response } from "express";
 import { parseBioressonancia } from "../utils/parserBio";
 import { gerarDiagnostico } from "../services/diagnostico.service";
 import { processBioSyncData } from "../services/engine-processor";
-import { atualizarExameComBioSync } from "../db/exames.repository";
+import { atualizarExameComBioSync, buscarExameComBioSync } from "../db/exames.repository";
 import type { ItemProcessado } from "../utils/parserBio";
 import type { ItemScoreEvolucao } from "../db/exames.repository";
 
 const router = Router();
 
 // ============================================================================
-// 🧹 UTILITÁRIOS DE LIMPEZA
+// 🧹 UTILITÁRIOS DE LIMPEZA E NORMALIZAÇÃO
 // ============================================================================
 
 function extrairNomeLimpo(texto: string | undefined): string {
@@ -28,6 +28,65 @@ function extrairNomeLimpo(texto: string | undefined): string {
     return palavras.slice(0, 2).join(' ') || 'Desconhecido';
   }
   return limpo || 'Desconhecido';
+}
+
+// 🔥 MAPEAMENTO DE CATEGORIAS PARA GARANTIR MATCH COM PESOS EMOCIONAIS
+function normalizarCategoria(sistema?: string, categoria?: string): string {
+  const texto = `${sistema || ''} ${categoria || ''}`.toLowerCase().trim();
+  
+  // Categorias emocionais/psicológicas
+  if (
+    texto.includes('consciencia') || 
+    texto.includes('consciência') || 
+    texto.includes('emocional') ||
+    texto.includes('emotional') ||
+    texto.includes('nivel de consciencia') ||
+    texto.includes('nível de consciência') ||
+    texto.includes('amor') || texto.includes('alegria') || texto.includes('paz') ||
+    texto.includes('vergonha') || texto.includes('culpa') || texto.includes('medo') ||
+    texto.includes('tristeza') || texto.includes('ansiedade') || texto.includes('depressao')
+  ) {
+    return 'emotional';
+  }
+  
+  // Categorias de sono
+  if (
+    texto.includes('sono') || texto.includes('insomnia') || texto.includes('insonia') ||
+    texto.includes('dormir') || texto.includes('descanso') || texto.includes('melatonina')
+  ) {
+    return 'sono';
+  }
+  
+  // Categorias de imunidade
+  if (
+    texto.includes('imun') || texto.includes('defesa') || texto.includes('alergia') ||
+    texto.includes('inflam') || texto.includes('infecc') || texto.includes('virus') ||
+    texto.includes('bacteria') || texto.includes('linfonodo') || texto.includes('timo')
+  ) {
+    return 'imunidade';
+  }
+  
+  // Categorias de fitness/físico
+  if (
+    texto.includes('fisico') || texto.includes('fitness') || texto.includes('musculo') ||
+    texto.includes('forca') || texto.includes('energia') || texto.includes('metabolismo') ||
+    texto.includes('peso') || texto.includes('gordura') || texto.includes('colesterol') ||
+    texto.includes('circulacao') || texto.includes('coracao') || texto.includes('vascular')
+  ) {
+    return 'fitness';
+  }
+  
+  // Categorias mental/cognitivo
+  if (
+    texto.includes('mental') || texto.includes('cognitivo') || texto.includes('memoria') ||
+    texto.includes('concentracao') || texto.includes('foco') || texto.includes('nevoa') ||
+    texto.includes('brain fog') || texto.includes('cerebro') || texto.includes('nervoso')
+  ) {
+    return 'mental';
+  }
+  
+  // Fallback: usar categoria original ou 'Outros'
+  return categoria || sistema || 'Outros';
 }
 
 function converterParaEngineBioSync(dadosProcessados: ItemProcessado[]) {
@@ -56,37 +115,59 @@ function converterParaEngineBioSync(dadosProcessados: ItemProcessado[]) {
     }
 
     const nomeLimpo = extrairNomeLimpo(item.item);
-
-    if (index < 3) {
-      console.log(`🔄 [CONVERT] "${item.item?.substring(0, 20)}..." → "${nomeLimpo}" = ${Math.round(percentual)}%`);
-    }
-
-    // 🔥 NORMALIZAR CATEGORIA PARA GARANTIR MATCH COM PESOS EMOCIONAIS
-    let categoria = (item as any).categoria || item.sistema || 'Geral';
-    const catLower = categoria.toLowerCase().trim();
     
-    // Mapear variações de "Nível de Consciência Humana" para "emotional"
-    if (
-      catLower.includes('consciencia') || 
-      catLower.includes('consciência') || 
-      catLower.includes('emocional') ||
-      catLower.includes('emotional') ||
-      catLower.includes('nivel de consciencia')
-    ) {
-      categoria = 'emotional';
+    // 🔥 Normalizar categoria com mapeamento robusto
+    const categoria = normalizarCategoria(item.sistema, (item as any).categoria);
+
+    if (index < 5) {
+      console.log(`🔄 [CONVERT] "${item.item?.substring(0, 30)}..." → "${nomeLimpo}" [${categoria}] = ${Math.round(percentual)}%`);
     }
 
     return {
       nome: nomeLimpo,
       percentual: Math.min(100, Math.max(0, Math.round(percentual))),
-      categoria, // ← Categoria normalizada
+      categoria,
       status: item.status,
       valor_original: item.valor,
       // ✅ Campos obrigatórios para RawDeviceItem (usado pela engine)
       min: item.min ?? 0,
-      max: item.max ?? 100
+      max: item.max ?? 100,
+      // 🔥 Manter referência original para debug
+      _original: { sistema: item.sistema, item: item.item }
     };
   });
+}
+
+// ============================================================================
+// 🔥 VALIDAÇÃO ROBUSTA DE PAYLOAD
+// ============================================================================
+
+function validarPayloadParaSupabase(payload: any): { valido: boolean; erros: string[] } {
+  const erros: string[] = [];
+  
+  if (!payload.modo_selecionado) erros.push('modo_selecionado ausente');
+  if (!payload.category_scores || typeof payload.category_scores !== 'object') erros.push('category_scores inválido');
+  if (!Array.isArray(payload.critical_alerts)) erros.push('critical_alerts deve ser array');
+  if (!Array.isArray(payload.quick_wins)) erros.push('quick_wins deve ser array');
+  if (!Array.isArray(payload.translated_items)) erros.push('translated_items deve ser array');
+  if (!Array.isArray(payload.matches)) erros.push('matches deve ser array');
+  if (!Array.isArray(payload.item_scores)) erros.push('item_scores deve ser array');
+  
+  // Validar estrutura de item_scores
+  if (Array.isArray(payload.item_scores)) {
+    payload.item_scores.forEach((is: any, idx: number) => {
+      if (!is.item) erros.push(`item_scores[${idx}]: item ausente`);
+      if (!is.categoria) erros.push(`item_scores[${idx}]: categoria ausente`);
+      if (typeof is.score_atual !== 'number' || isNaN(is.score_atual)) {
+        erros.push(`item_scores[${idx}]: score_atual inválido (${is.score_atual})`);
+      }
+      if (!['melhorou', 'piorou', 'estavel', 'novo'].includes(is.trend)) {
+        erros.push(`item_scores[${idx}]: trend inválido (${is.trend})`);
+      }
+    });
+  }
+  
+  return { valido: erros.length === 0, erros };
 }
 
 // ============================================================================
@@ -95,6 +176,7 @@ function converterParaEngineBioSync(dadosProcessados: ItemProcessado[]) {
 
 router.post("/api/analyze", async (req: Request, res: Response) => {
   const startTime = Date.now();
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   try {
     const {
@@ -105,14 +187,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       exame_id
     } = req.body;
 
-    if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 50) {
-      return res.status(400).json({
-        error: "Prompt inválido ou vazio",
-        hint: "Envie o conteúdo HTML completo do relatório de bioressonância"
-      });
-    }
-
-    console.log(`\n📥 [${new Date().toISOString()}] Iniciando análise...`);
+    console.log(`\n🆔 [${requestId}] === INÍCIO DA ANÁLISE ===`);
+    console.log(`📥 [${new Date().toISOString()}] Iniciando análise...`);
     console.log(`📦 Modo: ${modo_analise} | exame_id: ${exame_id || 'N/A'}`);
 
     // -------------------------------------------------------------------------
@@ -123,17 +199,19 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     const dadosProcessados: ItemProcessado[] = parseBioressonancia(prompt);
 
     if (!Array.isArray(dadosProcessados) || dadosProcessados.length === 0) {
-      console.error("❌ Parser não retornou dados válidos");
+      console.error(`❌ [${requestId}] Parser não retornou dados válidos`);
       return res.status(400).json({
         error: "Falha ao processar dados de bioressonância",
-        hint: "Verifique se o HTML contém tabelas com <tr><td>Item de Teste</td>..."
+        hint: "Verifique se o HTML contém tabelas com <tr><td>Item de Teste</td>...",
+        requestId
       });
     }
-    console.log(`✅ Parser: ${dadosProcessados.length} itens extraídos`);
+    console.log(`✅ [${requestId}] Parser: ${dadosProcessados.length} itens extraídos`);
 
-    console.log("🔍 [DEBUG] Primeiros itens do parser:");
+    // 🔥 Debug detalhado dos primeiros itens
+    console.log(`🔍 [${requestId}] Primeiros 5 itens do parser:`);
     dadosProcessados.slice(0, 5).forEach((item, i: number) => {
-      console.log(`   [${i + 1}] item="${item.item}" | sistema="${item.sistema}" | valor=${item.valor} | status=${item.status}`);
+      console.log(`   [${i + 1}] item="${item.item?.substring(0, 40)}" | sistema="${item.sistema}" | valor=${item.valor} | status=${item.status}`);
     });
 
     // -------------------------------------------------------------------------
@@ -147,16 +225,20 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       i.nome && i.nome !== 'Desconhecido' && i.nome.length < 50 && !i.nome.includes('<')
     );
 
-    console.log(`📋 Itens válidos para engine: ${itensValidos.length} / ${itemsConvertidos.length}`);
+    console.log(`📋 [${requestId}] Itens válidos para engine: ${itensValidos.length} / ${itemsConvertidos.length}`);
 
     if (itensValidos.length === 0) {
-      console.warn("⚠️ Nenhum item válido após filtragem:");
+      console.warn(`⚠️ [${requestId}] NENHUM ITEM VÁLIDO após filtragem!`);
       itemsConvertidos.slice(0, 5).forEach((i: any, idx: number) => {
-        console.log(`   [${idx + 1}] nome="${i.nome}" | categoria="${i.categoria}" | length=${i.nome?.length}`);
+        console.log(`   [${idx + 1}] nome="${i.nome}" | categoria="${i.categoria}" | length=${i.nome?.length} | tem '<': ${i.nome?.includes('<')}`);
       });
     }
 
-    console.log(`📊 Amostra: ${itensValidos.slice(0, 5).map((i: any) => `${i.nome}[${i.categoria}]:${i.percentual}%`).join(', ')}`);
+    // 🔥 Log de amostra com categorias
+    console.log(`📊 [${requestId}] Amostra de itens convertidos:`);
+    itensValidos.slice(0, 5).forEach((i: any, idx: number) => {
+      console.log(`   [${idx + 1}] ${i.nome}[${i.categoria}]:${i.percentual}%`);
+    });
 
     // -------------------------------------------------------------------------
     // 3️⃣ PROCESSAMENTO DA ENGINE BIOSYNC
@@ -172,25 +254,54 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         altura_cliente_metros
       );
 
-      console.log("✅ Engine: processamento concluído");
-      console.log(`📊 Scores: ${JSON.stringify(biosyncResult.category_scores)}`);
-      console.log(`🚨 Alerts: ${biosyncResult.critical_alerts?.length || 0} críticos`);
+      console.log(`✅ [${requestId}] Engine: processamento concluído`);
+      console.log(`📊 [${requestId}] Scores por categoria: ${JSON.stringify(biosyncResult.category_scores)}`);
+      console.log(`🚨 [${requestId}] Alerts críticos: ${biosyncResult.critical_alerts?.length || 0}`);
       
-      // 🔥 DEBUG: Verificar matches retornados
+      // 🔥 DEBUG DETALHADO DE MATCHES
       if (biosyncResult.matches?.length) {
-        console.log(`📈 [Engine] matches disponíveis: ${biosyncResult.matches.length} itens`);
-        console.log(`📈 [Engine] Amostra de matches:`, JSON.stringify(biosyncResult.matches.slice(0, 3), null, 2));
+        console.log(`📈 [${requestId}] Engine retornou ${biosyncResult.matches.length} matches`);
         
-        // Verificar se os matches têm scores calculados
-        const matchesComScore = biosyncResult.matches.filter((m: any) => typeof m.score === 'number');
-        console.log(`📈 [Engine] Matches com score calculado: ${matchesComScore.length}/${biosyncResult.matches.length}`);
+        // Contar matches por categoria
+        const contagemPorCategoria: Record<string, number> = {};
+        biosyncResult.matches.forEach((m: any) => {
+          const cat = m.categoria || 'Outros';
+          contagemPorCategoria[cat] = (contagemPorCategoria[cat] || 0) + 1;
+        });
+        console.log(`📈 [${requestId}] Matches por categoria:`, JSON.stringify(contagemPorCategoria));
+        
+        // Verificar scores calculados
+        const matchesComScore = biosyncResult.matches.filter((m: any) => typeof m.score === 'number' && !isNaN(m.score));
+        console.log(`📈 [${requestId}] Matches com score válido: ${matchesComScore.length}/${biosyncResult.matches.length}`);
+        
+        // 🔥 Log de amostra de matches COM scores
+        console.log(`📈 [${requestId}] Amostra de matches (com scores):`);
+        biosyncResult.matches.slice(0, 5).forEach((m: any, idx: number) => {
+          console.log(`   [${idx + 1}] "${m.itemBase}" [${m.categoria}] score=${m.score} gravidade=${m.gravidade}`);
+        });
+        
+        // 🔥 Verificar itens emocionais específicos
+        const emocionais = biosyncResult.matches.filter((m: any) => 
+          m.categoria?.toLowerCase() === 'emotional' || 
+          ['amor', 'alegria', 'paz', 'vergonha', 'culpa', 'medo'].some(p => m.itemBase?.toLowerCase().includes(p))
+        );
+        if (emocionais.length > 0) {
+          console.log(`📈 [${requestId}] Itens emocionais encontrados: ${emocionais.length}`);
+          emocionais.slice(0, 3).forEach((m: any) => {
+            console.log(`   • "${m.itemBase}" score=${m.score}`);
+          });
+        }
       } else {
-        console.warn("⚠️ [Engine] Nenhum match retornado - item_scores ficará vazio");
+        console.warn(`⚠️ [${requestId}] Engine NÃO retornou matches! matches=`, biosyncResult.matches);
       }
 
     } catch (engineError: any) {
-      console.error("❌ ERRO NA ENGINE:", engineError.message);
+      console.error(`❌ [${requestId}] ERRO NA ENGINE:`, {
+        message: engineError.message,
+        stack: process.env.NODE_ENV === 'development' ? engineError.stack : undefined
+      });
       
+      // Fallback seguro
       biosyncResult = {
         modo_selecionado: modo_analise,
         category_scores: { fitness: 50, emotional: 50, sono: 50, imunidade: 50, mental: 50 },
@@ -221,14 +332,37 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
       }))
     };
 
-    console.log(`✅ Diagnóstico: ${diagnostico.problemas.length} problemas | ${plano_terapeutico.terapias.length} terapias`);
+    console.log(`✅ [${requestId}] Diagnóstico: ${diagnostico.problemas.length} problemas | ${plano_terapeutico.terapias.length} terapias`);
 
     // -------------------------------------------------------------------------
     // 🔥 MAPEAR MATCHES PARA ITEM_SCORES (ESTRUTURA ESPERADA PELO FRONTEND)
     // -------------------------------------------------------------------------
-    const itemScores = (biosyncResult.matches || []).map((m: any) => {
-      // Garantir que score seja número válido
-      const scoreCalculado = typeof m.score === 'number' && !isNaN(m.score) ? m.score : 50;
+    const itemScores: ItemScoreEvolucao[] = (biosyncResult.matches || []).map((m: any) => {
+      // 🔥 Garantir que score seja número válido com fallback emocional
+      let scoreCalculado = 50;
+      if (typeof m.score === 'number' && !isNaN(m.score)) {
+        scoreCalculado = m.score;
+      } else {
+        // Fallback: tentar calcular baseado na categoria e nome do item
+        const itemNorm = (m.itemBase || '').toLowerCase().trim();
+        const catNorm = (m.categoria || '').toLowerCase();
+        
+        // Pesos emocionais padrão
+        const pesosEmocionais: Record<string, number> = {
+          'amor': 75, 'alegria': 70, 'paz': 65, 'iluminismo': 50,
+          'vergonha': 30, 'culpa': 25, 'apatia': 20, 'medo': 35,
+          'tristeza': 35, 'ansiedade': 30, 'depressao': 25, 'estresse': 35
+        };
+        
+        if (catNorm === 'emotional' || catNorm === 'emocional') {
+          for (const [key, peso] of Object.entries(pesosEmocionais)) {
+            if (itemNorm.includes(key)) {
+              scoreCalculado = peso;
+              break;
+            }
+          }
+        }
+      }
       
       return {
         item: m.itemBase || m.itemExame || 'Item desconhecido',
@@ -237,19 +371,35 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         score_anterior: null,
         delta: 0,
         trend: 'novo' as const,
-        impacto: m.impacto || m.descricaoTecnica || ''
+        impacto: m.impacto || m.descricaoTecnica || '',
+        impacto_fitness: m.impacto_fitness
       };
     });
 
-    console.log(`📊 [DEBUG] item_scores gerados: ${itemScores.length} itens`);
+    console.log(`📊 [${requestId}] item_scores gerados: ${itemScores.length} itens`);
     if (itemScores.length > 0) {
-      // Log de amostra com scores variados para confirmar cálculo
-      const amostra = itemScores.slice(0, 5).map((is: ItemScoreEvolucao) => `${is.item}[${is.categoria}]:${is.score_atual}`);
-      console.log(`   Amostra: [${amostra.join(', ')}]`);
+      // 🔥 Log detalhado de amostra
+      console.log(`📊 [${requestId}] Amostra de item_scores:`);
+      itemScores.slice(0, 5).forEach((is: ItemScoreEvolucao, idx: number) => {
+        console.log(`   [${idx + 1}] "${is.item}" [${is.categoria}] score=${is.score_atual} trend=${is.trend}`);
+      });
       
-      // Verificar distribuição de scores
-      const scoresUnicos = [...new Set(itemScores.map((is: ItemScoreEvolucao) => is.score_atual))];
-      console.log(`   Scores únicos encontrados: [${scoresUnicos.join(', ')}]`);
+      // 🔥 Estatísticas de scores
+      const scores = itemScores.map(is => is.score_atual);
+      const min = Math.min(...scores);
+      const max = Math.max(...scores);
+      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      const unicos = [...new Set(scores)].sort((a, b) => a - b);
+      
+      console.log(`📊 [${requestId}] Estatísticas de scores: min=${min}, max=${max}, avg=${avg}, únicos=[${unicos.join(', ')}]`);
+      
+      // 🔥 Verificar se há scores variados (não todos 50)
+      const todosCinquenta = scores.every(s => s === 50);
+      if (todosCinquenta) {
+        console.warn(`⚠️ [${requestId}] TODOS os scores são 50! Verificar lógica de cálculo.`);
+      } else {
+        console.log(`✅ [${requestId}] Scores variados detectados - OK`);
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -273,22 +423,14 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     };
 
     // -------------------------------------------------------------------------
-    // 💾 SALVAMENTO NO SUPABASE (COM ITEM_SCORES)
+    // 💾 SALVAMENTO NO SUPABASE (COM VALIDAÇÃO E CONFIRMAÇÃO)
     // -------------------------------------------------------------------------
     if (exame_id) {
       try {
-        console.log(`\n💾 Salvando no Supabase: ${exame_id}`);
+        console.log(`\n💾 [${requestId}] Salvando no Supabase: ${exame_id}`);
         
-        console.log('🔍 [PAYLOAD] Dados para salvar:', {
-          scores: biosyncResult.category_scores,
-          alerts: biosyncResult.critical_alerts?.length,
-          imc: biosyncResult.imc_value,
-          matches_count: biosyncResult.matches?.length || 0,
-          item_scores_count: itemScores.length
-        });
-
-        // 🔥 SALVA TANTO matches (para motor) QUANTO item_scores (para histórico/evolução)
-        await atualizarExameComBioSync(exame_id, {
+        // Montar payload completo
+        const payloadParaSalvar = {
           modo_selecionado: biosyncResult.modo_selecionado,
           category_scores: biosyncResult.category_scores,
           critical_alerts: biosyncResult.critical_alerts,
@@ -297,30 +439,67 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
           imc_status: biosyncResult.imc_status,
           suggested_protocol: biosyncResult.suggested_protocol,
           translated_items: biosyncResult.translated_items || [],
-          // 🔥 NOVO: matches para o motor semântico
           matches: biosyncResult.matches || [],
-          // 🔥 NOVO: item_scores para histórico de evolução no frontend/PDF
           item_scores: itemScores
+        };
+        
+        // 🔥 Validar payload antes de enviar
+        const { valido, erros } = validarPayloadParaSupabase(payloadParaSalvar);
+        if (!valido) {
+          console.error(`❌ [${requestId}] Payload inválido para Supabase:`, erros);
+          // Continuar mesmo assim, mas logar o erro
+        }
+        
+        console.log(`🔍 [${requestId}] Payload para salvar:`, {
+          scores: Object.keys(biosyncResult.category_scores || {}).length,
+          alerts: biosyncResult.critical_alerts?.length || 0,
+          matches: biosyncResult.matches?.length || 0,
+          item_scores: itemScores.length
         });
 
-        console.log("✅ Supabase: exame atualizado com sucesso");
+        // 🔥 Executar salvamento
+        const resultadoSalvamento = await atualizarExameComBioSync(exame_id, payloadParaSalvar);
+        
+        console.log(`✅ [${requestId}] Supabase: exame atualizado com sucesso`);
+        console.log(`📊 [${requestId}] Dados salvos: status=${resultadoSalvamento?.status}, updated_at=${resultadoSalvamento?.updated_at}`);
+        
+        // 🔥 CONFIRMAÇÃO: Re-consultar o exame para verificar se item_scores foi salvo
+        try {
+          const exameConfirmado = await buscarExameComBioSync(exame_id);
+          const itemScoresSalvos = exameConfirmado?.indice_biosync?.item_scores;
+          
+          if (Array.isArray(itemScoresSalvos) && itemScoresSalvos.length > 0) {
+            console.log(`✅ [${requestId}] CONFIRMAÇÃO: item_scores salvos no banco: ${itemScoresSalvos.length} itens`);
+            // Log de amostra confirmada
+            itemScoresSalvos.slice(0, 3).forEach((is: any, idx: number) => {
+              console.log(`   [${idx + 1}] "${is.item}" [${is.categoria}] score=${is.score_atual}`);
+            });
+          } else {
+            console.warn(`⚠️ [${requestId}] CONFIRMAÇÃO: item_scores NÃO encontrado no banco após salvamento!`);
+            console.log(`🔍 [${requestId}] indice_biosync keys:`, Object.keys(exameConfirmado?.indice_biosync || {}));
+          }
+        } catch (confirmError: any) {
+          console.warn(`⚠️ [${requestId}] Falha ao confirmar salvamento:`, confirmError.message);
+        }
 
       } catch (saveError: any) {
-        console.error("❌ ERRO AO SALVAR:", {
+        console.error(`❌ [${requestId}] ERRO AO SALVAR NO SUPABASE:`, {
           message: saveError.message,
           code: saveError.code,
-          detail: saveError.detail
+          detail: saveError.detail,
+          hint: saveError.hint
         });
+        // Não falhar a requisição inteira, apenas logar o erro
       }
     } else {
-      console.warn("⚠️ exame_id não informado - salvamento pulado");
+      console.warn(`⚠️ [${requestId}] exame_id não informado - salvamento pulado`);
     }
 
     // -------------------------------------------------------------------------
     // 🎉 RESPOSTA FINAL
     // -------------------------------------------------------------------------
     const duration = Date.now() - startTime;
-    console.log(`\n✅ Análise concluída em ${duration}ms`);
+    console.log(`\n✅ [${requestId}] Análise concluída em ${duration}ms`);
 
     return res.json({
       success: true,
@@ -329,21 +508,23 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
         total_items: dadosProcessados.length,
         valid_items: itensValidos.length,
         processing_time_ms: duration,
-        modo: modo_analise
+        modo: modo_analise,
+        request_id: requestId
       },
       debug: {
         parser_ok: dadosProcessados.length > 0,
         engine_ok: !!biosyncResult?.category_scores,
         saved: !!exame_id,
+        matches_count: biosyncResult.matches?.length || 0,
+        item_scores_count: itemScores.length,
+        scores_varied: itemScores.some((is: ItemScoreEvolucao) => is.score_atual !== 50),
         html_fallback_used: dadosProcessados.some((d: any) => d.item?.includes('<TABLE')),
-        matches_saved: !!(biosyncResult.matches?.length && exame_id),
-        item_scores_saved: !!(itemScores.length && exame_id)
       }
     });
 
   } catch (error: any) {
     const duration = Date.now() - startTime;
-    console.error(`❌ ERRO GERAL em /api/analyze (${duration}ms):`, {
+    console.error(`❌ [${requestId}] ERRO GERAL em /api/analyze (${duration}ms):`, {
       name: error.name,
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -352,7 +533,8 @@ router.post("/api/analyze", async (req: Request, res: Response) => {
     return res.status(500).json({
       error: "Erro interno ao processar análise",
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      request_id: requestId
     });
   }
 });
