@@ -555,10 +555,7 @@ function exameRowToAiData(
 }
 
 // ==============================
-// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM FALLBACK DE SCORES DO BANCO
-// ==============================
-// ==============================
-// 🔥 FUNÇÃO buildRelatorioData - VERSÃO FINAL COM FALLBACK DIRETO DO BANCO
+// 🔥 FUNÇÃO buildRelatorioData - VERSÃO FINAL CORRETIVA
 // ==============================
 function buildRelatorioData(
   row: ExameRow,
@@ -572,30 +569,49 @@ function buildRelatorioData(
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
-  // 🔥 PRIORIDADE 1: Usar item_scores direto do banco se disponíveis
+  // 🔥 PRIORIDADE MÁXIMA: Extrair scores DIRETAMENTE do row.indice_biosync
   let itemScoresEvolucao: ItemScoreEvolucao[] | undefined;
   
-  // Verificar se row.indice_biosync tem item_scores
-  const indiceBiosync = row.indice_biosync as Record<string, any> | undefined;
-  if (indiceBiosync?.item_scores && Array.isArray(indiceBiosync.item_scores)) {
-    console.log('📊 [buildRelatorioData] Usando item_scores DIRETO DO BANCO:', indiceBiosync.item_scores.length, 'itens');
+  // Verificar se row.indice_biosync existe e tem item_scores
+  console.log('🔍 [DEBUG buildRelatorioData] row.indice_biosync:', row.indice_biosync ? 'EXISTS' : 'NULL');
+  
+  if (row.indice_biosync && typeof row.indice_biosync === 'object') {
+    const biosync = row.indice_biosync as Record<string, any>;
     
-    // Mapear diretamente do banco
-    itemScoresEvolucao = indiceBiosync.item_scores.map((is: any) => ({
-      item: is.item,
-      categoria: is.categoria || 'geral',
-      score_atual: typeof is.score_atual === 'number' ? is.score_atual : 50,
-      score_anterior: is.score_anterior ?? null,
-      delta: is.delta ?? 0,
-      trend: is.trend ?? 'novo',
-      impacto: is.impacto || 'Desequilíbrio bioenergético identificado'
-    }));
-    
-    console.log('📊 [DEBUG] Amostra de scores do banco:', itemScoresEvolucao.slice(0, 5).map(is => `${is.item}: ${is.score_atual}`));
-  } 
-  // 🔥 PRIORIDADE 2: Fallback para motor.matches se item_scores não estiver no banco
-  else if (motor?.matches && motor.matches.length > 0) {
-    console.log('📊 [buildRelatorioData] Usando motor.matches:', motor.matches.length, 'itens');
+    if (Array.isArray(biosync.item_scores) && biosync.item_scores.length > 0) {
+      console.log('✅ [DEBUG] Encontrei', biosync.item_scores.length, 'item_scores no banco!');
+      console.log('📊 [DEBUG] Amostra:', biosync.item_scores.slice(0, 3));
+      
+      // Mapear diretamente do banco - SEM FALLBACK DE 50/60!
+      itemScoresEvolucao = biosync.item_scores.map((is: any) => {
+        // Garantir que score_atual é um número válido
+        const score = typeof is.score_atual === 'number' ? is.score_atual : 50;
+        
+        return {
+          item: is.item,
+          categoria: is.categoria || 'geral',
+          score_atual: score,
+          score_anterior: is.score_anterior ?? null,
+          delta: is.delta ?? 0,
+          trend: is.trend ?? 'novo',
+          impacto: is.impacto || 'Desequilíbrio bioenergético identificado'
+        };
+      });
+      
+      // Log dos scores únicos encontrados
+      const scoresUnicos = [...new Set(itemScoresEvolucao.map(is => is.score_atual))].sort((a, b) => a - b);
+      console.log('📊 [DEBUG] Scores únicos no banco:', scoresUnicos);
+      console.log('📊 [DEBUG] Itens com score < 60:', itemScoresEvolucao.filter(is => is.score_atual < 60).slice(0, 5).map(is => `${is.item}: ${is.score_atual}`));
+    } else {
+      console.warn('⚠️ [DEBUG] row.indice_biosync.item_scores está vazio ou não é array');
+    }
+  } else {
+    console.warn('⚠️ [DEBUG] row.indice_biosync não existe ou não é objeto');
+  }
+  
+  // Fallback: tentar motor.matches se não encontrou no banco
+  if (!itemScoresEvolucao && motor?.matches && motor.matches.length > 0) {
+    console.log('🔄 [DEBUG] Fallback para motor.matches:', motor.matches.length, 'itens');
     
     const itensAtuais = motor.matches.map((m: any) => ({
       item: m.itemBase,
@@ -604,11 +620,12 @@ function buildRelatorioData(
       impacto: m.impacto || 'Desequilíbrio bioenergético identificado'
     }));
     
-    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || []);
-  } 
-  // 🔥 PRIORIDADE 3: Fallback extremo vazio
-  else {
-    console.warn('⚠️ [buildRelatorioData] Sem item_scores no banco E sem motor.matches');
+    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || [], row);
+  }
+  
+  // Último fallback: array vazio
+  if (!itemScoresEvolucao) {
+    console.error('❌ [DEBUG] SEM SCORES! Nem no banco nem no motor!');
     itemScoresEvolucao = [];
   }
 
@@ -632,9 +649,7 @@ function buildRelatorioData(
     comparacao,
     relatorio_original_html: getRelatorioOriginal(meta, row),
     filtros_aplicados: filtrosAtivos && filtrosAtivos.length > 0 ? filtrosAtivos : undefined,
-    // 🔥 NOVO: item_scores com evolução para tabela no PDF
     item_scores: itemScoresEvolucao,
-    // 🔥 NOVO: Gênero do paciente para filtragem no PDF
     pacienteGenero
   };
 }
