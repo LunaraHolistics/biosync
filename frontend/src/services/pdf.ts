@@ -9,7 +9,10 @@ const MAX_CHARS_POR_BLOCO = 2400;
 const MARGEM_PDF = 20;
 const ALTURA_RODAPE = 40;
 
-// 🔥 NOVO: Tipo para evolução de itens no PDF
+// =======================================================================
+// 🔥 TIPOS
+// =======================================================================
+
 export type ItemScoreEvolucao = {
   item: string;
   categoria: string;
@@ -47,16 +50,24 @@ export type RelatorioData = {
   comparacao?: unknown;
   relatorio_original_html?: string;
   filtros_aplicados?: string[];
-  // 🔥 NOVO: Scores por item com evolução para tabela no PDF
   item_scores?: ItemScoreEvolucao[];
-  // 🔥 NOVO: Dados do paciente para filtragem por gênero
   pacienteGenero?: 'masculino' | 'feminino';
 };
+
+// =======================================================================
+// 🔥 HELPERS BÁSICOS
+// =======================================================================
 
 function formatDate(value: string | Date): string {
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return String(value);
-  return new Intl.DateTimeFormat("pt-BR").format(d);
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(d);
 }
 
 function escapeHtml(text: string): string {
@@ -66,7 +77,6 @@ function escapeHtml(text: string): string {
     .replaceAll(">", "&gt;");
 }
 
-// 🔥 Divide textos longos em pedaços que cabem em um bloco PDF
 function dividirTexto(texto: string, maxChars: number): string[] {
   if (texto.length <= maxChars) return [texto];
   const pedacos: string[] = [];
@@ -87,7 +97,6 @@ function dividirTexto(texto: string, maxChars: number): string[] {
   return pedacos;
 }
 
-// 🔥 Cria bloco HTML com estilos seguros para PDF (page-break-inside: avoid)
 function criarBlocoHTML(html: string, comBordaInferior = false): HTMLDivElement {
   const el = document.createElement("div");
   el.style.cssText = `
@@ -118,7 +127,6 @@ async function renderizarBlocoParaCanvas(el: HTMLElement, scale: number) {
   });
 }
 
-// 🔥 Lógica robusta de adição de bloco ao PDF com verificação de espaço
 function adicionarBlocoAoPDF(
   pdf: jsPDF,
   canvas: HTMLCanvasElement,
@@ -141,46 +149,65 @@ function adicionarBlocoAoPDF(
   return currentY + imgHeight + 8;
 }
 
-// 🔥 FILTRO: Remove itens específicos de gênero não compatível
+// =======================================================================
+// 🔥 FILTRO DE GÊNERO — VERSÃO REFORÇADA E ROBUSTA
+// =======================================================================
+
+function normalizarNomeItem(nome: string): string {
+  return nome.trim().replace(/[:：]$/, '').replace(/\s+/g, ' ');
+}
+
 function filtrarPorGenero(item: string, genero?: 'masculino' | 'feminino'): boolean {
-  if (!genero) return true; // Sem filtro se gênero não informado
+  if (!genero) return true;
   
-  const itemLower = item.toLowerCase();
+  const itemClean = normalizarNomeItem(item).toLowerCase();
   
-  // Itens exclusivos masculinos
+  // 🔥 Lista expandida de itens masculinos
   const itensMasculinos = [
-    'testosterona', 'próstata', 'prostata', 'androgênio', 'androgenio', 
-    'hormona masculina', 'hormônio masculino', 'esperma', 'espermatozóide',
-    'ereção', 'ejaculação', 'líbido masculina', 'hipertrofia prostática'
+    'testosterona', 'próstata', 'prostata', 'androgênio', 'androgenio', 'andrógeno',
+    'hormona masculina', 'hormônio masculino', 'esperma', 'espermatozóide', 'espermatozoide',
+    'ereção', 'ejaculação', 'líbido masculina', 'hipertrofia prostática',
+    'volume de sêmen', 'motilidade do esperma', 'transmissor da ereção',
+    'gonadotrofina masculina', 'função sexual masculina', 'androstenediona',
+    'dht', 'dihidrotestosterona', 'shbg', 'globulina ligadora'
   ];
   
-  // Itens exclusivos femininos
+  // 🔥 Lista expandida de itens femininos
   const itensFemininos = [
-    'estrogênio', 'estrogenio', 'progesterona', 'prolactina', 'hormona feminina',
-    'hormônio feminino', 'ovário', 'ovarios', 'útero', 'utero', 'colo uterino',
-    'menstruação', 'menstruacao', 'ciclo menstrual', 'menopausa', 'gravidez',
-    'amamentação', 'amamentacao', 'mastite', 'cisto ovario', 'inflamação pélvica'
+    'estrogênio', 'estrogenio', 'estrogénio', 'progesterona', 'prolactina',
+    'hormona feminina', 'hormônio feminino', 'ovário', 'ovarios', 'útero', 'utero',
+    'colo uterino', 'menstruação', 'menstruacao', 'ciclo menstrual', 'menopausa',
+    'gravidez', 'amamentação', 'amamentacao', 'mastite', 'cisto ovario',
+    'inflamação pélvica', 'anexite', 'cervicite', 'vaginite', 'ginecologia',
+    'endométrio', 'miométrio', 'fsh', 'lh', 'hormona luteinizante'
   ];
   
   if (genero === 'masculino') {
-    // Para homens, remover itens femininos
-    return !itensFemininos.some(f => itemLower.includes(f));
+    return !itensFemininos.some(f => itemClean.includes(f));
   } else {
-    // Para mulheres, remover itens masculinos
-    return !itensMasculinos.some(m => itemLower.includes(m));
+    return !itensMasculinos.some(m => itemClean.includes(m));
   }
 }
 
-// 🔥 DESTAQUE: Verifica se item está relacionado a sono/insônia
+// =======================================================================
+// 🔥 DETECÇÃO DE ITENS RELACIONADOS A SONO/INSÔNIA
+// =======================================================================
+
 function isItemSono(item: string): boolean {
-  const itemLower = item.toLowerCase();
-  return itemLower.includes('sono') || 
-         itemLower.includes('insônia') || itemLower.includes('insonia') ||
-         itemLower.includes('melatonina') || itemLower.includes('dormir') ||
-         itemLower.includes('descanso') || itemLower.includes('fadiga') ||
-         itemLower.includes('magnésio') || itemLower.includes('magnesio') ||
-         itemLower.includes('equilíbrio hepático') || itemLower.includes('equilibrio hepatico');
+  const itemClean = normalizarNomeItem(item).toLowerCase();
+  const palavrasSono = [
+    'sono', 'insônia', 'insonia', 'melatonina', 'dormir', 'descanso',
+    'fadiga', 'magnésio', 'magnesio', 'equilíbrio hepático', 'equilibrio hepatico',
+    'secreção de bílis', 'secrecao de bilis', 'triptofano', 'gaba',
+    'relaxamento', 'calma', 'ansiedade', 'estresse', 'cortisol',
+    'serotonina', 'adrenalina', 'sistema nervoso', 'neurotransmissor'
+  ];
+  return palavrasSono.some(p => itemClean.includes(p));
 }
+
+// =======================================================================
+// 🔥 COMPARATIVO ENTRE EXAMES
+// =======================================================================
 
 function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
@@ -220,43 +247,47 @@ function extrairComparativoHTML(comparacao: unknown): string {
 }
 
 // =======================================================================
-// 🔥 NOVA FUNÇÃO: Gerar tabela de evolução por item para o PDF (CORRIGIDA)
+// 🔥 TABELA DE EVOLUÇÃO — COM FILTRO, DEDUPLICAÇÃO E DESTAQUE
 // =======================================================================
+
 function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculino' | 'feminino'): string {
   if (!itemScores || itemScores.length === 0) return '';
 
-  // 🔥 Filtrar por gênero primeiro
-  const filtrados = itemScores.filter(is => filtrarPorGenero(is.item, genero));
+  // 🔥 1. Filtrar por gênero
+  let filtrados = itemScores.filter(is => filtrarPorGenero(is.item, genero));
+  
+  // 🔥 2. Deduplicar: normalizar nomes e manter apenas o mais crítico
+  const mapaUnico = new Map<string, ItemScoreEvolucao>();
+  for (const is of filtrados) {
+    const chave = normalizarNomeItem(is.item).toLowerCase();
+    // Manter versão com score mais baixo (mais crítico) ou maior impacto
+    const existente = mapaUnico.get(chave);
+    if (!existente || is.score_atual < existente.score_atual || is.impacto.length > existente.impacto.length) {
+      mapaUnico.set(chave, { ...is, item: normalizarNomeItem(is.item) });
+    }
+  }
+  filtrados = Array.from(mapaUnico.values());
   
   if (filtrados.length === 0) return '';
 
-  // 🔥 Priorizar itens de sono/insônia no topo se houver
+  // 🔥 3. Ordenar: sono primeiro → maior impacto → score mais crítico → alfabético
   const temSono = filtrados.some(is => isItemSono(is.item));
   const ordenados = [...filtrados].sort((a, b) => {
-    // 1. Itens de sono primeiro (se houver)
     if (temSono) {
       const aSono = isItemSono(a.item) ? 1 : 0;
       const bSono = isItemSono(b.item) ? 1 : 0;
       if (aSono !== bSono) return bSono - aSono;
     }
-    // 2. Depois por impacto (maior |delta|)
-    if (Math.abs(b.delta) !== Math.abs(a.delta)) {
-      return Math.abs(b.delta) - Math.abs(a.delta);
-    }
-    // 3. Depois por score atual (mais crítico primeiro)
-    if (a.score_atual !== b.score_atual) {
-      return a.score_atual - b.score_atual;
-    }
-    // 4. Finalmente alfabético
-    return a.item.localeCompare(b.item, 'pt-BR');
-  }).slice(0, 15); // Limita a 15 itens para não poluir
+    if (Math.abs(b.delta) !== Math.abs(a.delta)) return Math.abs(b.delta) - Math.abs(a.delta);
+    if (a.score_atual !== b.score_atual) return a.score_atual - b.score_atual;
+    return normalizarNomeItem(a.item).localeCompare(normalizarNomeItem(b.item), 'pt-BR');
+  }).slice(0, 15);
 
   const linhas = ordenados.map(item => {
     const icon = item.trend === 'melhorou' ? '🟢' :
       item.trend === 'piorou' ? '🔴' :
         item.trend === 'novo' ? '🆕' : '🟡';
     
-    // 🔥 Destaque visual para itens de sono
     const destaqueSono = isItemSono(item.item) 
       ? 'background: #fef3c7; border-left: 3px solid #f59e0b; padding-left: 6px;' 
       : '';
@@ -265,15 +296,9 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
       ? `${item.delta >= 0 ? '+' : ''}${item.delta}`
       : '—';
 
-    const scoreAnterior = item.score_anterior !== null
-      ? item.score_anterior
-      : '—';
-
+    const scoreAnterior = item.score_anterior !== null ? item.score_anterior : '—';
     const corDelta = item.delta >= 0 ? '#16a34a' : '#dc2626';
-    
-    // 🔥 Cor do score atual baseada em gravidade
-    const corScore = item.score_atual >= 70 ? '#16a34a' : 
-                     item.score_atual >= 50 ? '#ca8a04' : '#dc2626';
+    const corScore = item.score_atual >= 70 ? '#16a34a' : item.score_atual >= 50 ? '#ca8a04' : '#dc2626';
 
     return `
       <tr style="border-bottom: 1px solid #f1f5f9; ${destaqueSono}">
@@ -288,7 +313,6 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
     `;
   }).join('');
 
-  // Calcula resumo para badge
   const resumo = {
     melhoraram: ordenados.filter(i => i.trend === 'melhorou').length,
     pioraram: ordenados.filter(i => i.trend === 'piorou').length,
@@ -302,19 +326,15 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
         <span>📈</span> Evolução dos Principais Itens
         ${temSono ? '<span style="margin-left: 8px; font-size: 10px; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: 600;">😴 Sono em foco</span>' : ''}
       </div>
-      
-      <!-- Badge de resumo -->
       <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
         ${resumo.melhoraram > 0 ? `<span style="background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🟢 ${resumo.melhoraram} melhoraram</span>` : ''}
         ${resumo.estaveis > 0 ? `<span style="background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🟡 ${resumo.estaveis} estáveis</span>` : ''}
         ${resumo.pioraram > 0 ? `<span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🔴 ${resumo.pioraram} pioraram</span>` : ''}
         ${resumo.novos > 0 ? `<span style="background: #dbeafe; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">🆕 ${resumo.novos} novos</span>` : ''}
       </div>
-      
       <div style="font-size: 9px; color: #64748b; margin-bottom: 8px; font-style: italic;">
         Comparativo com exame anterior • 🟢 Melhorou (≥10 pts) • 🟡 Estável (±9 pts) • 🔴 Piorou (≤-10 pts) • 🆕 Novo
       </div>
-      
       <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
         <thead>
           <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
@@ -325,13 +345,15 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculin
             <th style="padding: 8px 4px; text-align: center; font-weight: 700; color: #334155; width: 10%;">Status</th>
           </tr>
         </thead>
-        <tbody>
-          ${linhas}
-        </tbody>
+        <tbody>${linhas}</tbody>
       </table>
     </div>
   `;
 }
+
+// =======================================================================
+// 🔥 FUNÇÃO PRINCIPAL: gerarRelatorioPDF
+// =======================================================================
 
 export async function gerarRelatorioPDF(data: RelatorioData) {
   const container = document.createElement("div");
@@ -347,9 +369,11 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
 
   const blocks: HTMLElement[] = [];
 
-  // =======================================================================
-  // 1. CABEÇALHO (com filtros aplicados, se houver)
-  // =======================================================================
+  // 🔥 1. CABEÇALHO — Data formatada com hora
+  const dataExibicao = data.createdAt instanceof Date 
+    ? data.createdAt 
+    : new Date(data.createdAt);
+  
   const filtrosHTML = data.filtros_aplicados?.length
     ? `<div style="font-size:10px;color:#0ea5e9;margin-top:4px">
         🔍 Filtro: ${data.filtros_aplicados.map(f => f === 'emotional' ? 'Emocional' : f).join(', ')}
@@ -365,16 +389,14 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
         </div>
         <div style="text-align:right;font-size:10px;color:#64748b">
           <b>${escapeHtml(data.clientName)}</b><br/>
-          ${formatDate(data.createdAt)}
+          ${formatDate(dataExibicao)}
         </div>
       </div>
       ${filtrosHTML}
     `, true)
   );
 
-  // =======================================================================
-  // 2. INTERPRETAÇÃO (fatiada se longa)
-  // =======================================================================
+  // 🔥 2. INTERPRETAÇÃO
   if (data.interpretacao) {
     const pedacos = dividirTexto(data.interpretacao, MAX_CHARS_POR_BLOCO);
     for (let i = 0; i < pedacos.length; i++) {
@@ -388,17 +410,19 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // =======================================================================
-  // 3. PONTOS CRÍTICOS (com filtro de gênero e destaque para sono)
-  // =======================================================================
+  // 🔥 3. PONTOS CRÍTICOS — COM FILTRO, DEDUPLICAÇÃO E DESTAQUE PARA SONO
   if (data.pontos_criticos.length > 0) {
-    // Filtrar por gênero
-    const pontosFiltrados = data.pontos_criticos.filter(p => filtrarPorGenero(p, data.pacienteGenero));
+    let pontosFiltrados = data.pontos_criticos
+      .filter(p => filtrarPorGenero(p, data.pacienteGenero))
+      .map(p => normalizarNomeItem(p));
     
-    // 🔥 Destacar itens de sono no topo
+    // Remover duplicatas mantendo primeira ocorrência
+    pontosFiltrados = [...new Set(pontosFiltrados)];
+    
+    // Destacar itens de sono no topo
     const pontosSono = pontosFiltrados.filter(p => isItemSono(p));
     const pontosOutros = pontosFiltrados.filter(p => !isItemSono(p));
-    const listaOrdenada = [...pontosSono, ...pontosOutros].slice(0, 8); // Limita a 8 para não poluir
+    const listaOrdenada = [...pontosSono, ...pontosOutros].slice(0, 8);
     
     if (listaOrdenada.length > 0) {
       const listaHTML = listaOrdenada
@@ -422,23 +446,18 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // =======================================================================
-  // 🔥 NOVO: TABELA DE EVOLUÇÃO POR ITEM (com filtro de gênero e destaque sono)
-  // =======================================================================
+  // 🔥 4. TABELA DE EVOLUÇÃO
   if (data.item_scores && data.item_scores.length > 0) {
     const tabelaHTML = gerarTabelaEvolucao(data.item_scores, data.pacienteGenero);
     if (tabelaHTML) {
       blocks.push(criarBlocoHTML(tabelaHTML, true));
     }
   } else {
-    // Fallback melhorado
     blocks.push(
       criarBlocoHTML(`
       <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 12px; border: 2px dashed #cbd5e1;">
         <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
-        <div style="font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">
-          Evolução dos Itens
-        </div>
+        <div style="font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Evolução dos Itens</div>
         <div style="font-size: 11px; color: #64748b; line-height: 1.5;">
           Para visualizar a evolução comparativa, é necessário ter pelo menos <b>2 exames com análise completa</b> deste paciente.
           <br/><br/>
@@ -452,26 +471,31 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     );
   }
 
-  // =======================================================================
-  // 4. COMPARATIVO (se existir)
-  // =======================================================================
+  // 🔥 5. COMPARATIVO
   const comparativoHTML = extrairComparativoHTML(data.comparacao);
   if (comparativoHTML) {
     blocks.push(criarBlocoHTML(comparativoHTML, true));
   }
 
-  // =======================================================================
-  // 5. MAPA TÉCNICO + IMPACTO FITNESS (com filtro de gênero)
-  // =======================================================================
+  // 🔥 6. MAPA TÉCNICO + IMPACTO FITNESS — COM FILTRO E DEDUPLICAÇÃO
   if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
-    // Filtrar problemas por gênero
-    const problemasFiltrados = data.diagnostico.problemas.filter(p => 
-      filtrarPorGenero(p.item, data.pacienteGenero)
-    );
+    const problemasFiltrados = data.diagnostico.problemas
+      .filter(p => filtrarPorGenero(p.item, data.pacienteGenero))
+      .map(p => ({ ...p, item: normalizarNomeItem(p.item) }));
     
-    if (problemasFiltrados.length > 0) {
-      const grupos: Record<string, typeof data.diagnostico.problemas> = {};
-      for (const item of problemasFiltrados) {
+    // Agrupar e deduplicar
+    const mapaUnico = new Map<string, typeof problemasFiltrados[0]>();
+    for (const p of problemasFiltrados) {
+      const chave = `${p.sistema}|${p.item.toLowerCase()}`;
+      if (!mapaUnico.has(chave) || (p.score ?? 100) < (mapaUnico.get(chave)?.score ?? 100)) {
+        mapaUnico.set(chave, p);
+      }
+    }
+    const problemasUnicos = Array.from(mapaUnico.values());
+    
+    if (problemasUnicos.length > 0) {
+      const grupos: Record<string, typeof problemasUnicos> = {};
+      for (const item of problemasUnicos) {
         const sys = item.sistema || "Geral";
         if (!grupos[sys]) grupos[sys] = [];
         grupos[sys].push(item);
@@ -522,18 +546,14 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // =======================================================================
-  // 6. PLANO TERAPÊUTICO (com filtro de gênero)
-  // =======================================================================
+  // 🔥 7. PLANO TERAPÊUTICO — COM FILTRO DE GÊNERO
   if (data.plano_terapeutico?.terapias?.length) {
-    // Filtrar terapias por gênero (remover terapias exclusivas de gênero não compatível)
-    const terapiasFiltradas = data.plano_terapeutico.terapias.filter(t => 
-      filtrarPorGenero(t.nome, data.pacienteGenero)
-    );
+    const terapiasFiltradas = data.plano_terapeutico.terapias
+      .filter(t => filtrarPorGenero(t.nome, data.pacienteGenero))
+      .map(t => ({ ...t, nome: normalizarNomeItem(t.nome) }));
     
     if (terapiasFiltradas.length > 0) {
       const TERAPIAS_POR_BLOCO = 4;
-
       for (let i = 0; i < terapiasFiltradas.length; i += TERAPIAS_POR_BLOCO) {
         const chunk = terapiasFiltradas.slice(i, i + TERAPIAS_POR_BLOCO);
         const htmlTerapias = chunk.map((t) => `
@@ -554,9 +574,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
   }
 
-  // =======================================================================
-  // 7. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA (com destaque para sono se relevante)
-  // =======================================================================
+  // 🔥 8. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA — COM DESTAQUE PARA SONO
   const temInsônia = data.pontos_criticos?.some(p => isItemSono(p)) || 
                      data.item_scores?.some(is => isItemSono(is.item) && is.score_atual < 50);
   
@@ -582,13 +600,11 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
 
   blocks.push(criarBlocoHTML(htmlFrequenciaEJustificativa));
 
-  // =======================================================================
-  // 8. RODAPÉ
-  // =======================================================================
+  // 🔥 9. RODAPÉ
   blocks.push(
     criarBlocoHTML(`
       <div style="text-align:center;font-size:9px;color:#94a3b8;padding-top:8px;border-top:1px solid #e2e8f0">
-        Gerado por BioSync • Saúde Integrativa • ${new Date().getFullYear()}
+        Gerado por QRMA + BioSync • Lunara Terapias - Saúde Integrativa • ${new Date().getFullYear()}
       </div>
     `)
   );
@@ -611,7 +627,7 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
     }
 
     const safeFilename = data.clientName.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
-    pdf.save(`biosync-${safeFilename || "relatorio"}-${formatDate(data.createdAt).replace(/\//g, "-")}.pdf`);
+    pdf.save(`biosync-${safeFilename || "relatorio"}-${formatDate(dataExibicao).replace(/\//g, "-")}.pdf`);
 
   } catch (error) {
     console.error("❌ Erro ao gerar PDF:", error);
