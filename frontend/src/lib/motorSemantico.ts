@@ -345,7 +345,7 @@ function calcularSimilaridade(
 function calcularScoreParaItem(
   itemBase: string,
   categoria: string,
-  gravidade: Gravidade,
+  gravidade: Gravidade
   ): number {
   // 1. Fallback: usar pesos emocionais padrão se for categoria emotional
   if (categoria.toLowerCase() === 'emotional' || categoria.toLowerCase() === 'emocional') {
