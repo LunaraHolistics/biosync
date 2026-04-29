@@ -292,7 +292,7 @@ function extrairGeneroPaciente(nomePaciente: string): 'masculino' | 'feminino' |
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-  AiStructuredData;
+   AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -519,12 +519,12 @@ function exameRowToAiData(
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  AiStructuredData,
+   AiStructuredData,  // ← 3º parâmetro
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
   examesAnteriores?: ExameRow[],
-  pacienteGenero?: 'masculino' | 'feminino' // ← NOVO PARÂMETRO
+  pacienteGenero?: 'masculino' | 'feminino'
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
