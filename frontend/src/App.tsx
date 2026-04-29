@@ -557,6 +557,9 @@ function exameRowToAiData(
 // ==============================
 // 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM FALLBACK DE SCORES DO BANCO
 // ==============================
+// ==============================
+// 🔥 FUNÇÃO buildRelatorioData - VERSÃO FINAL COM FALLBACK DIRETO DO BANCO
+// ==============================
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
@@ -569,54 +572,44 @@ function buildRelatorioData(
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
-  // 🔥 Calcula item_scores com evolução se houver exames anteriores
+  // 🔥 PRIORIDADE 1: Usar item_scores direto do banco se disponíveis
   let itemScoresEvolucao: ItemScoreEvolucao[] | undefined;
   
-  // Verificar se motor tem matches
-  if (motor?.matches && motor.matches.length > 0) {
-    console.log('📊 [buildRelatorioData] Motor matches:', motor.matches.length);
-    console.log('📊 [buildRelatorioData] Amostra:', motor.matches.slice(0, 2));
+  // Verificar se row.indice_biosync tem item_scores
+  const indiceBiosync = row.indice_biosync as Record<string, any> | undefined;
+  if (indiceBiosync?.item_scores && Array.isArray(indiceBiosync.item_scores)) {
+    console.log('📊 [buildRelatorioData] Usando item_scores DIRETO DO BANCO:', indiceBiosync.item_scores.length, 'itens');
+    
+    // Mapear diretamente do banco
+    itemScoresEvolucao = indiceBiosync.item_scores.map((is: any) => ({
+      item: is.item,
+      categoria: is.categoria || 'geral',
+      score_atual: typeof is.score_atual === 'number' ? is.score_atual : 50,
+      score_anterior: is.score_anterior ?? null,
+      delta: is.delta ?? 0,
+      trend: is.trend ?? 'novo',
+      impacto: is.impacto || 'Desequilíbrio bioenergético identificado'
+    }));
+    
+    console.log('📊 [DEBUG] Amostra de scores do banco:', itemScoresEvolucao.slice(0, 5).map(is => `${is.item}: ${is.score_atual}`));
+  } 
+  // 🔥 PRIORIDADE 2: Fallback para motor.matches se item_scores não estiver no banco
+  else if (motor?.matches && motor.matches.length > 0) {
+    console.log('📊 [buildRelatorioData] Usando motor.matches:', motor.matches.length, 'itens');
     
     const itensAtuais = motor.matches.map((m: any) => ({
       item: m.itemBase,
       categoria: m.categoria,
-      score: m.score, // ← Pode ser undefined, fallback será aplicado em gerarItemScoresComEvolucao
+      score: m.score,
       impacto: m.impacto || 'Desequilíbrio bioenergético identificado'
     }));
     
-    // 🔥 PASSAR rowAtual para fallback de scores do banco
-    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || [], row);
-    
-    console.log('📊 [buildRelatorioData] item_scores gerados:', itemScoresEvolucao?.length);
-    console.log('📊 [buildRelatorioData] Amostra de scores:', itemScoresEvolucao?.slice(0, 3).map(is => ({
-      item: is.item,
-      score: is.score_atual,
-      trend: is.trend
-    })));
-  } else {
-    console.warn('⚠️ [buildRelatorioData] motor.matches vazio ou undefined');
-    
-    // 🔥 Fallback extremo: tentar criar item_scores diretamente do indice_biosync
-    try {
-      const indiceBiosync = row.indice_biosync;
-      if (indiceBiosync && typeof indiceBiosync === 'object' && 'item_scores' in indiceBiosync) {
-        const itemScoresDoBanco = (indiceBiosync as any).item_scores;
-        if (Array.isArray(itemScoresDoBanco) && itemScoresDoBanco.length > 0) {
-          console.log('📊 [buildRelatorioData] Usando fallback: scores direto do banco');
-          itemScoresEvolucao = itemScoresDoBanco.map((is: any) => ({
-            item: is.item,
-            categoria: is.categoria || 'geral',
-            score_atual: is.score_atual ?? 50,
-            score_anterior: is.score_anterior ?? null,
-            delta: is.delta ?? 0,
-            trend: is.trend ?? 'novo',
-            impacto: is.impacto || 'Desequilíbrio bioenergético identificado'
-          }));
-        }
-      }
-    } catch (e) {
-      console.warn('⚠️ [buildRelatorioData] Erro no fallback extremo:', e);
-    }
+    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || []);
+  } 
+  // 🔥 PRIORIDADE 3: Fallback extremo vazio
+  else {
+    console.warn('⚠️ [buildRelatorioData] Sem item_scores no banco E sem motor.matches');
+    itemScoresEvolucao = [];
   }
 
   return {
