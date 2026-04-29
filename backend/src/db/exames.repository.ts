@@ -10,7 +10,10 @@ import { supabase } from '../config/supabase';
 export type ItemScoreEvolucao = {
   item: string;
   categoria: string;
-  score: number;
+  score_atual: number;  // ← ✅ Nome correto (compatível com frontend)
+  score_anterior: number | null;  // ← ✅ Adicionado para evolução
+  delta: number;  // ← ✅ Adicionado para evolução
+  trend: 'melhorou' | 'piorou' | 'estavel' | 'novo';  // ← ✅ Adicionado para evolução
   status: 'baixo' | 'normal' | 'alto';
   impacto: string;
   impacto_fitness?: {
