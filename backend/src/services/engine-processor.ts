@@ -165,7 +165,7 @@ function mapearImpactoFitness(categoria: string, score: number): MatchClinico['i
     };
   }
   
-  return null;
+  return undefined;
 }
 
 // ==============================
