@@ -345,8 +345,9 @@ function calcularSimilaridade(
 function calcularScoreParaItem(
   itemBase: string,
   categoria: string,
-  gravidade: Gravidade
-  ): number {
+  gravidade: Gravidade,
+  _base?: BaseAnaliseSaudeRow[]  // ← Add back but unused (prefix with _)
+): number {
   // 1. Fallback: usar pesos emocionais padrão se for categoria emotional
   if (categoria.toLowerCase() === 'emotional' || categoria.toLowerCase() === 'emocional') {
     const itemNorm = normalizarTexto(itemBase);
