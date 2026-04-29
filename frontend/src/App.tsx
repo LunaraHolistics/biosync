@@ -278,11 +278,21 @@ function gerarItemScoresComEvolucao(
 }
 
 // ==============================
+// 🔥 HELPER: EXTRAIR GÊNERO DO PACIENTE
+// ==============================
+function extrairGeneroPaciente(nomePaciente: string): 'masculino' | 'feminino' | undefined {
+  if (!nomePaciente) return undefined;
+  const match = nomePaciente.match(/Sexo:\s*(Masculino|Feminino)/i);
+  if (!match) return undefined;
+  return match[1].toLowerCase() as 'masculino' | 'feminino';
+}
+
+// ==============================
 // SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX E RESTAURAÇÃO)
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-  data: AiStructuredData;
+  AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -301,17 +311,21 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
 
   return (
     <div>
-      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-        <span>PLANO TERAPÊUTICO</span>
-        {ocultas && ocultas.size > 0 && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400 }}>{ocultas.size} terapia(s) ocultada(s)</span>}
+      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>🌿 PLANO TERAPÊUTICO</span>
+        {ocultas && ocultas.size > 0 && (
+          <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400, background: "rgba(245, 158, 11, 0.1)", padding: "2px 8px", borderRadius: 4 }}>
+            {ocultas.size} ocultada(s)
+          </span>
+        )}
       </div>
 
       {p.terapias.length > 0 && (
         <>
-          <div style={{ marginBottom: 10, fontSize: 14 }}>
-            <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
+          <div style={{ marginBottom: 10, fontSize: 13, color: "#64748b" }}>
+            <b>Periodicidade:</b> {labelPlanoTipo(p.tipo)}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {p.terapias.map((item: any, i: number) => {
               const idx = String(i);
               const isOculta = ocultas?.has(idx) || false;
@@ -327,9 +341,10 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                       border: "1px dashed #475569",
                       borderRadius: 10,
                       padding: 10,
-                      opacity: 0.5,
+                      opacity: 0.6,
                       cursor: "pointer",
-                      transition: "opacity 0.2s"
+                      transition: "all 0.2s",
+                      background: "rgba(71, 85, 105, 0.05)"
                     }}
                     title="Clique para restaurar esta terapia ao PDF"
                   >
@@ -340,11 +355,11 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                         readOnly
                         style={{ cursor: "pointer", accentColor: "#22c55e", width: 16, height: 16 }}
                       />
-                      <span style={{ fontSize: 8, opacity: 1, marginTop: 2, color: "#22c55e", fontWeight: 700 }}>Restaurar</span>
+                      <span style={{ fontSize: 8, opacity: 1, marginTop: 2, color: "#22c55e", fontWeight: 700 }}>✓</span>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, textDecoration: "line-through" }}>{item.nome}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>Ocultada do PDF. Clique aqui para reverter.</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, textDecoration: "line-through", color: "#94a3b8" }}>{item.nome}</div>
+                      <div style={{ fontSize: 10, color: "#64748b" }}>Ocultada do PDF • Clique para restaurar</div>
                     </div>
                   </div>
                 );
@@ -358,7 +373,9 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                     gap: 10,
                     border: "1px solid var(--border)",
                     borderRadius: 10,
-                    padding: 10,
+                    padding: 12,
+                    background: "rgba(255,255,255,0.02)",
+                    transition: "border-color 0.2s"
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 2 }}>
@@ -369,18 +386,21 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                       style={{ cursor: "pointer", accentColor: "#ef4444", width: 16, height: 16 }}
                       title="Clique para ocultar esta terapia do PDF"
                     />
-                    <span style={{ fontSize: 8, opacity: 0.5, marginTop: 2 }}>Ocultar</span>
+                    <span style={{ fontSize: 8, opacity: 0.6, marginTop: 2, color: "#ef4444" }}>Ocultar</span>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
-                    <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
-                      <b>Frequência:</b> {item.frequencia || "—"}
+                    <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 13 }}>{item.nome}</div>
+                    <div style={{ fontSize: 12, color: "#0ea5e9", marginBottom: 4 }}>
+                      <b>Frequência:</b> {item.frequencia || "Conforme necessidade"}
                     </div>
-                    <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 6, whiteSpace: "pre-wrap" }}>
                       {item.descricao || "—"}
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.85 }}>
-                      <b>Justificativa:</b> {item.justificativa || "—"}</div>
+                    {item.justificativa && (
+                      <div style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", borderLeft: "2px solid #334155", paddingLeft: 8 }}>
+                        <b>Por quê:</b> {item.justificativa}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -390,27 +410,32 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
       )}
 
       {onChangeEditavel && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
-            Adicionar/Editar terapias manualmente (será incluído no PDF):
+        <div style={{ marginTop: 16, padding: 12, background: "rgba(30, 41, 59, 0.5)", borderRadius: 10, border: "1px dashed #475569" }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 12, color: "#94a3b8" }}>
+            ✏️ Adicionar terapias manualmente:
           </div>
           <textarea
             value={editavel}
             onChange={(e) => onChangeEditavel(e.target.value)}
-            placeholder="Ex: Acupuntura — Semanal — Para dor e inflamação crônica...
-Ozonioterapia — Quinzenal — Para oxigenação tecidual..."
+            placeholder="Formato: Nome da Terapia — Frequência — Descrição/Justificativa
+
+Exemplos:
+• Acupuntura — Semanal — Para dor e inflamação crônica
+• Ozonioterapia — Quinzenal — Para oxigenação tecidual
+• Fitoterapia — Diário — Suporte hepático e desintox"
             style={{
               width: "100%",
               minHeight: 100,
               padding: 10,
               borderRadius: 8,
               border: "1px solid var(--border)",
-              background: "transparent",
+              background: "rgba(15, 23, 42, 0.5)",
               color: "inherit",
-              fontSize: 13,
+              fontSize: 12,
               lineHeight: "18px",
               resize: "vertical",
               boxSizing: "border-box",
+              fontFamily: "monospace"
             }}
           />
         </div>
@@ -420,7 +445,7 @@ Ozonioterapia — Quinzenal — Para oxigenação tecidual..."
 }
 
 // ==============================
-// 🔥 CONVERSÃO CORRIGIDA: Motor Novo → AiStructuredData COM FILTROS
+// 🔥 CONVERSÃO: Motor Novo → AiStructuredData COM FILTROS + GÊNERO
 // ==============================
 
 function exameRowToAiData(
@@ -428,8 +453,8 @@ function exameRowToAiData(
   base: BaseAnaliseSaudeRow[],
   terapias: TerapiaRow[],
   terapiasManuais?: string,
-  filtrosAtivos?: string[] // ← NOVO PARÂMETRO
-): AiStructuredData {
+  filtrosAtivos?: string[]
+): { AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {
   const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
 
   // 🔥 APLICA FILTROS NA ANÁLISE ANTES DE CONVERTER
@@ -469,7 +494,11 @@ function exameRowToAiData(
     ? analise.setoresAfetados.filter(s => filtrosAtivos.includes(s.toLowerCase()))
     : analise.setoresAfetados;
 
-  return {
+  // 🔥 Extrair gênero do paciente para filtragem no PDF
+  const pacienteGenero = extrairGeneroPaciente(row.nome_paciente);
+
+  // ✅ CORREÇÃO: Retornar objeto com propriedades nomeadas
+  const analiseData: AiStructuredData = {
     interpretacao: analise.interpretacao,
     pontos_criticos: analise.pontosCriticos,
     plano_terapeutico: {
@@ -479,31 +508,23 @@ function exameRowToAiData(
     frequencia_lunara: frequencia_lunara,
     justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${setoresParaJustificativa.join(", ") || "nenhum"}.`,
   };
+
+  return { analiseData, pacienteGenero };
 }
 
-// ✅ CORREÇÃO: Esta declaração FORA da função App() foi REMOVIDA para evitar erro de escopo
-// A declaração correta está DENTRO da função App() abaixo
+// ==============================
+// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM item_scores, EVOLUÇÃO E GÊNERO
+// ==============================
 
-function getRelatorioOriginal(
-  meta: Record<string, unknown>,
-  _row: ExameRow
-): string | undefined {
-  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
-    const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string" && val.length > 0) return val;
-  }
-  return undefined;
-}
-
-// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM item_scores E EVOLUÇÃO
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  data: AiStructuredData,  // ← ✅ CORRETO: nome "data", tipo "AiStructuredData"
+  AiStructuredData,
   comparacao?: any,
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
-  examesAnteriores?: ExameRow[]
+  examesAnteriores?: ExameRow[],
+  pacienteGenero?: 'masculino' | 'feminino' // ← NOVO PARÂMETRO
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -540,8 +561,24 @@ function buildRelatorioData(
     relatorio_original_html: getRelatorioOriginal(meta, row),
     filtros_aplicados: filtrosAtivos && filtrosAtivos.length > 0 ? filtrosAtivos : undefined,
     // 🔥 NOVO: item_scores com evolução para tabela no PDF
-    item_scores: itemScoresEvolucao
+    item_scores: itemScoresEvolucao,
+    // 🔥 NOVO: Gênero do paciente para filtragem no PDF
+    pacienteGenero
   };
+}
+
+// ✅ CORREÇÃO: Esta declaração FORA da função App() foi REMOVIDA para evitar erro de escopo
+// A declaração correta está DENTRO da função App() abaixo
+
+function getRelatorioOriginal(
+  meta: Record<string, unknown>,
+  _row: ExameRow
+): string | undefined {
+  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
+    const val = (meta as any).relatorio_original_html;
+    if (typeof val === "string" && val.length > 0) return val;
+  }
+  return undefined;
 }
 
 // ==============================
@@ -618,9 +655,12 @@ function App() {
   }, [examesPaciente]);
 
   // 🔥 CORREÇÃO: analiseSelecionadaData declarado DENTRO da função App() (CORRETO)
-  const analiseSelecionadaData = analiseSelecionada
+  const analiseResult = analiseSelecionada
     ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
-    : null;
+    : { analiseData: null, pacienteGenero: undefined };
+
+  const analiseSelecionadaData = analiseResult.analiseData;
+  const generoSelecionado = analiseResult.pacienteGenero;
 
   const analiseMotorRaw = analiseSelecionada
     ? obterAnalise(analiseSelecionada)
@@ -631,7 +671,7 @@ function App() {
     ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
     : analiseMotorRaw;
 
-  // 🔥 PASSA categoriasFiltro E examesAnteriores PARA buildRelatorioData
+  // 🔥 PASSA categoriasFiltro, examesAnteriores E pacienteGenero PARA buildRelatorioData
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -646,7 +686,8 @@ function App() {
       comparativoExamesData,
       analiseMotor,
       categoriasFiltro,
-      examesPaciente.filter(e => e.id !== analiseSelecionada?.id) // 🔥 Exames anteriores para evolução
+      examesPaciente.filter(e => e.id !== analiseSelecionada?.id), // 🔥 Exames anteriores para evolução
+      generoSelecionado // 🔥 NOVO: Passar gênero para filtragem no PDF
     )
     : null;
 
@@ -897,8 +938,8 @@ function App() {
                                   console.log('🔍 [DEBUG] Setores filtrados:', analiseMotor?.setoresAfetados);
                                   console.log('🔍 [DEBUG] Matches filtrados:', analiseMotor?.matches?.map(m => m.categoria));
 
-                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id)));
+                                  const analiseResult = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", analiseResult.data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id), analiseResult.pacienteGenero));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
                                 disabled={gerandoPdf}

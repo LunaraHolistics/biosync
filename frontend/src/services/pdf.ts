@@ -49,6 +49,8 @@ export type RelatorioData = {
   filtros_aplicados?: string[];
   // 🔥 NOVO: Scores por item com evolução para tabela no PDF
   item_scores?: ItemScoreEvolucao[];
+  // 🔥 NOVO: Dados do paciente para filtragem por gênero
+  pacienteGenero?: 'masculino' | 'feminino';
 };
 
 function formatDate(value: string | Date): string {
@@ -139,6 +141,47 @@ function adicionarBlocoAoPDF(
   return currentY + imgHeight + 8;
 }
 
+// 🔥 FILTRO: Remove itens específicos de gênero não compatível
+function filtrarPorGenero(item: string, genero?: 'masculino' | 'feminino'): boolean {
+  if (!genero) return true; // Sem filtro se gênero não informado
+  
+  const itemLower = item.toLowerCase();
+  
+  // Itens exclusivos masculinos
+  const itensMasculinos = [
+    'testosterona', 'próstata', 'prostata', 'androgênio', 'androgenio', 
+    'hormona masculina', 'hormônio masculino', 'esperma', 'espermatozóide',
+    'ereção', 'ejaculação', 'líbido masculina', 'hipertrofia prostática'
+  ];
+  
+  // Itens exclusivos femininos
+  const itensFemininos = [
+    'estrogênio', 'estrogenio', 'progesterona', 'prolactina', 'hormona feminina',
+    'hormônio feminino', 'ovário', 'ovarios', 'útero', 'utero', 'colo uterino',
+    'menstruação', 'menstruacao', 'ciclo menstrual', 'menopausa', 'gravidez',
+    'amamentação', 'amamentacao', 'mastite', 'cisto ovario', 'inflamação pélvica'
+  ];
+  
+  if (genero === 'masculino') {
+    // Para homens, remover itens femininos
+    return !itensFemininos.some(f => itemLower.includes(f));
+  } else {
+    // Para mulheres, remover itens masculinos
+    return !itensMasculinos.some(m => itemLower.includes(m));
+  }
+}
+
+// 🔥 DESTAQUE: Verifica se item está relacionado a sono/insônia
+function isItemSono(item: string): boolean {
+  const itemLower = item.toLowerCase();
+  return itemLower.includes('sono') || 
+         itemLower.includes('insônia') || itemLower.includes('insonia') ||
+         itemLower.includes('melatonina') || itemLower.includes('dormir') ||
+         itemLower.includes('descanso') || itemLower.includes('fadiga') ||
+         itemLower.includes('magnésio') || itemLower.includes('magnesio') ||
+         itemLower.includes('equilíbrio hepático') || itemLower.includes('equilibrio hepatico');
+}
+
 function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
   const c = comparacao as Record<string, unknown>;
@@ -177,16 +220,34 @@ function extrairComparativoHTML(comparacao: unknown): string {
 }
 
 // =======================================================================
-// 🔥 NOVA FUNÇÃO: Gerar tabela de evolução por item para o PDF
+// 🔥 NOVA FUNÇÃO: Gerar tabela de evolução por item para o PDF (CORRIGIDA)
 // =======================================================================
-function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[]): string {
+function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[], genero?: 'masculino' | 'feminino'): string {
   if (!itemScores || itemScores.length === 0) return '';
 
-  // Ordena: mais impactantes primeiro (maior |delta|), depois alfabético
-  const ordenados = [...itemScores].sort((a, b) => {
+  // 🔥 Filtrar por gênero primeiro
+  const filtrados = itemScores.filter(is => filtrarPorGenero(is.item, genero));
+  
+  if (filtrados.length === 0) return '';
+
+  // 🔥 Priorizar itens de sono/insônia no topo se houver
+  const temSono = filtrados.some(is => isItemSono(is.item));
+  const ordenados = [...filtrados].sort((a, b) => {
+    // 1. Itens de sono primeiro (se houver)
+    if (temSono) {
+      const aSono = isItemSono(a.item) ? 1 : 0;
+      const bSono = isItemSono(b.item) ? 1 : 0;
+      if (aSono !== bSono) return bSono - aSono;
+    }
+    // 2. Depois por impacto (maior |delta|)
     if (Math.abs(b.delta) !== Math.abs(a.delta)) {
       return Math.abs(b.delta) - Math.abs(a.delta);
     }
+    // 3. Depois por score atual (mais crítico primeiro)
+    if (a.score_atual !== b.score_atual) {
+      return a.score_atual - b.score_atual;
+    }
+    // 4. Finalmente alfabético
     return a.item.localeCompare(b.item, 'pt-BR');
   }).slice(0, 15); // Limita a 15 itens para não poluir
 
@@ -194,6 +255,11 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[]): string {
     const icon = item.trend === 'melhorou' ? '🟢' :
       item.trend === 'piorou' ? '🔴' :
         item.trend === 'novo' ? '🆕' : '🟡';
+    
+    // 🔥 Destaque visual para itens de sono
+    const destaqueSono = isItemSono(item.item) 
+      ? 'background: #fef3c7; border-left: 3px solid #f59e0b; padding-left: 6px;' 
+      : '';
 
     const deltaStr = item.score_anterior !== null
       ? `${item.delta >= 0 ? '+' : ''}${item.delta}`
@@ -204,12 +270,18 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[]): string {
       : '—';
 
     const corDelta = item.delta >= 0 ? '#16a34a' : '#dc2626';
+    
+    // 🔥 Cor do score atual baseada em gravidade
+    const corScore = item.score_atual >= 70 ? '#16a34a' : 
+                     item.score_atual >= 50 ? '#ca8a04' : '#dc2626';
 
     return `
-      <tr style="border-bottom: 1px solid #f1f5f9;">
-        <td style="padding: 8px 4px; font-size: 10px; font-weight: 600; color: #1e293b; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item.item)}</td>
+      <tr style="border-bottom: 1px solid #f1f5f9; ${destaqueSono}">
+        <td style="padding: 8px 4px; font-size: 10px; font-weight: 600; color: #1e293b; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          ${isItemSono(item.item) ? '😴 ' : ''}${escapeHtml(item.item)}
+        </td>
         <td style="padding: 8px 4px; font-size: 10px; text-align: center; color: #475569;">${scoreAnterior}</td>
-        <td style="padding: 8px 4px; font-size: 10px; text-align: center; font-weight: 700; color: #0f172a;">${item.score_atual}</td>
+        <td style="padding: 8px 4px; font-size: 10px; text-align: center; font-weight: 700; color: ${corScore};">${item.score_atual}</td>
         <td style="padding: 8px 4px; font-size: 10px; text-align: center; font-weight: 700; color: ${corDelta};">${deltaStr}</td>
         <td style="padding: 8px 4px; font-size: 10px; text-align: center;">${icon}</td>
       </tr>
@@ -228,6 +300,7 @@ function gerarTabelaEvolucao(itemScores: ItemScoreEvolucao[]): string {
     <div style="margin: 20px 0; page-break-inside: avoid;" data-pdf-section="evolucao">
       <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
         <span>📈</span> Evolução dos Principais Itens
+        ${temSono ? '<span style="margin-left: 8px; font-size: 10px; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: 600;">😴 Sono em foco</span>' : ''}
       </div>
       
       <!-- Badge de resumo -->
@@ -316,25 +389,44 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   }
 
   // =======================================================================
-  // 3. PONTOS CRÍTICOS
+  // 3. PONTOS CRÍTICOS (com filtro de gênero e destaque para sono)
   // =======================================================================
   if (data.pontos_criticos.length > 0) {
-    const listaHTML = data.pontos_criticos
-      .map(p => `<li style="margin-bottom:3px;font-size:11px;color:#334155">${escapeHtml(p)}</li>`)
-      .join("");
-    blocks.push(
-      criarBlocoHTML(`
-        <div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:6px">⚠️ Pontos Críticos</div>
-        <ul style="margin:0;padding-left:18px;list-style-type:disc">${listaHTML}</ul>
-      `, true)
-    );
+    // Filtrar por gênero
+    const pontosFiltrados = data.pontos_criticos.filter(p => filtrarPorGenero(p, data.pacienteGenero));
+    
+    // 🔥 Destacar itens de sono no topo
+    const pontosSono = pontosFiltrados.filter(p => isItemSono(p));
+    const pontosOutros = pontosFiltrados.filter(p => !isItemSono(p));
+    const listaOrdenada = [...pontosSono, ...pontosOutros].slice(0, 8); // Limita a 8 para não poluir
+    
+    if (listaOrdenada.length > 0) {
+      const listaHTML = listaOrdenada
+        .map(p => {
+          const destaque = isItemSono(p) ? 'style="color: #92400e; font-weight: 600;"' : '';
+          const emoji = isItemSono(p) ? '😴 ' : '';
+          return `<li ${destaque} style="margin-bottom:3px;font-size:11px;color:#334155">${emoji}${escapeHtml(p)}</li>`;
+        })
+        .join("");
+      
+      const tituloSono = pontosSono.length > 0 
+        ? '⚠️ Pontos Críticos <span style="font-size:10px;color:#92400e;font-weight:400">(Sono em destaque)</span>' 
+        : '⚠️ Pontos Críticos';
+      
+      blocks.push(
+        criarBlocoHTML(`
+          <div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:6px">${tituloSono}</div>
+          <ul style="margin:0;padding-left:18px;list-style-type:disc">${listaHTML}</ul>
+        `, true)
+      );
+    }
   }
 
   // =======================================================================
-  // 🔥 NOVO: TABELA DE EVOLUÇÃO POR ITEM (com fallback se não houver dados)
+  // 🔥 NOVO: TABELA DE EVOLUÇÃO POR ITEM (com filtro de gênero e destaque sono)
   // =======================================================================
   if (data.item_scores && data.item_scores.length > 0) {
-    const tabelaHTML = gerarTabelaEvolucao(data.item_scores);
+    const tabelaHTML = gerarTabelaEvolucao(data.item_scores, data.pacienteGenero);
     if (tabelaHTML) {
       blocks.push(criarBlocoHTML(tabelaHTML, true));
     }
@@ -369,96 +461,114 @@ export async function gerarRelatorioPDF(data: RelatorioData) {
   }
 
   // =======================================================================
-  // 5. MAPA TÉCNICO + IMPACTO FITNESS (agrupado por sistema, paginado)
+  // 5. MAPA TÉCNICO + IMPACTO FITNESS (com filtro de gênero)
   // =======================================================================
   if (data.diagnostico?.problemas && data.diagnostico.problemas.length > 0) {
-    const grupos: Record<string, typeof data.diagnostico.problemas> = {};
-    for (const item of data.diagnostico.problemas) {
-      const sys = item.sistema || "Geral";
-      if (!grupos[sys]) grupos[sys] = [];
-      grupos[sys].push(item);
-    }
+    // Filtrar problemas por gênero
+    const problemasFiltrados = data.diagnostico.problemas.filter(p => 
+      filtrarPorGenero(p.item, data.pacienteGenero)
+    );
+    
+    if (problemasFiltrados.length > 0) {
+      const grupos: Record<string, typeof data.diagnostico.problemas> = {};
+      for (const item of problemasFiltrados) {
+        const sys = item.sistema || "Geral";
+        if (!grupos[sys]) grupos[sys] = [];
+        grupos[sys].push(item);
+      }
 
-    const categoriasOrdenadas = Object.entries(grupos).sort((a, b) => b[1].length - a[1].length);
-    let isFirstBlock = true;
-    const ITENS_POR_BLOCO = 10;
+      const categoriasOrdenadas = Object.entries(grupos).sort((a, b) => b[1].length - a[1].length);
+      let isFirstBlock = true;
+      const ITENS_POR_BLOCO = 10;
 
-    for (const [sistema, itens] of categoriasOrdenadas) {
-      for (let i = 0; i < itens.length; i += ITENS_POR_BLOCO) {
-        const chunk = itens.slice(i, i + ITENS_POR_BLOCO);
-        const impactosUnicos = [...new Set(chunk.map(it => it.impacto).filter(Boolean))];
-        const sintomasStr = impactosUnicos.length > 0
-          ? `<div style="font-size:10px;color:#64748b;margin:4px 0 6px 0"><b>Sintomas:</b> ${impactosUnicos.slice(0, 3).join("; ")}${impactosUnicos.length > 3 ? "..." : ""}</div>`
-          : "";
+      for (const [sistema, itens] of categoriasOrdenadas) {
+        for (let i = 0; i < itens.length; i += ITENS_POR_BLOCO) {
+          const chunk = itens.slice(i, i + ITENS_POR_BLOCO);
+          const impactosUnicos = [...new Set(chunk.map(it => it.impacto).filter(Boolean))];
+          const sintomasStr = impactosUnicos.length > 0
+            ? `<div style="font-size:10px;color:#64748b;margin:4px 0 6px 0"><b>Sintomas:</b> ${impactosUnicos.slice(0, 3).join("; ")}${impactosUnicos.length > 3 ? "..." : ""}</div>`
+            : "";
 
-        const fitnessMap: Record<string, Set<string>> = {};
-        for (const it of chunk) {
-          if (!it.impacto_fitness) continue;
-          for (const [k, v] of Object.entries(it.impacto_fitness)) {
-            if (!fitnessMap[k]) fitnessMap[k] = new Set();
-            fitnessMap[k].add(String(v));
+          const fitnessMap: Record<string, Set<string>> = {};
+          for (const it of chunk) {
+            if (!it.impacto_fitness) continue;
+            for (const [k, v] of Object.entries(it.impacto_fitness)) {
+              if (!fitnessMap[k]) fitnessMap[k] = new Set();
+              fitnessMap[k].add(String(v));
+            }
           }
+          const fitnessTags = Object.entries(fitnessMap).map(([k, v]) => {
+            const emoji = { performance: '💪', hipertrofia: '🏋️', emagrecimento: '🔥', recuperacao: '🩹', humor: '🧠' }[k] || '📊';
+            return `<span style="background:#f0f9ff;color:#0284c7;padding:2px 6px;border-radius:4px;font-size:9px;margin-right:4px;display:inline-block">${emoji} ${k}: ${[...v].slice(0, 2).join(", ")}${v.size > 2 ? "..." : ""}</span>`;
+          }).join("");
+          const fitnessStr = fitnessTags ? `<div style="margin-top:4px">${fitnessTags}</div>` : "";
+
+          const nomesItens = [...new Set(chunk.map(it => it.item))].join(", ");
+          const htmlItens = `
+            <div style="font-weight:800;color:#0f172a;font-size:11px;margin-bottom:3px">${escapeHtml(sistema)}</div>
+            <div style="font-size:10px;color:#475569;margin-bottom:4px">${escapeHtml(nomesItens)}</div>
+            ${sintomasStr}
+            ${fitnessStr}
+          `;
+
+          const titulo = isFirstBlock
+            ? `<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px">🔍 Mapa Técnico e Impacto Fitness</div>`
+            : `<div style="font-size:10px;color:#64748b;margin-bottom:8px;font-style:italic">Mapa Técnico (continuação)</div>`;
+
+          blocks.push(criarBlocoHTML(`${titulo}${htmlItens}`, true));
+          isFirstBlock = false;
         }
-        const fitnessTags = Object.entries(fitnessMap).map(([k, v]) => {
-          const emoji = { performance: '💪', hipertrofia: '🏋️', emagrecimento: '🔥', recuperacao: '🩹', humor: '🧠' }[k] || '📊';
-          return `<span style="background:#f0f9ff;color:#0284c7;padding:2px 6px;border-radius:4px;font-size:9px;margin-right:4px;display:inline-block">${emoji} ${k}: ${[...v].slice(0, 2).join(", ")}${v.size > 2 ? "..." : ""}</span>`;
-        }).join("");
-        const fitnessStr = fitnessTags ? `<div style="margin-top:4px">${fitnessTags}</div>` : "";
-
-        const nomesItens = [...new Set(chunk.map(it => it.item))].join(", ");
-        const htmlItens = `
-          <div style="font-weight:800;color:#0f172a;font-size:11px;margin-bottom:3px">${escapeHtml(sistema)}</div>
-          <div style="font-size:10px;color:#475569;margin-bottom:4px">${escapeHtml(nomesItens)}</div>
-          ${sintomasStr}
-          ${fitnessStr}
-        `;
-
-        const titulo = isFirstBlock
-          ? `<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px">🔍 Mapa Técnico e Impacto Fitness</div>`
-          : `<div style="font-size:10px;color:#64748b;margin-bottom:8px;font-style:italic">Mapa Técnico (continuação)</div>`;
-
-        blocks.push(criarBlocoHTML(`${titulo}${htmlItens}`, true));
-        isFirstBlock = false;
       }
     }
   }
 
   // =======================================================================
-  // 6. PLANO TERAPÊUTICO (paginado: 4 terapias por bloco)
+  // 6. PLANO TERAPÊUTICO (com filtro de gênero)
   // =======================================================================
   if (data.plano_terapeutico?.terapias?.length) {
-    const terapias = data.plano_terapeutico.terapias;
-    const TERAPIAS_POR_BLOCO = 4;
+    // Filtrar terapias por gênero (remover terapias exclusivas de gênero não compatível)
+    const terapiasFiltradas = data.plano_terapeutico.terapias.filter(t => 
+      filtrarPorGenero(t.nome, data.pacienteGenero)
+    );
+    
+    if (terapiasFiltradas.length > 0) {
+      const TERAPIAS_POR_BLOCO = 4;
 
-    for (let i = 0; i < terapias.length; i += TERAPIAS_POR_BLOCO) {
-      const chunk = terapias.slice(i, i + TERAPIAS_POR_BLOCO);
-      const htmlTerapias = chunk.map((t) => `
-        <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed #e2e8f0">
-          <div style="font-weight:700;color:#0f172a;font-size:11px">${escapeHtml(t.nome)}</div>
-          <div style="font-size:10px;color:#0284c7;margin:2px 0"><b>${escapeHtml(t.frequencia || "")}</b></div>
-          <div style="color:#475569;font-size:10px">${escapeHtml(t.descricao || "")}</div>
-          ${t.justificativa ? `<div style="font-size:9px;color:#64748b;margin-top:3px"><b>Por quê:</b> ${escapeHtml(t.justificativa)}</div>` : ""}
-        </div>
-      `).join("");
+      for (let i = 0; i < terapiasFiltradas.length; i += TERAPIAS_POR_BLOCO) {
+        const chunk = terapiasFiltradas.slice(i, i + TERAPIAS_POR_BLOCO);
+        const htmlTerapias = chunk.map((t) => `
+          <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed #e2e8f0">
+            <div style="font-weight:700;color:#0f172a;font-size:11px">${escapeHtml(t.nome)}</div>
+            <div style="font-size:10px;color:#0284c7;margin:2px 0"><b>${escapeHtml(t.frequencia || "")}</b></div>
+            <div style="color:#475569;font-size:10px">${escapeHtml(t.descricao || "")}</div>
+            ${t.justificativa ? `<div style="font-size:9px;color:#64748b;margin-top:3px"><b>Por quê:</b> ${escapeHtml(t.justificativa)}</div>` : ""}
+          </div>
+        `).join("");
 
-      const titulo = i === 0
-        ? `<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px">🌿 Plano Terapêutico</div>`
-        : `<div style="font-size:10px;color:#64748b;margin-bottom:8px;font-style:italic">Plano Terapêutico (cont.)</div>`;
+        const titulo = i === 0
+          ? `<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px">🌿 Plano Terapêutico</div>`
+          : `<div style="font-size:10px;color:#64748b;margin-bottom:8px;font-style:italic">Plano Terapêutico (cont.)</div>`;
 
-      blocks.push(criarBlocoHTML(`${titulo}${htmlTerapias}`, i < terapias.length - TERAPIAS_POR_BLOCO));
+        blocks.push(criarBlocoHTML(`${titulo}${htmlTerapias}`, i < terapiasFiltradas.length - TERAPIAS_POR_BLOCO));
+      }
     }
   }
 
   // =======================================================================
-  // 7. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA
+  // 7. FREQUÊNCIA SOLFEGGIO + JUSTIFICATIVA (com destaque para sono se relevante)
   // =======================================================================
+  const temInsônia = data.pontos_criticos?.some(p => isItemSono(p)) || 
+                     data.item_scores?.some(is => isItemSono(is.item) && is.score_atual < 50);
+  
   const frequenciaTexto = data.frequencia_lunara && !/^[\s—\-–]+$/.test(data.frequencia_lunara)
     ? data.frequencia_lunara
-    : "Recomendação: Utilizar frequências Solfeggio (ex: 432Hz harmonização, 528Hz reparação) durante a sessão.";
+    : temInsônia 
+      ? "🌙 Recomendação para Sono: 432Hz (ancoramento) + 528Hz (reparo) antes de dormir. Evitar telas 1h antes. Chá de camomila ou melissa."
+      : "Recomendação: Utilizar frequências Solfeggio (ex: 432Hz harmonização, 528Hz reparação) durante a sessão.";
 
   let htmlFrequenciaEJustificativa = `
     <div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:6px">🎵 Frequência para Sessão</div>
-    <div style="color:#334155;margin-bottom:12px;background:#f8fafc;padding:10px;border-radius:6px;border-left:4px solid #8b5cf6;font-size:11px">
+    <div style="color:#334155;margin-bottom:12px;background:#f8fafc;padding:10px;border-radius:6px;border-left:4px solid ${temInsônia ? '#f59e0b' : '#8b5cf6'};font-size:11px">
       ${escapeHtml(frequenciaTexto)}
     </div>
   `;
