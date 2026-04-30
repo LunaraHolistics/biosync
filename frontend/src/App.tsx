@@ -129,10 +129,18 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 }
 
 // ==============================
-// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA
-// ==============================
+// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA (EVOLUÍDA)
+// =======================================================================
+// Melhorias:
+// - Match de categoria case-insensitive e por substring (evita perda por variação de casing)
+// - Regex de títulos mais flexível (captura qualquer título em MAIÚSCULAS, não apenas os hardcoded)
+// - Fallback para manter seções com palavras-chave mesmo sem título reconhecido
+// =======================================================================
 function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
   if (categoriasFiltro.length === 0) return analise;
+
+  // Normalizar categorias do filtro para busca flexível
+  const filtroNorm = categoriasFiltro.map(c => c.toLowerCase());
 
   const palavrasChaveAtivas = new Set<string>();
   for (const cat of categoriasFiltro) {
@@ -141,31 +149,41 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
   }
 
+  // =======================================================================
+  // FILTRAR INTERPRETAÇÃO (SEÇÕES)
+  // =======================================================================
   let interpretacaoFiltrada = analise.interpretacao;
-  if (categoriasFiltro.length > 0) {
-    const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=\b(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR|ACUPUNTURA|ALERGENOS)\b)/i);
+  if (categoriasFiltro.length > 0 && analise.interpretacao) {
+    // Extrair introdução (tudo antes do primeiro título em MAIÚSCULAS)
+    const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=\b(?:[A-ZÀ-Ú]{4,}(?:\s+[A-ZÀ-Ú]+)*)\b)/);
     const intro = introMatch?.[1]?.trim() || '';
 
-    const regexTitulos = /(?=\b(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR E CEREBROVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO E CEREBRO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS SANGUE|LECITINA|FUNCAO DA VESICULA BILIAR|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL OSSEA|DOENCAS OSSEA REUMATOIDE|SEIOS|INDICE DE CRESCIMENTO OSSEO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA BASICA|OBESIDADE|GRANDE FUNCAO DO INTESTINO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL MASCULINA)\b)/i;
+    // Regex flexível: captura qualquer título que seja 4+ letras MAIÚSCULAS
+    // (Não depende mais de lista hardcoded de nomes de seção)
+    const regexTitulos = /(?=\b(?:[A-ZÀ-Ú]{4,}(?:\s+[A-ZÀ-Ú]+)*)\b)/;
 
     const secoesRaw = analise.interpretacao.split(regexTitulos);
 
     const secoesFiltradas = secoesRaw.filter(secao => {
       if (!secao.trim()) return false;
+      const textoLower = secao.toLowerCase();
+
+      // Verifica se ALGUMA palavra-chave ativa aparece no texto da seção
+      const temKeywordAtiva = [...palavrasChaveAtivas].some(kw => 
+        kw.length > 2 && textoLower.includes(kw)
+      );
+
+      if (temKeywordAtiva) return true;
+
+      // Fallback: verifica se o título da seção contém alguma categoria
       const tituloMatch = secao.match(/^\b([A-ZÀ-Ú][A-ZÀ-Ú\s]+)\b/);
       const titulo = tituloMatch?.[1]?.trim() || '';
+      if (!titulo) return false;
 
-      const textoLower = secao.toLowerCase();
-      const corresponde = categoriasFiltro.some(cat => {
-        const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
-        return titulo.toLowerCase().includes(cat) ||
-          palavras.some(p => textoLower.includes(p.toLowerCase()));
-      });
-
-      return corresponde;
+      return filtroNorm.some(cat => titulo.toLowerCase().includes(cat));
     });
 
-    const conclusaoMatch = analise.interpretacao.match(/(Conclusao[\s\S]*$)/i);
+    const conclusaoMatch = analise.interpretacao.match(/(Conclus[aã]o[\s\S]*$)/i);
     const conclusao = conclusaoMatch?.[1]?.trim() || '';
 
     const partes = [];
@@ -176,27 +194,48 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     interpretacaoFiltrada = partes.join('\n\n').trim() || analise.interpretacao;
   }
 
+  // =======================================================================
+  // FILTRAR PONTOS CRÍTICOS
+  // =======================================================================
   const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) => {
     const itemMatch = p.match(/^·?\s*([^:：]+):/);
     const item = itemMatch?.[1]?.trim() || p;
+    const textoLower = p.toLowerCase();
+    const itemLower = item.toLowerCase();
 
-    return categoriasFiltro.some(cat => {
+    return filtroNorm.some(cat => {
       const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
-      const textoLower = p.toLowerCase();
-      const itemLower = item.toLowerCase();
       return itemLower.includes(cat) ||
         palavras.some(palavra => textoLower.includes(palavra) || itemLower.includes(palavra));
     });
   });
 
-  const matchesFiltrados = analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria));
-
-  const terapiasFiltradas = analise.terapias.filter((t: any) => {
-    const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
-    return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
+  // =======================================================================
+  // FILTRAR MATCHES (case-insensitive + substring)
+  // =======================================================================
+  const matchesFiltrados = analise.matches.filter((m: any) => {
+    const catNorm = (m.categoria || '').toLowerCase();
+    // Match exato OU substring (ex: "sistema nervoso" inclui "nervoso")
+    return filtroNorm.some(f => catNorm.includes(f) || f.includes(catNorm));
   });
 
-  const setoresFiltrados = analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()));
+  // =======================================================================
+  // FILTRAR TERAPIAS (tags case-insensitive)
+  // =======================================================================
+  const terapiasFiltradas = analise.terapias.filter((t: any) => {
+    const tags = [t.categoria, ...(t.tags || [])].filter(Boolean).map((tag: string) => tag.toLowerCase());
+    return tags.some((tag: string) => 
+      filtroNorm.some(f => tag.includes(f) || f.includes(tag))
+    );
+  });
+
+  // =======================================================================
+  // FILTRAR SETORES (case-insensitive + substring)
+  // =======================================================================
+  const setoresFiltrados = analise.setoresAfetados.filter((s: string) => {
+    const sNorm = s.toLowerCase();
+    return filtroNorm.some(f => sNorm.includes(f) || f.includes(sNorm));
+  });
 
   return {
     ...analise,
@@ -211,8 +250,8 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
 }
 
 // ==============================
-// 🔥 NOVO: DETECÇÃO DE SCORES GENÉRICOS
-// ==============================
+// 🔥 DETECÇÃO DE SCORES GENÉRICOS
+// =======================================================================
 
 /**
  * Detecta se um array de scores é "genérico" (todos iguais ou sem variação real).
@@ -220,7 +259,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
  */
 function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
   if (!scores || scores.length === 0) return true;
-  if (scores.length === 1) return false; // Com 1 item não dá para detectar padrão
+  if (scores.length === 1) return false;
 
   const valoresUnicos = new Set(scores.map(s => s.score_atual));
 
@@ -247,8 +286,8 @@ function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
 }
 
 // ==============================
-// 🔥 NOVO: EXTRAIR SCORES DOS PONTOS CRÍTICOS (FONTE ALTERNATIVA)
-// ==============================
+// 🔥 EXTRAIR SCORES DOS PONTOS CRÍTICOS (FONTE ALTERNATIVA)
+// =======================================================================
 
 /**
  * Tenta extrair scores numéricos dos pontos_criticos do exame.
@@ -258,14 +297,11 @@ function extrairScoresDosPontosCriticos(pontosCriticos: string[]): Map<string, n
   const map = new Map<string, number>();
 
   for (const p of pontosCriticos) {
-    // Padrão 1: "Item: 45" ou "Item：45"
     let match = p.match(/^·?\s*(.+?)\s*[:：]\s*(\d{1,3})\s*$/);
     if (!match) {
-      // Padrão 2: "Item — 45" ou "Item - 45"
       match = p.match(/^·?\s*(.+?)\s*[—\-–]\s*(\d{1,3})\s*$/);
     }
     if (!match) {
-      // Padrão 3: "Item (45)" ou "Item（45）"
       match = p.match(/^·?\s*(.+?)\s*[(（]\s*(\d{1,3})\s*[)）]\s*$/);
     }
 
@@ -283,7 +319,7 @@ function extrairScoresDosPontosCriticos(pontosCriticos: string[]): Map<string, n
 
 // ==============================
 // 🔥 CÁLCULO DE EVOLUÇÃO ENTRE EXAMES
-// ==============================
+// =======================================================================
 
 function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
   if (scoreAnterior === null) return 'novo';
@@ -294,23 +330,49 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
 }
 
 // ==============================
-// 🔥 NOVO: Extrair scores do exame ANTERIOR para evolução
-// ==============================
+// 🔥 EXTRAIR SCORES DO EXAME ANTERIOR (COM PROTEÇÃO CONTRA VIAGEM NO TEMPO)
+// =======================================================================
 
-function extrairScoresExameAnterior(examesAnteriores: ExameRow[]): Map<string, ItemScoreEvolucao> {
+/**
+ * Busca scores do exame anterior para preencher evolução.
+ * Recebe dataExameAtual para IGNORAR exames mais recentes (evita deltas invertidos).
+ */
+function extrairScoresExameAnterior(
+  examesAnteriores: ExameRow[], 
+  dataExameAtual?: string | Date
+): Map<string, ItemScoreEvolucao> {
   const mapa = new Map<string, ItemScoreEvolucao>();
 
-  // Buscar o exame anterior mais recente
-  const anterior = examesAnteriores
-    .filter(e => {
-      const ib = e.indice_biosync;
-      return ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0;
-    })
-    .sort((a, b) => new Date(b.data_exame || b.created_at).getTime() - new Date(a.data_exame || a.created_at).getTime())[0];
+  if (!examesAnteriores || examesAnteriores.length === 0) return mapa;
 
-  if (!anterior) return mapa;
+  // Define o "presente" como a data do exame que está sendo visualizado
+  const dataAtualMs = dataExameAtual ? new Date(dataExameAtual).getTime() : Infinity;
 
+  // Filtra apenas exames que têm item_scores E são estritamente ANTERIORES
+  const anterioresValidos = examesAnteriores.filter(e => {
+    const ib = e.indice_biosync;
+    const temScores = ib && typeof ib === 'object' && 'item_scores' in ib 
+      && Array.isArray((ib as any).item_scores) 
+      && (ib as any).item_scores.length > 0;
+    if (!temScores) return false;
+
+    const dataExameMs = new Date(e.data_exame || e.created_at).getTime();
+    // Estritamente anterior (descarta mesmo dia e futuros)
+    return dataExameMs < dataAtualMs; 
+  });
+
+  if (anterioresValidos.length === 0) return mapa;
+
+  // Ordena do mais recente para o mais antigo (pega o imediatamente anterior)
+  anterioresValidos.sort((a, b) => 
+    new Date(b.data_exame || b.created_at).getTime() - 
+    new Date(a.data_exame || a.created_at).getTime()
+  );
+
+  // Pega o exame mais recente que seja ANTERIOR ao atual
+  const anterior = anterioresValidos[0];
   const items = (anterior.indice_biosync as any).item_scores as ItemScoreEvolucao[];
+  
   for (const item of items) {
     const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
     if (chave && typeof item.score_atual === 'number') {
@@ -642,11 +704,12 @@ function buildRelatorioData(
     console.error('   4. Verifique o motorSemantico.ts — provável bug no cálculo de scores');
   }
 
-   // =======================================================================
+  // =======================================================================
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
-    const mapaAnterior = extrairScoresExameAnterior(examesAnteriores);
+    // ✅ CORREÇÃO: Passa a data do exame atual para ignorar exames futuros
+    const mapaAnterior = extrairScoresExameAnterior(examesAnteriores, row.data_exame || row.created_at);
     let preenchidos = 0;
 
     itemScoresEvolucao = itemScoresEvolucao.map(item => {
@@ -672,7 +735,7 @@ function buildRelatorioData(
       console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com score anterior preenchido`);
     }
   }
-  
+
   // =======================================================================
   // LOG RESUMO FINAL
   // =======================================================================
