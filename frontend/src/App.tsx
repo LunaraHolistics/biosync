@@ -329,13 +329,6 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
   return 'estavel';
 }
 
-// ==============================
-// 🔥 EXTRAIR SCORES DO EXAME ANTERIOR (COM FALLBACK PELO MOTOR)
-// =======================================================================
-// Se o exame anterior NÃO tem indice_biosync.item_scores (ex: inserido via extensão),
-// roda o motor rapidamente para gerar scores de comparação.
-// =======================================================================
-
 function extrairScoresExameAnterior(
   examesAnteriores: ExameRow[],
   dataExameAtual?: string | Date,
@@ -346,11 +339,22 @@ function extrairScoresExameAnterior(
 
   if (!examesAnteriores || examesAnteriores.length === 0) return mapa;
 
-  const dataAtualMs = dataExameAtual ? new Date(dataExameAtual).getTime() : Infinity;
+  // ✅ Parsing local (sem bug UTC)
+  function parseDataLocal(valor: string | Date): number {
+    if (valor instanceof Date) return valor.getTime();
+    const str = String(valor).split('T')[0];
+    const partes = str.split('-');
+    if (partes.length === 3 && partes[0].length === 4) {
+      return new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2])).getTime();
+    }
+    return new Date(valor).getTime();
+  }
+
+  const dataAtualMs = dataExameAtual ? parseDataLocal(dataExameAtual) : Infinity;
 
   // Buscar exames estritamente anteriores
   const anterioresValidos = examesAnteriores.filter(e => {
-    const dataExameMs = new Date(e.data_exame || e.created_at).getTime();
+    const dataExameMs = parseDataLocal(e.data_exame || e.created_at);
     return dataExameMs < dataAtualMs;
   });
 
@@ -358,14 +362,14 @@ function extrairScoresExameAnterior(
 
   // Ordena do mais recente para o mais antigo
   anterioresValidos.sort((a, b) =>
-    new Date(b.data_exame || b.created_at).getTime() -
-    new Date(a.data_exame || a.created_at).getTime()
+    parseDataLocal(b.data_exame || b.created_at) -
+    parseDataLocal(a.data_exame || a.created_at)
   );
 
   const anterior = anterioresValidos[0];
 
   // =======================================================================
-  // TENTATIVA 1: Buscar indice_biosync.item_scores (dados já processados)
+  // TENTATIVA 1: Buscar indice_biosync.item_scores
   // =======================================================================
   const ib = anterior.indice_biosync;
   if (ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0) {
@@ -384,10 +388,10 @@ function extrairScoresExameAnterior(
   }
 
   // =======================================================================
-  // TENTATIVA 2: Rodar o motor no exame anterior para gerar scores (FALLBACK)
+  // TENTATIVA 2: Rodar o motor no exame anterior (FALLBACK)
   // =======================================================================
   if (base && terapias && base.length > 0) {
-    console.log(`🔄 [EVOLUÇÃO] Exame anterior sem item_scores — rodando motor para gerar scores de comparação...`);
+    console.log(`🔄 [EVOLUÇÃO] Exame anterior sem item_scores — rodando motor para gerar scores...`);
 
     try {
       const analiseAnterior = gerarAnaliseCompleta(anterior, base, terapias);
@@ -416,7 +420,7 @@ function extrairScoresExameAnterior(
       console.warn('⚠️ [EVOLUÇÃO] Falha ao rodar motor no exame anterior:', e);
     }
   } else {
-    console.warn('⚠️ [EVOLUÇÃO] Exame anterior sem item_scores e sem base/terapias disponíveis para fallback');
+    console.warn(`⚠️ [EVOLUÇÃO] Sem item_scores E sem dados para fallback (base=${base?.length || 0}, terapias=${terapias?.length || 0})`);
   }
 
   return mapa;
@@ -623,17 +627,12 @@ function exameRowToAiData(
 }
 
 // ==============================
-// 🔥 FUNÇÃO buildRelatorioData — VERSÃO REESCRITA COM PRIORIDADE INVERTIDA
+// 🔥 FUNÇÃO buildRelatorioData — VERSÃO AUTO-SUFICIENTE
 // =======================================================================
-// Prioridade de score_atual:
-//   1. motor.matches (cálculo fresco em tempo real)
-//   2. pontos_criticos com regex (extração de texto)
-//   3. indice_biosync do banco (ULTIMO recurso — pode ter dados genéricos)
-//
-// Prioridade de score_anterior:
-//   1. indice_biosync do exame anterior
+// Busca base/terapias automaticamente quando não são passados.
+// Assim NENHUMA chamada pode esquecer os parâmetros.
 // =======================================================================
-function buildRelatorioData(
+async function buildRelatorioData(
   row: ExameRow,
   paciente: string,
   data: AiStructuredData,
@@ -642,10 +641,29 @@ function buildRelatorioData(
   filtrosAtivos?: string[],
   examesAnteriores?: ExameRow[],
   pacienteGenero?: 'masculino' | 'feminino',
-  baseAnalise?: BaseAnaliseSaudeRow[],  // ← ADICIONAR
-  terapias?: TerapiaRow[]               // ← ADICIONAR
-): RelatorioData {
+  baseAnaliseIn?: BaseAnaliseSaudeRow[],
+  terapiasIn?: TerapiaRow[]
+): Promise<RelatorioData> {
   const meta = resultadoMeta(row);
+
+  // ✅ AUTO-SUFICIENTE: busca base e terapias se não foram passados
+  let baseAnalise = baseAnaliseIn;
+  let terapias = terapiasIn;
+
+  if (!baseAnalise?.length || !terapias?.length) {
+    console.log(`🔄 [AUTO] Buscando base/terapias automaticamente (base=${baseAnalise?.length || 0}, terapias=${terapias?.length || 0})`);
+    try {
+      const [baseData, terapiasData] = await Promise.all([
+        baseAnalise?.length ? Promise.resolve(baseAnalise) : listarBaseAnaliseSaude(),
+        terapias?.length ? Promise.resolve(terapias) : listarTerapias()
+      ]);
+      baseAnalise = baseData;
+      terapias = terapiasData;
+      console.log(`✅ [AUTO] Obtidos: base=${baseAnalise.length} itens, terapias=${terapias.length} itens`);
+    } catch (e) {
+      console.warn('⚠️ [AUTO] Falha ao buscar base/terapias:', e);
+    }
+  }
 
   let itemScoresEvolucao: ItemScoreEvolucao[] = [];
   let fonteUsada = 'nenhuma';
@@ -660,7 +678,7 @@ function buildRelatorioData(
         item: m.itemBase,
         categoria: m.categoria || 'geral',
         score_atual: m.score as number,
-        score_anterior: null, // Preenchido depois com exame anterior
+        score_anterior: null,
         delta: 0,
         trend: 'novo' as const,
         impacto: m.impacto || 'Desequilíbrio bioenergético identificado',
@@ -670,14 +688,14 @@ function buildRelatorioData(
     if (!ScoresSaoGenericos(scoresDoMotor) && scoresDoMotor.length > 0) {
       itemScoresEvolucao = scoresDoMotor;
       fonteUsada = 'motor.matches';
-      console.log(`✅ [SCORES] Fonte: motor.matches — ${scoresDoMotor.length} itens com scores variados`);
+      console.log(`✅ [SCORES] Fonte: motor.matches — ${scoresDoMotor.length} itens`);
     } else {
-      console.warn('⚠️ [SCORES] motor.matches rejeitado — scores genéricos ou vazio');
+      console.warn('⚠️ [SCORES] motor.matches rejeitado — scores genéricos');
     }
   }
 
   // =======================================================================
-  // FONTE 2: pontos_criticos com regex (extração de texto)
+  // FONTE 2: pontos_criticos com regex
   // =======================================================================
   if (itemScoresEvolucao.length === 0 && data.pontos_criticos?.length > 0) {
     const scoresDoTexto = extrairScoresDosPontosCriticos(data.pontos_criticos);
@@ -695,15 +713,13 @@ function buildRelatorioData(
           impacto: 'Desequilíbrio identificado nos pontos críticos',
         }));
         fonteUsada = 'pontos_criticos (regex)';
-        console.log(`✅ [SCORES] Fonte: pontos_criticos — ${itemScoresEvolucao.length} itens extraídos`);
-      } else {
-        console.warn('⚠️ [SCORES] pontos_criticos rejeitado — todos os scores extraídos são iguais');
+        console.log(`✅ [SCORES] Fonte: pontos_criticos — ${itemScoresEvolucao.length} itens`);
       }
     }
   }
 
   // =======================================================================
-  // FONTE 3: indice_biosync do banco (ÚLTIMO RECURSO — pode ter genéricos)
+  // FONTE 3: indice_biosync do banco
   // =======================================================================
   if (itemScoresEvolucao.length === 0 && row.indice_biosync && typeof row.indice_biosync === 'object') {
     const biosync = row.indice_biosync as Record<string, any>;
@@ -725,41 +741,23 @@ function buildRelatorioData(
       if (!ScoresSaoGenericos(scoresDoBanco) && scoresDoBanco.length > 0) {
         itemScoresEvolucao = scoresDoBanco;
         fonteUsada = 'indice_biosync (banco)';
-        console.log(`✅ [SCORES] Fonte: indice_biosync — ${scoresDoBanco.length} itens (último recurso)`);
-      } else {
-        console.warn('⚠️ [SCORES] indice_biosync rejeitado — scores genéricos no banco');
-        console.warn('⚠️ [SCORES] Isso indica que os dados foram salvos com score padrão. Verifique o processo de salvamento.');
+        console.log(`✅ [SCORES] Fonte: indice_biosync — ${scoresDoBanco.length} itens`);
       }
     }
   }
 
   // =======================================================================
-  // FALLBACK FINAL: Se nenhuma fonte teve scores válidos
+  // FALLBACK FINAL
   // =======================================================================
   if (itemScoresEvolucao.length === 0) {
-    console.error('❌ [SCORES] NENHUMA fonte com scores válidos! A tabela de evolução ficará vazia.');
-    console.error('❌ [SCORES] Possíveis causas:');
-    console.error('   1. motor.matches não retorna scores variados');
-    console.error('   2. pontos_criticos não têm scores numéricos no texto');
-    console.error('   3. indice_biosync no banco tem scores genéricos');
-    console.error('   4. Verifique o motorSemantico.ts — provável bug no cálculo de scores');
+    console.error('❌ [SCORES] NENHUMA fonte com scores válidos!');
   }
 
   // =======================================================================
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
-    // ✅ Diagnóstico: quantos exames anteriores existem e quais datas?
-    console.log(`🔍 [DIAG EVOLUÇÃO] Exames anteriores disponíveis: ${examesAnteriores.length}`);
-    examesAnteriores.forEach((e, i) => {
-      const dataE = e.data_exame || e.created_at;
-      const ib = e.indice_biosync;
-      const temScores = ib && typeof ib === 'object' && 'item_scores' in ib;
-      console.log(`  [${i}] id=${e.id.substring(0, 5)} data=${dataE} tem_indice_biosync=${!!ib} tem_item_scores=${temScores}`);
-    });
-    console.log(`🔍 [DIAG EVOLUÇÃO] Data do exame atual: ${row.data_exame || row.created_at}`);
-    console.log(`🔍 [DIAG EVOLUÇÃO] baseAnalise disponível: ${baseAnalise?.length || 0} itens`);
-    console.log(`🔍 [DIAG EVOLUÇÃO] terapias disponível: ${terapias?.length || 0} itens`);
+    console.log(`🔍 [DIAG] Exames anteriores: ${examesAnteriores.length}, base: ${baseAnalise.length}, terapias: ${terapias.length}`);
 
     const mapaAnterior = extrairScoresExameAnterior(
       examesAnteriores,
@@ -769,13 +767,7 @@ function buildRelatorioData(
     );
     let preenchidos = 0;
 
-    console.log(`🔍 [DIAG EVOLUÇÃO] Mapa anterior retornou: ${mapaAnterior.size} itens`);
-    if (mapaAnterior.size > 0) {
-      const amostras = [...mapaAnterior.entries()].slice(0, 3);
-      for (const [chave, val] of amostras) {
-        console.log(`  → "${chave}": score=${val.score_atual}`);
-      }
-    }
+    console.log(`🔍 [DIAG] Mapa anterior: ${mapaAnterior.size} itens`);
 
     itemScoresEvolucao = itemScoresEvolucao.map(item => {
       const chave = item.item.trim().replace(/[:：]$/, '').toLowerCase();
@@ -797,21 +789,18 @@ function buildRelatorioData(
     });
 
     if (preenchidos > 0) {
-      console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com score anterior preenchido`);
+      console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com anterior preenchido`);
     } else {
-      console.warn('⚠️ [EVOLUÇÃO] NENHUM item bateu entre exame atual e anterior!');
-      console.warn('⚠️ [EVOLUÇÃO] Chaves do atual (5 primeiras):');
-      itemScoresEvolucao.slice(0, 5).forEach(i => {
-        const chave = i.item.trim().replace(/[:：]$/, '').toLowerCase();
-        console.warn(`  → "${chave}" (score=${i.score_atual})`);
-      });
-      console.warn('⚠️ [EVOLUÇÃO] Chaves do anterior (5 primeiras):');
-      [...mapaAnterior.keys()].slice(0, 5).forEach(k => {
-        console.warn(`  → "${k}"`);
-      });
+      console.warn('⚠️ [EVOLUÇÃO] Nenhum item bateu');
+      if (mapaAnterior.size === 0) {
+        console.warn('⚠️ [EVOLUÇÃO] Mapa vazio — exame anterior não gerou scores');
+      } else {
+        const atuais = itemScoresEvolucao.slice(0, 3).map(i => i.item.trim().replace(/[:：]$/, '').toLowerCase());
+        const anteriores = [...mapaAnterior.keys()].slice(0, 3);
+        console.warn(`⚠️ [EVOLUÇÃO] Atuais: [${atuais.join(', ')}]`);
+        console.warn(`⚠️ [EVOLUÇÃO] Anteriores: [${anteriores.join(', ')}]`);
+      }
     }
-  } else {
-    console.log(`🔍 [DIAG EVOLUÇÃO] Bloco de evolução ignorado: itemScores=${itemScoresEvolucao.length} examesAnteriores=${examesAnteriores?.length || 0}`);
   }
 
   // =======================================================================
@@ -824,7 +813,7 @@ function buildRelatorioData(
     const media = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
     const unicos = new Set(scores).size;
 
-    console.log(`📊 [RESUMO FINAL] Fonte: ${fonteUsada} | Itens: ${itemScoresEvolucao.length} | Min: ${min} | Max: ${max} | Média: ${media} | Valores únicos: ${unicos}`);
+    console.log(`📊 [RESUMO] Fonte: ${fonteUsada} | Itens: ${itemScoresEvolucao.length} | Min: ${min} | Max: ${max} | Média: ${media} | Únicos: ${unicos}`);
   }
 
   return {
@@ -948,24 +937,49 @@ function App() {
     ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
     : analiseMotorRaw;
 
-  const relatorioDataHistorico = analiseSelecionada
-    ? buildRelatorioData(
-      analiseSelecionada,
-      pacienteSelecionado || clientName.trim() || "Cliente",
-      analiseSelecionadaData ?? {
-        interpretacao: "",
-        pontos_criticos: [],
-        plano_terapeutico: { tipo: "mensal", terapias: [] },
-        frequencia_lunara: "",
-        justificativa: "",
-      },
-      comparativoExamesData,
-      analiseMotor,
-      categoriasFiltro,
-      examesPaciente.filter(e => e.id !== analiseSelecionada?.id),
-      generoSelecionado
-    )
-    : null;
+  // ✅ Estado async para relatório (buildRelatorioData é async)
+  const [relatorioDataHistorico, setRelatorioDataHistorico] = useState<RelatorioData | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function gerar() {
+      if (!analiseSelecionada || !analiseSelecionadaData) {
+        setRelatorioDataHistorico(null);
+        return;
+      }
+
+      try {
+        const resultado = await buildRelatorioData(
+          analiseSelecionada,
+          pacienteSelecionado || clientName.trim() || "Cliente",
+          analiseSelecionadaData,
+          comparativoExamesData,
+          analiseMotor,
+          categoriasFiltro,
+          examesPaciente.filter(e => e.id !== analiseSelecionada?.id),
+          generoSelecionado
+        );
+        if (!cancelado) setRelatorioDataHistorico(resultado);
+      } catch (e) {
+        console.error('Erro ao gerar relatório:', e);
+        if (!cancelado) setRelatorioDataHistorico(null);
+      }
+    }
+
+    gerar();
+    return () => { cancelado = true; };
+  }, [
+    analiseSelecionada,
+    analiseSelecionadaData,
+    pacienteSelecionado,
+    clientName,
+    comparativoExamesData,
+    analiseMotor,
+    categoriasFiltro,
+    examesPaciente,
+    generoSelecionado
+  ]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -1217,22 +1231,26 @@ function App() {
                               </button>
                               <button
                                 className="counter"
-                                onClick={() => {
+                                onClick={async () => {
                                   setGerandoPdf(true);
-                                  const analiseResult = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
-                                  gerarRelatorioPDF(buildRelatorioData(
-                                    a,
-                                    pacienteSelecionado || "Cliente",
-                                    analiseResult.data,
-                                    comparativoExamesData,
-                                    obterAnalise(a),
-                                    categoriasFiltro,
-                                    examesPaciente.filter(e => e.id !== a.id),
-                                    analiseResult.pacienteGenero,
-                                    baseAnalise,  // ← ADICIONAR
-                                    terapias       // ← ADICIONAR
-                                  ));
-                                  setTimeout(() => setGerandoPdf(false), 3000);
+                                  try {
+                                    const analiseResult = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
+                                    const dados = await buildRelatorioData(
+                                      a,
+                                      pacienteSelecionado || "Cliente",
+                                      analiseResult.data,
+                                      comparativoExamesData,
+                                      obterAnalise(a),
+                                      categoriasFiltro,
+                                      examesPaciente.filter(e => e.id !== a.id),
+                                      analiseResult.pacienteGenero
+                                    );
+                                    await gerarRelatorioPDF(dados);
+                                  } catch (e) {
+                                    console.error('Erro ao gerar PDF:', e);
+                                  } finally {
+                                    setGerandoPdf(false);
+                                  }
                                 }}
                                 disabled={gerandoPdf}
                               >
