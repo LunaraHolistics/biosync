@@ -127,11 +127,11 @@ export class DataValidationError extends PDFGenerationError {
  */
 export function formatDate(value: string | Date | undefined | null): string {
   if (!value) return new Date().toLocaleString("pt-BR");
-  
+
   try {
     const d = typeof value === "string" ? new Date(value) : value;
     if (Number.isNaN(d.getTime())) return new Date().toLocaleString("pt-BR");
-    
+
     return new Intl.DateTimeFormat("pt-BR", {
       day: "2-digit",
       month: "2-digit",
@@ -151,19 +151,19 @@ const escapeCache = new Map<string, string>();
 
 export function escapeHtml(text: string): string {
   if (escapeCache.has(text)) return escapeCache.get(text)!;
-  
+
   const escaped = text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-  
+
   // Limita cache a 1000 entradas para evitar memory leak
   if (escapeCache.size < 1000) {
     escapeCache.set(text, escaped);
   }
-  
+
   return escaped;
 }
 
@@ -172,31 +172,31 @@ export function escapeHtml(text: string): string {
  */
 export function dividirTexto(texto: string, maxChars: number): string[] {
   if (!texto || texto.length <= maxChars) return [texto || ""];
-  
+
   const pedacos: string[] = [];
   let resto = texto;
-  
+
   while (resto.length > 0) {
     if (resto.length <= maxChars) {
       pedacos.push(resto);
       break;
     }
-    
+
     // Tenta quebrar em nova linha primeiro
     let corte = resto.lastIndexOf("\n", maxChars);
-    
+
     // Se não encontrou, tenta em espaço
     if (corte <= maxChars * 0.3) {
       corte = resto.lastIndexOf(" ", maxChars);
     }
-    
+
     // Fallback: corte forçado no limite
     if (corte <= maxChars * 0.3) corte = maxChars;
-    
+
     pedacos.push(resto.substring(0, corte).trimEnd());
     resto = resto.substring(corte).trimStart();
   }
-  
+
   return pedacos;
 }
 
@@ -204,7 +204,7 @@ export function dividirTexto(texto: string, maxChars: number): string[] {
  * Cria elemento HTML com estilos padronizados para PDF
  */
 export function criarBlocoHTML(
-  html: string, 
+  html: string,
   options: {
     comBordaInferior?: boolean;
     backgroundColor?: string;
@@ -212,7 +212,7 @@ export function criarBlocoHTML(
   } = {}
 ): HTMLDivElement {
   const { comBordaInferior = false, backgroundColor = "#ffffff", extraStyles = "" } = options;
-  
+
   const el = document.createElement("div");
   el.style.cssText = `
     width: ${PDFConfig.contentWidthPx}px;
@@ -238,7 +238,7 @@ export function criarBlocoHTML(
  * Renderiza elemento para canvas com tratamento de erros
  */
 export async function renderizarBlocoParaCanvas(
-  el: HTMLElement, 
+  el: HTMLElement,
   scale: number = PDFConfig.canvasScale
 ): Promise<HTMLCanvasElement> {
   try {
@@ -276,13 +276,13 @@ export function adicionarBlocoAoPDF(
     footerHeight?: number;
   }
 ): { newY: number; pageAdded: boolean } {
-  const { 
-    pageWidth, 
-    pageHeight, 
-    margin = PDFConfig.margin, 
-    footerHeight = PDFConfig.footerHeight 
+  const {
+    pageWidth,
+    pageHeight,
+    margin = PDFConfig.margin,
+    footerHeight = PDFConfig.footerHeight
   } = options;
-  
+
   const marginX = margin;
   const maxY = pageHeight - footerHeight;
   const imgData = canvas.toDataURL("image/png");
@@ -300,14 +300,14 @@ export function adicionarBlocoAoPDF(
   }
 
   pdf.addImage(imgData, "PNG", marginX, finalY, imgWidth, imgHeight);
-  
+
   // Libera memória do canvas imediatamente
   canvas.width = 0;
   canvas.height = 0;
-  
-  return { 
-    newY: finalY + imgHeight + 8, 
-    pageAdded 
+
+  return {
+    newY: finalY + imgHeight + 8,
+    pageAdded
   };
 }
 
@@ -352,16 +352,16 @@ const GENDER_FILTERS = {
  * Filtra itens por gênero do paciente
  */
 export function filtrarPorGenero(
-  item: string, 
+  item: string,
   genero?: "masculino" | "feminino"
 ): boolean {
   if (!genero) return true;
-  
+
   const itemClean = normalizarNomeItem(item);
-  const listaOposta = genero === "masculino" 
-    ? GENDER_FILTERS.feminino 
+  const listaOposta = genero === "masculino"
+    ? GENDER_FILTERS.feminino
     : GENDER_FILTERS.masculino;
-  
+
   return !listaOposta.some(filtro => itemClean.includes(filtro));
 }
 
@@ -429,13 +429,13 @@ const SECOES_COMPARATIVO: ComparativoSecao[] = [
 
 export function extrairComparativoHTML(comparacao: unknown): string {
   if (!comparacao || typeof comparacao !== "object") return "";
-  
+
   const c = comparacao as Record<string, unknown>;
   const totalItens = SECOES_COMPARATIVO.reduce((sum, sec) => {
     const itens = c[sec.key];
     return sum + (Array.isArray(itens) ? itens.length : 0);
   }, 0);
-  
+
   if (totalItens === 0) return "";
 
   const partes: string[] = [
@@ -447,7 +447,7 @@ export function extrairComparativoHTML(comparacao: unknown): string {
   for (const secao of SECOES_COMPARATIVO) {
     const itens = c[secao.key];
     if (!Array.isArray(itens) || itens.length === 0) continue;
-    
+
     const itensValidos = itens.slice(0, 10) as ComparativoItem[];
     const linhas = itensValidos.map(item => `
       <div style="margin-bottom:4px;font-size:10px">
@@ -461,7 +461,7 @@ export function extrairComparativoHTML(comparacao: unknown): string {
         </span>
       </div>
     `).join("");
-    
+
     partes.push(`
       <div style="margin-bottom:10px;padding:8px;background:#f9fafb;border-radius:4px">
         <div style="font-weight:700;color:${secao.cor};margin-bottom:4px;font-size:11px">
@@ -471,7 +471,7 @@ export function extrairComparativoHTML(comparacao: unknown): string {
       </div>
     `);
   }
-  
+
   return partes.join("");
 }
 
@@ -480,34 +480,34 @@ export function extrairComparativoHTML(comparacao: unknown): string {
 // =======================================================================
 
 export function gerarTabelaEvolucao(
-  itemScores: ItemScoreEvolucao[], 
+  itemScores: ItemScoreEvolucao[],
   genero?: "masculino" | "feminino"
 ): string {
   if (!itemScores?.length) return "";
 
   // 1. Filtrar por gênero
   let filtrados = itemScores.filter(is => filtrarPorGenero(is.item, genero));
-  
+
   // 2. Deduplicar mantendo item mais crítico
   const mapaUnico = new Map<string, ItemScoreEvolucao>();
   for (const is of filtrados) {
     const chave = normalizarNomeItem(is.item);
     const existente = mapaUnico.get(chave);
-    
-    if (!existente || 
-        is.score_atual < existente.score_atual || 
-        is.impacto.length > existente.impacto.length) {
+
+    if (!existente ||
+      is.score_atual < existente.score_atual ||
+      is.impacto.length > existente.impacto.length) {
       mapaUnico.set(chave, { ...is, item: normalizarNomeItem(is.item).replace(/^./, c => c.toUpperCase()) });
     }
   }
   filtrados = Array.from(mapaUnico.values());
-  
+
   if (!filtrados.length) return "";
 
   // 3. Ordenar: sono/emoções → impacto → score → alfabético
   const temSono = filtrados.some(is => isItemSono(is.item));
   const temEmocional = filtrados.some(is => isItemEmocional(is.item));
-  
+
   const ordenados = [...filtrados].sort((a, b) => {
     if (temSono) {
       const aSono = isItemSono(a.item) ? 2 : 0;
@@ -527,13 +527,13 @@ export function gerarTabelaEvolucao(
   const linhas = ordenados.map(item => {
     const icon = {
       melhorou: "🟢",
-      piorou: "🔴", 
+      piorou: "🔴",
       novo: "🆕",
       estavel: "🟡"
     }[item.trend] || "⚪";
-    
+
     const categoria = getCategoriaItem(item.item);
-    const destaque = categoria === "sono" 
+    const destaque = categoria === "sono"
       ? "background: #fef3c7; border-left: 3px solid #f59e0b; padding-left: 6px;"
       : categoria === "emocional"
         ? "background: #f0f9ff; border-left: 3px solid #3b82f6; padding-left: 6px;"
@@ -545,9 +545,9 @@ export function gerarTabelaEvolucao(
 
     const scoreAnterior = item.score_anterior ?? "—";
     const corDelta = item.delta >= 0 ? PDFConfig.colors.success : PDFConfig.colors.error;
-    const corScore = item.score_atual >= 70 ? PDFConfig.colors.success 
-      : item.score_atual >= 50 ? PDFConfig.colors.warning 
-      : PDFConfig.colors.error;
+    const corScore = item.score_atual >= 70 ? PDFConfig.colors.success
+      : item.score_atual >= 50 ? PDFConfig.colors.warning
+        : PDFConfig.colors.error;
 
     const emoji = categoria === "sono" ? "😴 " : categoria === "emocional" ? "💙 " : "";
 
@@ -662,33 +662,33 @@ const EXPLICACOES_ITENS: Record<string, { titulo: string; explicacao: string; re
 
 export function gerarSecaoExplicativa(itemScores: ItemScoreEvolucao[]): string {
   if (!itemScores?.length) return "";
-  
+
   const itensCriticos = itemScores
     .filter(is => is.score_atual < 60 && (isItemSono(is.item) || isItemEmocional(is.item)))
     .sort((a, b) => a.score_atual - b.score_atual)
     .slice(0, 5);
-  
+
   if (!itensCriticos.length) return "";
-  
+
   const htmlExplicacoes = itensCriticos.map(is => {
     const nome = normalizarNomeItem(is.item);
     const info = EXPLICACOES_ITENS[nome] || {
       titulo: nome.replace(/^./, c => c.toUpperCase()),
-      explicacao: isItemEmocional(nome) 
+      explicacao: isItemEmocional(nome)
         ? "Estado emocional que influencia qualidade de vida, sono e bem-estar. Score baixo indica necessidade de trabalho emocional e autocuidado."
         : "Desequilíbrio bioenergético que impacta sono, energia e bem-estar geral.",
       recomendacao: "Avaliação profissional recomendada para protocolo personalizado."
     };
-    
-    const corBadge = is.score_atual < 30 ? PDFConfig.colors.error 
-      : is.score_atual < 50 ? "#f97316" 
-      : PDFConfig.colors.warning;
-    const labelScore = is.score_atual < 30 ? "Crítico" 
-      : is.score_atual < 50 ? "Atenção" 
-      : "Moderado";
-    
+
+    const corBadge = is.score_atual < 30 ? PDFConfig.colors.error
+      : is.score_atual < 50 ? "#f97316"
+        : PDFConfig.colors.warning;
+    const labelScore = is.score_atual < 30 ? "Crítico"
+      : is.score_atual < 50 ? "Atenção"
+        : "Moderado";
+
     const emoji = isItemSono(nome) ? "😴" : isItemEmocional(nome) ? "💙" : "⚠️";
-    
+
     return `
       <div style="margin-bottom: 12px; padding: 12px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b; border-radius: 6px;">
         <div style="font-weight: 800; color: #92400e; font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
@@ -706,7 +706,7 @@ export function gerarSecaoExplicativa(itemScores: ItemScoreEvolucao[]): string {
       </div>
     `;
   }).join("");
-  
+
   return `
     <div style="margin: 24px 0; page-break-inside: avoid;" data-pdf-section="explicacoes">
       <div style="font-size: 14px; font-weight: 900; color: ${PDFConfig.colors.primary}; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
@@ -749,20 +749,20 @@ export function validarDadosRelatorio(data: RelatorioData): asserts data is Rela
 // =======================================================================
 
 export async function gerarRelatorioPDF(
-  data: RelatorioData, 
+  data: RelatorioData,
   options: PDFGenerationOptions = {}
 ): Promise<void> {
-  const { 
-    onProgress, 
-    onError, 
+  const {
+    onProgress,
+    onError,
     filename,
-    includeMetadata = true 
+    includeMetadata = true
   } = options;
 
   try {
     // Validar dados de entrada
     validarDadosRelatorio(data);
-    
+
     onProgress?.(5, "Preparando conteúdo...");
 
     // Criar container off-screen
@@ -781,10 +781,10 @@ export async function gerarRelatorioPDF(
     const blocks: HTMLElement[] = [];
 
     // 1. CABEÇALHO
-    const dataExibicao = data.createdAt instanceof Date 
-      ? data.createdAt 
+    const dataExibicao = data.createdAt instanceof Date
+      ? data.createdAt
       : new Date(data.createdAt);
-    
+
     const filtrosHTML = data.filtros_aplicados?.length
       ? `<div style="font-size:10px;color:${PDFConfig.colors.info};margin-top:4px">
           🔍 Filtro: ${data.filtros_aplicados.map(f => f === "emotional" ? "Emocional" : f).join(", ")}
@@ -830,14 +830,14 @@ export async function gerarRelatorioPDF(
       let pontosFiltrados = data.pontos_criticos
         .filter(p => filtrarPorGenero(p, data.pacienteGenero))
         .map(p => normalizarNomeItem(p));
-      
+
       pontosFiltrados = [...new Set(pontosFiltrados)];
-      
+
       const pontosSono = pontosFiltrados.filter(p => isItemSono(p));
       const pontosEmocionais = pontosFiltrados.filter(p => isItemEmocional(p) && !isItemSono(p));
       const pontosOutros = pontosFiltrados.filter(p => !isItemSono(p) && !isItemEmocional(p));
       const listaOrdenada = [...pontosSono, ...pontosEmocionais, ...pontosOutros].slice(0, 8);
-      
+
       if (listaOrdenada.length) {
         const listaHTML = listaOrdenada.map(p => {
           const categoria = getCategoriaItem(p);
@@ -845,15 +845,15 @@ export async function gerarRelatorioPDF(
           const emoji = categoria === "sono" ? "😴 " : categoria === "emocional" ? "💙 " : "";
           return `<li style="margin-bottom:3px;font-size:11px;color:${cor};font-weight:${categoria !== "geral" ? "600" : "400"}">${emoji}${escapeHtml(p)}</li>`;
         }).join("");
-        
+
         const temSono = pontosSono.length > 0;
         const temEmocional = pontosEmocionais.length > 0;
-        const tituloDestaque = temSono 
-          ? '⚠️ Pontos Críticos <span style="font-size:10px;color:#92400e;font-weight:400">(Sono em destaque)</span>' 
+        const tituloDestaque = temSono
+          ? '⚠️ Pontos Críticos <span style="font-size:10px;color:#92400e;font-weight:400">(Sono em destaque)</span>'
           : temEmocional
             ? '⚠️ Pontos Críticos <span style="font-size:10px;color:#1e40af;font-weight:400">(Emoções em destaque)</span>'
             : '⚠️ Pontos Críticos';
-        
+
         blocks.push(
           criarBlocoHTML(`
             <div style="font-size:12px;font-weight:800;color:${PDFConfig.colors.primary};margin-bottom:6px">${tituloDestaque}</div>
@@ -871,7 +871,7 @@ export async function gerarRelatorioPDF(
       if (tabelaHTML) {
         blocks.push(criarBlocoHTML(tabelaHTML, { comBordaInferior: true }));
       }
-      
+
       const explicacoesHTML = gerarSecaoExplicativa(data.item_scores);
       if (explicacoesHTML) {
         blocks.push(criarBlocoHTML(explicacoesHTML, { comBordaInferior: true }));
@@ -893,7 +893,7 @@ export async function gerarRelatorioPDF(
       const problemasFiltrados = data.diagnostico.problemas
         .filter(p => filtrarPorGenero(p.item, data.pacienteGenero))
         .map(p => ({ ...p, item: normalizarNomeItem(p.item) }));
-      
+
       const mapaUnico = new Map<string, ProblemaDiagnostico>();
       for (const p of problemasFiltrados) {
         const chave = `${p.sistema}|${p.item.toLowerCase()}`;
@@ -902,7 +902,7 @@ export async function gerarRelatorioPDF(
         }
       }
       const problemasUnicos = Array.from(mapaUnico.values());
-      
+
       if (problemasUnicos.length) {
         const grupos: Record<string, ProblemaDiagnostico[]> = {};
         for (const item of problemasUnicos) {
@@ -932,9 +932,9 @@ export async function gerarRelatorioPDF(
               }
             }
             const fitnessTags = Object.entries(fitnessMap).map(([k, v]) => {
-              const emoji: Record<string, string> = { 
-                performance: '💪', hipertrofia: '🏋️', emagrecimento: '🔥', 
-                recuperacao: '🩹', humor: '🧠' 
+              const emoji: Record<string, string> = {
+                performance: '💪', hipertrofia: '🏋️', emagrecimento: '🔥',
+                recuperacao: '🩹', humor: '🧠'
               };
               return `<span style="background:#f0f9ff;color:#0284c7;padding:2px 6px;border-radius:4px;font-size:9px;margin-right:4px;display:inline-block">${emoji[k] || '📊'} ${k}: ${[...v].slice(0, 2).join(", ")}${v.size > 2 ? "..." : ""}</span>`;
             }).join("");
@@ -966,7 +966,7 @@ export async function gerarRelatorioPDF(
       const terapiasFiltradas = data.plano_terapeutico.terapias
         .filter(t => filtrarPorGenero(t.nome, data.pacienteGenero))
         .map(t => ({ ...t, nome: normalizarNomeItem(t.nome) }));
-      
+
       if (terapiasFiltradas.length) {
         const TERAPIAS_POR_BLOCO = 4;
         for (let i = 0; i < terapiasFiltradas.length; i += TERAPIAS_POR_BLOCO) {
@@ -984,21 +984,21 @@ export async function gerarRelatorioPDF(
             ? `<div style="font-size:12px;font-weight:800;color:${PDFConfig.colors.primary};margin-bottom:8px">🌿 Plano Terapêutico</div>`
             : `<div style="font-size:10px;color:#64748b;margin-bottom:8px;font-style:italic">Plano Terapêutico (cont.)</div>`;
 
-          blocks.push(criarBlocoHTML(`${titulo}${htmlTerapias}`, { 
-            comBordaInferior: i < terapiasFiltradas.length - TERAPIAS_POR_BLOCO 
+          blocks.push(criarBlocoHTML(`${titulo}${htmlTerapias}`, {
+            comBordaInferior: i < terapiasFiltradas.length - TERAPIAS_POR_BLOCO
           }));
         }
       }
     }
 
     // 8. FREQUÊNCIA + JUSTIFICATIVA
-    const temInsônia = data.pontos_criticos?.some(p => isItemSono(p)) || 
-                       data.item_scores?.some(is => isItemSono(is.item) && is.score_atual < 50);
+    const temInsônia = data.pontos_criticos?.some(p => isItemSono(p)) ||
+      data.item_scores?.some(is => isItemSono(is.item) && is.score_atual < 50);
     const temEmocionalCritico = data.item_scores?.some(is => isItemEmocional(is.item) && is.score_atual < 50);
-    
+
     const frequenciaTexto = data.frequencia_lunara && !/^[\s—\-–]+$/.test(data.frequencia_lunara)
       ? data.frequencia_lunara
-      : temInsônia 
+      : temInsônia
         ? "🌙 Recomendação para Sono: 432Hz (ancoramento) + 528Hz (reparo) antes de dormir. Evitar telas 1h antes. Chá de camomila ou melissa."
         : temEmocionalCritico
           ? "💙 Recomendação Emocional: 417Hz (liberação) + 639Hz (conexão) durante meditação. Journaling e respiração consciente."
@@ -1037,21 +1037,24 @@ export async function gerarRelatorioPDF(
     blocks.forEach((b) => container.appendChild(b));
     document.body.appendChild(container);
 
-    const pdf = new jsPDF({ 
-      unit: "pt", 
-      format: "a4",
-      compress: true
+    // ✅ Correção 1: Remover 'compress' que não é opção válida no jsPDF
+    const pdf = new jsPDF({
+      unit: "pt",
+      format: "a4"
+      // compress: true  ← REMOVIDO: não é propriedade válida nas definições de tipo
     });
 
     // Adicionar metadados se solicitado
     if (includeMetadata) {
+      // ✅ Correção 2: creationDate deve ser string no formato esperado ou omitido
       pdf.setProperties({
         title: `Relatório BioSync - ${data.clientName}`,
         subject: "Relatório Terapêutico Integrativo",
         author: "BioSync System",
         creator: "QRMA + BioSync",
         keywords: "saúde, bioenergética, terapia, relatório",
-        creationDate: dataExibicao,
+        // ✅ Correção: usar string ISO ou remover se causar conflito de tipo
+        creationDate: new Date(dataExibicao).toISOString(),
       });
     }
 
@@ -1063,7 +1066,7 @@ export async function gerarRelatorioPDF(
       const block = blocks[i];
       const progress = 90 + Math.round((i / blocks.length) * 8);
       onProgress?.(progress, `Renderizando bloco ${i + 1}/${blocks.length}...`);
-      
+
       const canvas = await renderizarBlocoParaCanvas(block, PDFConfig.canvasScale);
       const result = adicionarBlocoAoPDF(pdf, canvas, currentY, {
         pageWidth,
@@ -1082,17 +1085,18 @@ export async function gerarRelatorioPDF(
       .replace(/^_+|_+$/g, "")
       .toLowerCase()
       .slice(0, 50) || "relatorio";
-    
+
     const dateStr = formatDate(dataExibicao).replace(/\//g, "-").replace(/:/g, "-");
     const finalFilename = `biosync-${safeName}-${dateStr}.pdf`;
-    
+
     pdf.save(finalFilename);
-    
+
     onProgress?.(100, "PDF gerado com sucesso!");
 
-  } catch (error) {
+  } catch (error: unknown) { // ✅ Correção 3: tipar error como unknown para type safety
     console.error("❌ Erro ao gerar PDF:", error);
-    
+
+    // ✅ Correção 4: garantir que apenas PDFGenerationError seja passado para onError
     if (error instanceof PDFGenerationError) {
       onError?.(error);
       alert(`Erro no relatório: ${error.message}\nCódigo: ${error.code}`);
@@ -1102,37 +1106,39 @@ export async function gerarRelatorioPDF(
         "UNKNOWN_ERROR",
         { originalError: error instanceof Error ? error.message : String(error) }
       );
-      onError?.(fallbackError);
+      onError?.(fallbackError); // ✅ onError recebe apenas PDFGenerationError
       alert("Erro ao gerar o PDF. Tente novamente ou contate o suporte.");
+
+      // ✅ Correção 5: throw o erro tratado, não o original
+      throw fallbackError;
     }
-    
-    throw error;
-    
+
   } finally {
     // Cleanup garantido
-    const container = document.querySelector('div[style*="left: -9999px"]');
+    // ✅ Correção 6: seleção mais segura do container
+    const container = document.querySelector<HTMLDivElement>('div[style*="left: -9999px"]');
     container?.remove();
     escapeCache.clear(); // Limpar cache para evitar memory leak em sessões longas
   }
-}
 
-// =======================================================================
-// 🔥 EXPORTAÇÕES PARA TESTES
-// =======================================================================
-
-if (typeof window !== "undefined") {
-  (window as any).PDFUtils = {
-    formatDate,
-    escapeHtml,
-    dividirTexto,
-    filtrarPorGenero,
-    isItemSono,
-    isItemEmocional,
-    getCategoriaItem,
-    normalizarNomeItem,
-    gerarTabelaEvolucao,
-    gerarSecaoExplicativa,
-    extrairComparativoHTML,
-    PDFConfig,
-  };
-}
+    // =======================================================================
+    // 🔥 EXPORTAÇÕES PARA TESTES
+    // =======================================================================
+  
+    if (typeof window !== "undefined") {
+      (window as any).PDFUtils = {
+        formatDate,
+        escapeHtml,
+        dividirTexto,
+        filtrarPorGenero,
+        isItemSono,
+        isItemEmocional,
+        getCategoriaItem,
+        normalizarNomeItem,
+        gerarTabelaEvolucao,
+        gerarSecaoExplicativa,
+        extrairComparativoHTML,
+        PDFConfig,
+      };
+    }
+  }
