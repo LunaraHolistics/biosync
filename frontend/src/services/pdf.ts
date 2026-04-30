@@ -751,7 +751,8 @@ export function validarDadosRelatorio(data: RelatorioData): asserts data is Rela
 // =======================================================================
 
 if (typeof window !== "undefined") {
-  (window as Record<string, unknown>).PDFUtils = {
+  // ✅ CORREÇÃO: Window → unknown → Record (duplo cast necessário pois Window não tem index signature)
+  (window as unknown as Record<string, unknown>).PDFUtils = {
     formatDate,
     escapeHtml,
     dividirTexto,
