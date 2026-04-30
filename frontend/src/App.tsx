@@ -642,10 +642,10 @@ function buildRelatorioData(
     console.error('   4. Verifique o motorSemantico.ts — provável bug no cálculo de scores');
   }
 
-  // =======================================================================
+   // =======================================================================
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
-  if (itemScoresEvolucao.length > 0 && examesAnteriores?.length > 0) {
+  if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
     const mapaAnterior = extrairScoresExameAnterior(examesAnteriores);
     let preenchidos = 0;
 
@@ -672,7 +672,7 @@ function buildRelatorioData(
       console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com score anterior preenchido`);
     }
   }
-
+  
   // =======================================================================
   // LOG RESUMO FINAL
   // =======================================================================
