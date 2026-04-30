@@ -757,7 +757,7 @@ async function buildRelatorioData(
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
-    console.log(`🔍 [DIAG] Exames anteriores: ${examesAnteriores.length}, base: ${baseAnalise.length}, terapias: ${terapias.length}`);
+    console.log(`🔍 [DIAG] Exames anteriores: ${examesAnteriores.length}, base: ${baseAnalise?.length ?? 0}, terapias: ${terapias?.length ?? 0}`);
 
     const mapaAnterior = extrairScoresExameAnterior(
       examesAnteriores,
