@@ -850,19 +850,19 @@ export function gerarSecaoExplicativa(itemScores: ItemScoreEvolucao[]): string {
   const htmlExplicacoes = itensCriticos.map(is => {
     const nome = normalizarNomeItem(is.item);
 
-    // ✅ CORREÇÃO: Lookup case-insensitive — normaliza as chaves da tabela também
-    let info = EXPLICACOES_ITENS[nome];
+    // ✅ CORREÇÃO: Lookup case-insensitive com tipagem segura
+    let info: { titulo: string; explicacao: string; recomendacao: string } | undefined = EXPLICACOES_ITENS[nome];
     if (!info) {
-      // Busca por chave exata capitalizada
       const chaveCapitalizada = nome.replace(/^./, c => c.toUpperCase());
       info = EXPLICACOES_ITENS[chaveCapitalizada];
     }
     if (!info) {
-      // Busca por substring em qualquer chave
       const chaveEncontrada = Object.keys(EXPLICACOES_ITENS).find(k =>
         k.toLowerCase() === nome || nome.includes(k.toLowerCase()) || k.toLowerCase().includes(nome)
       );
-      info = chaveEncontrada ? EXPLICACOES_ITENS[chaveEncontrada] : undefined;
+      if (chaveEncontrada) {
+        info = EXPLICACOES_ITENS[chaveEncontrada];
+      }
     }
 
     // Fallback apenas se NENHUMA busca funcionar
