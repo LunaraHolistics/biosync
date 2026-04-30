@@ -289,6 +289,30 @@ function extrairScoresDosPontosCriticos(pontosCriticos: string[]): Map<string, n
 }
 
 // ==============================
+// 🔷 TIPOS NECESSÁRIOS
+// =======================================================================
+type ItemScoreEvolucao = {
+  item: string;
+  categoria: string;
+  score_atual: number;
+  score_anterior: number | null;
+  delta: number;
+  trend: 'novo' | 'melhorou' | 'piorou' | 'estavel';
+  impacto: string;
+};
+
+type ExameRow = {
+  id: string;
+  data_exame?: string | Date;
+  created_at?: string | Date;
+  indice_biosync?: any;
+  resultado_json?: any;
+};
+
+type BaseAnaliseSaudeRow = any;
+type TerapiaRow = any;
+
+// ==============================
 // 🔥 CÁLCULO DE EVOLUÇÃO ENTRE EXAMES
 // =======================================================================
 function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
@@ -297,6 +321,36 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
   if (delta >= 10) return 'melhorou';
   if (delta <= -10) return 'piorou';
   return 'estavel';
+}
+
+// ==============================
+// 🔥 HELPER: VERIFICA SE SCORES SÃO GENÉRICOS/DUMMY
+// =======================================================================
+function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
+  if (!scores || scores.length === 0) return true;
+  
+  // Verifica se todos os scores têm valores muito similares (possível dado dummy)
+  const valores = scores.map(s => s.score_atual).filter(v => typeof v === 'number');
+  if (valores.length === 0) return true;
+  
+  const media = valores.reduce((a, b) => a + b, 0) / valores.length;
+  const desvioPadrao = Math.sqrt(
+    valores.reduce((acc, v) => acc + Math.pow(v - media, 2), 0) / valores.length
+  );
+  
+  // Se desvio padrão muito baixo (< 5) e média em faixa suspeita, provavelmente é dummy
+  if (desvioPadrao < 5 && (media < 10 || media > 95)) {
+    return true;
+  }
+  
+  // Verifica se todos os impactos são iguais e genéricos
+  const impactosUnicos = [...new Set(scores.map(s => s.impacto?.toLowerCase().trim()))];
+  if (impactosUnicos.length === 1 && impactosUnicos[0]?.includes('desequilíbrio bioenergético')) {
+    // Se TODOS tiverem o mesmo impacto genérico, pode ser dado não processado
+    return scores.length > 50; // Só considera genérico se houver muitos itens
+  }
+  
+  return false;
 }
 
 // ==============================
@@ -370,9 +424,12 @@ function extrairScoresExameAnterior(
   if (base && terapias && base.length > 0) {
     try {
       console.log(`🔄 [EVOLUÇÃO] Rodando motor semântico no exame anterior...`);
-      const analiseAnterior = gerarAnaliseCompleta(anterior, base, terapias);
+      // Nota: gerarAnaliseCompleta deve ser importada do módulo principal
+      const analiseAnterior = typeof gerarAnaliseCompleta === 'function' 
+        ? gerarAnaliseCompleta(anterior, base, terapias) 
+        : null;
 
-      if (analiseAnterior.matches?.length > 0) {
+      if (analiseAnterior?.matches?.length > 0) {
         for (const m of analiseAnterior.matches) {
           if (m.itemBase && typeof m.score === 'number') {
             const chave = m.itemBase.trim().replace(/[:：]$/, '').toLowerCase();
