@@ -91,16 +91,22 @@ export type PDFGenerationOptions = {
 
 // =======================================================================
 // 🔥 CLASSES DE ERRO PERSONALIZADAS
+// ✅ CORREÇÃO 1: Removido 'public readonly' do construtor (TS1294 - erasableSyntaxOnly)
 // =======================================================================
 
 export class PDFGenerationError extends Error {
+  code: string;
+  context?: Record<string, unknown>;
+
   constructor(
     message: string,
-    public readonly code: string,
-    public readonly context?: Record<string, unknown>
+    code: string,
+    context?: Record<string, unknown>
   ) {
     super(message);
     this.name = "PDFGenerationError";
+    this.code = code;
+    this.context = context;
   }
 }
 
@@ -248,7 +254,7 @@ export async function renderizarBlocoParaCanvas(
       backgroundColor: "#ffffff",
       logging: false,
       scrollY: -window.scrollY,
-      removeContainer: true, // Libera memória automaticamente
+      removeContainer: true,
       windowWidth: PDFConfig.contentWidthPx + 100,
       windowHeight: el.scrollHeight + 100,
     });
@@ -321,8 +327,8 @@ export function adicionarBlocoAoPDF(
 export function normalizarNomeItem(nome: string): string {
   return nome
     .trim()
-    .replace(/[:：]$/, "") // Remove dois pontos no final
-    .replace(/\s+/g, " ") // Normaliza espaços múltiplos
+    .replace(/[:：]$/, "")
+    .replace(/\s+/g, " ")
     .toLowerCase();
 }
 
@@ -614,7 +620,6 @@ export function gerarTabelaEvolucao(
 // =======================================================================
 
 const EXPLICACOES_ITENS: Record<string, { titulo: string; explicacao: string; recomendacao: string }> = {
-  // Sono e relaxamento
   "Magnésio": {
     titulo: "Magnésio (Relaxamento e Sono)",
     explicacao: "O magnésio é essencial para o relaxamento muscular, produção de melatonina e regulação do sistema nervoso. Deficiência causa insônia, ansiedade, tensão muscular, cãibras e fadiga crônica.",
@@ -635,7 +640,6 @@ const EXPLICACOES_ITENS: Record<string, { titulo: string; explicacao: string; re
     explicacao: "Fígado sobrecarregado prejudica desintoxicação noturna, metabolismo de hormônios e produção de bile. Sono entre 23h-3h é crucial para regeneração hepática.",
     recomendacao: "Evitar álcool e alimentos processados, chás digestivos (boldo, carqueja), jantar leve até 19h, dormir antes de 23h."
   },
-  // Emoções
   "Amor": {
     titulo: "Amor (Nível de Consciência)",
     explicacao: "Estado emocional de conexão, compaixão e aceitação. Score baixo indica bloqueios emocionais, dificuldade em se conectar ou ressentimentos não resolvidos.",
@@ -646,13 +650,11 @@ const EXPLICACOES_ITENS: Record<string, { titulo: string; explicacao: string; re
     explicacao: "Emoção de proteção que, em excesso, paralisa e limita. Score baixo indica ansiedade generalizada, fobias ou insegurança crônica.",
     recomendacao: "Exposição gradual, técnicas de grounding, florais de Bach (Mimulus, Rock Rose), suplementação com magnésio e L-teanina."
   },
-  // Minerais
   "Potássio": {
     titulo: "Potássio",
     explicacao: "Mineral essencial para função muscular, nervosa e equilíbrio eletrolítico. Deficiência causa cãibras, fadiga, arritmias e sono fragmentado.",
     recomendacao: "Alimentos ricos (banana, batata-doce, abacate, espinafre, feijão), evitar diuréticos em excesso."
   },
-  // Saúde geral
   "Metais Pesados": {
     titulo: "Metais Pesados",
     explicacao: "Acúmulo de chumbo, mercúrio, cádmio e alumínio causa toxicidade sistêmica, fadiga crônica, névoa mental e distúrbios do sono.",
@@ -742,6 +744,27 @@ export function validarDadosRelatorio(data: RelatorioData): asserts data is Rela
   if (!Array.isArray(data?.pontos_criticos)) {
     throw new DataValidationError("pontos_criticos deve ser um array", { field: "pontos_criticos" });
   }
+}
+
+// =======================================================================
+// 🔥 EXPORTAÇÕES PARA TESTES (declarado antes para estar disponível)
+// =======================================================================
+
+if (typeof window !== "undefined") {
+  (window as Record<string, unknown>).PDFUtils = {
+    formatDate,
+    escapeHtml,
+    dividirTexto,
+    filtrarPorGenero,
+    isItemSono,
+    isItemEmocional,
+    getCategoriaItem,
+    normalizarNomeItem,
+    gerarTabelaEvolucao,
+    gerarSecaoExplicativa,
+    extrairComparativoHTML,
+    PDFConfig,
+  };
 }
 
 // =======================================================================
@@ -1037,30 +1060,30 @@ export async function gerarRelatorioPDF(
     blocks.forEach((b) => container.appendChild(b));
     document.body.appendChild(container);
 
-    // ✅ Correção 1: Remover 'compress' que não é opção válida no jsPDF
+    // ✅ Sem 'compress' — não é propriedade válida nas tipagens do jsPDF
     const pdf = new jsPDF({
       unit: "pt",
       format: "a4"
-      // compress: true  ← REMOVIDO: não é propriedade válida nas definições de tipo
     });
 
-    // Adicionar metadados se solicitado
+    // ✅ CORREÇÃO 2: Removido 'creationDate' — não existe no tipo DocumentProperties
     if (includeMetadata) {
-      // ✅ Correção 2: creationDate deve ser string no formato esperado ou omitido
       pdf.setProperties({
         title: `Relatório BioSync - ${data.clientName}`,
         subject: "Relatório Terapêutico Integrativo",
         author: "BioSync System",
         creator: "QRMA + BioSync",
         keywords: "saúde, bioenergética, terapia, relatório",
-        // ✅ Correção: usar string ISO ou remover se causar conflito de tipo
-        creationDate: new Date(dataExibicao).toISOString(),
       });
     }
 
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let currentY = PDFConfig.margin;
+
+    // ✅ CORREÇÃO 3: Tipar explicitamente como 'number' — sem isso o 'as const'
+    //    do PDFConfig faz currentY ser inferido como literal '20', e quando
+    //    recebe result.newY (number), o TS reclama: "number not assignable to 20"
+    let currentY: number = PDFConfig.margin;
 
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
@@ -1093,10 +1116,9 @@ export async function gerarRelatorioPDF(
 
     onProgress?.(100, "PDF gerado com sucesso!");
 
-  } catch (error: unknown) { // ✅ Correção 3: tipar error como unknown para type safety
+  } catch (error: unknown) {
     console.error("❌ Erro ao gerar PDF:", error);
 
-    // ✅ Correção 4: garantir que apenas PDFGenerationError seja passado para onError
     if (error instanceof PDFGenerationError) {
       onError?.(error);
       alert(`Erro no relatório: ${error.message}\nCódigo: ${error.code}`);
@@ -1106,39 +1128,16 @@ export async function gerarRelatorioPDF(
         "UNKNOWN_ERROR",
         { originalError: error instanceof Error ? error.message : String(error) }
       );
-      onError?.(fallbackError); // ✅ onError recebe apenas PDFGenerationError
+      onError?.(fallbackError);
       alert("Erro ao gerar o PDF. Tente novamente ou contate o suporte.");
-
-      // ✅ Correção 5: throw o erro tratado, não o original
       throw fallbackError;
     }
 
   } finally {
-    // Cleanup garantido
-    // ✅ Correção 6: seleção mais segura do container
-    const container = document.querySelector<HTMLDivElement>('div[style*="left: -9999px"]');
-    container?.remove();
-    escapeCache.clear(); // Limpar cache para evitar memory leak em sessões longas
+    // ✅ CORREÇÃO 4: Renomeado para 'containerEl' — evita shadowing com
+    //    a variável 'container' declarada no escopo do try
+    const containerEl = document.querySelector<HTMLDivElement>('div[style*="left: -9999px"]');
+    containerEl?.remove();
+    escapeCache.clear();
   }
-
-    // =======================================================================
-    // 🔥 EXPORTAÇÕES PARA TESTES
-    // =======================================================================
-  
-    if (typeof window !== "undefined") {
-      (window as any).PDFUtils = {
-        formatDate,
-        escapeHtml,
-        dividirTexto,
-        filtrarPorGenero,
-        isItemSono,
-        isItemEmocional,
-        getCategoriaItem,
-        normalizarNomeItem,
-        gerarTabelaEvolucao,
-        gerarSecaoExplicativa,
-        extrairComparativoHTML,
-        PDFConfig,
-      };
-    }
-  }
+}
