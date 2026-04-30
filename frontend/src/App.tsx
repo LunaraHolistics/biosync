@@ -1164,10 +1164,22 @@ function App() {
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {examesPaciente.map((a) => {
-                        const date = new Date(a.data_exame || a.created_at);
-                        const label = Number.isNaN(date.getTime())
-                          ? a.data_exame || a.created_at
-                          : date.toLocaleString();
+                        const dataRaw = a.data_exame || a.created_at;
+                        let label = dataRaw;
+                        try {
+                          const partes = String(dataRaw).split('T')[0].split('-');
+                          if (partes.length === 3 && partes[0].length === 4) {
+                            const d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+                            if (!Number.isNaN(d.getTime())) {
+                              label = d.toLocaleDateString("pt-BR");
+                            }
+                          } else {
+                            const d = new Date(dataRaw);
+                            if (!Number.isNaN(d.getTime())) {
+                              label = d.toLocaleString("pt-BR");
+                            }
+                          }
+                        } catch { /* mantém dataRaw */ }
                         const scoreMotor = obterAnalise(a);
                         const corScore =
                           scoreMotor.scoreGeral >= 85 ? "#22c55e"
