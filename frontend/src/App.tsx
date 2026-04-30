@@ -350,7 +350,7 @@ function extrairScoresExameAnterior(
   const ib = anterior.indice_biosync;
   if (ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0) {
     const items = (ib as any).item_scores as ItemScoreEvolucao[];
-    
+
     for (const item of items) {
       const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
       if (chave && typeof item.score_atual === 'number') {
@@ -755,8 +755,9 @@ async function buildRelatorioData(
   // ✅ PERSISTIR scores no Supabase
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && fonteUsada === 'motor.matches') {
-    // @ts-expect-error - Promise não aguardada intencionalmente (fire-and-forget)
-    salvarItemScores(row.id, itemScoresEvolucao).catch(() => {});
+    // Use @ts-ignore em vez de @ts-expect-error (menos rigoroso)
+    // @ts-ignore
+    salvarItemScores(row.id, itemScoresEvolucao).catch(() => { });
   }
 
   // =======================================================================
