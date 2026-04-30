@@ -22,42 +22,20 @@ import {
   gerarAnaliseCompleta,
   gerarComparativoInteligente,
   type AnaliseCompleta,
+  type MatchItem,
 } from "./lib/motorSemantico";
 
 // ==============================
-// 🔥 CATEGORIAS PARA FILTRO
-// ==============================
-const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
-
-const PALAVRAS_CHAVE_POR_CATEGORIA: Record<string, string[]> = {
-  fitness: ['fisico', 'fitness', 'performance', 'treino', 'musculo', 'forca', 'energia', 'metabolismo', 'peso', 'gordura', 'colesterol', 'viscosidade', 'circulacao', 'coracao', 'vascular', 'miocardio', 'perfusao', 'oxigenio', 'aerobico', 'fadiga', 'resistencia', 'capacidade', 'exercicio', 'atletico', 'cardio', 'respiratorio', 'pulmao', 'sangue', 'arteria', 'veia'],
-  emotional: ['emocional', 'emotional', 'emocao', 'sentimento', 'ansiedade', 'depressao', 'medo', 'culpa', 'vergonha', 'raiva', 'tristeza', 'luto', 'apego', 'magoa', 'estresse', 'humor', 'instabilidade', 'afetivo', 'psicologico', 'trauma', 'frustracao', 'desanimo', 'apatia', 'melancolia', 'saudade', 'solidao', 'rejeicao', 'abandono'],
-  sono: ['sono', 'insomnia', 'insonia', 'dormir', 'descanso', 'repouso', 'letargia', 'cansaco', 'exaustao', 'fadiga', 'acordar', 'noite', 'melatonina', 'despertar', 'ciclo', 'ritmo', 'circadiano', 'sonolencia', 'vigilia', 'cochilo'],
-  imunidade: ['imunidade', 'imune', 'defesa', 'alergia', 'alergeno', 'inflamacao', 'infeccao', 'virus', 'bacteria', 'fungo', 'parasita', 'linfonodo', 'amigdala', 'bao', 'timo', 'imunoglobulina', 'respiratorio', 'gastrointestinal', 'mucosa', 'anticorpo', 'leucocito', 'linfocito', 'resistencia', 'protecao', 'vacina', 'imunizacao'],
-  mental: ['mental', 'cognitivo', 'pensamento', 'memoria', 'concentracao', 'foco', 'razao', 'logica', 'aprendizado', 'nevoa', 'brain fog', 'confusao', 'clareza', 'neurologico', 'cerebro', 'cerebral', 'nervoso', 'sinapse', 'intelecto', 'raciocinio', 'julgamento', 'decisao', 'intuicao', 'percepcao', 'consciencia', 'mente']
-};
-
-// ==============================
-// TIPOS LOCAIS
+// 🔷 TIPOS GLOBAIS CONSOLIDADOS
 // ==============================
 
-type DiagnosticoPdf = {
-  problemas: {
-    sistema: string;
-    item: string;
-    status: string;
-    impacto: string;
-    score?: number;
-  }[];
-};
-
-type ItemScoreEvolucao = {
+export type ItemScoreEvolucao = {
   item: string;
   categoria: string;
   score_atual: number;
   score_anterior: number | null;
   delta: number;
-  trend: 'melhorou' | 'piorou' | 'estavel' | 'novo';
+  trend: 'novo' | 'melhorou' | 'piorou' | 'estavel';
   impacto: string;
   impacto_fitness?: {
     performance?: string;
@@ -66,6 +44,31 @@ type ItemScoreEvolucao = {
     recuperacao?: string;
     humor?: string;
   };
+};
+
+type DiagnosticoPdf = {
+  problemas: {
+    sistema: string;
+    item: string;
+    status: string;
+    impacto: string;
+    score?: number;
+    impacto_fitness?: ItemScoreEvolucao['impacto_fitness'];
+  }[];
+};
+
+// ==============================
+// 🔥 CATEGORIAS PARA FILTRO
+// ==============================
+const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
+type CategoriaFiltro = typeof CATEGORIAS_DISPONIVEIS[number];
+
+const PALAVRAS_CHAVE_POR_CATEGORIA: Record<CategoriaFiltro, string[]> = {
+  fitness: ['fisico', 'fitness', 'performance', 'treino', 'musculo', 'forca', 'energia', 'metabolismo', 'peso', 'gordura', 'colesterol', 'viscosidade', 'circulacao', 'coracao', 'vascular', 'miocardio', 'perfusao', 'oxigenio', 'aerobico', 'fadiga', 'resistencia', 'capacidade', 'exercicio', 'atletico', 'cardio', 'respiratorio', 'pulmao', 'sangue', 'arteria', 'veia'],
+  emotional: ['emocional', 'emotional', 'emocao', 'sentimento', 'ansiedade', 'depressao', 'medo', 'culpa', 'vergonha', 'raiva', 'tristeza', 'luto', 'apego', 'magoa', 'estresse', 'humor', 'instabilidade', 'afetivo', 'psicologico', 'trauma', 'frustracao', 'desanimo', 'apatia', 'melancolia', 'saudade', 'solidao', 'rejeicao', 'abandono'],
+  sono: ['sono', 'insomnia', 'insonia', 'dormir', 'descanso', 'repouso', 'letargia', 'cansaco', 'exaustao', 'fadiga', 'acordar', 'noite', 'melatonina', 'despertar', 'ciclo', 'ritmo', 'circadiano', 'sonolencia', 'vigilia', 'cochilo'],
+  imunidade: ['imunidade', 'imune', 'defesa', 'alergia', 'alergeno', 'inflamacao', 'infeccao', 'virus', 'bacteria', 'fungo', 'parasita', 'linfonodo', 'amigdala', 'bao', 'timo', 'imunoglobulina', 'respiratorio', 'gastrointestinal', 'mucosa', 'anticorpo', 'leucocito', 'linfocito', 'resistencia', 'protecao', 'vacina', 'imunizacao'],
+  mental: ['mental', 'cognitivo', 'pensamento', 'memoria', 'concentracao', 'foco', 'razao', 'logica', 'aprendizado', 'nevoa', 'brain fog', 'confusao', 'clareza', 'neurologico', 'cerebro', 'cerebral', 'nervoso', 'sinapse', 'intelecto', 'raciocinio', 'julgamento', 'decisao', 'intuicao', 'percepcao', 'consciencia', 'mente']
 };
 
 // ==============================
@@ -107,10 +110,10 @@ function labelPlanoTipo(t: AiStructuredData["plano_terapeutico"]["tipo"]): strin
 }
 
 const COMPARATIVO_VAZIO = {
-  melhoraram: [],
-  pioraram: [],
-  novos_problemas: [],
-  normalizados: [],
+  melhoraram: [] as string[],
+  pioraram: [] as string[],
+  novos_problemas: [] as string[],
+  normalizados: [] as string[],
 };
 
 // ==============================
@@ -130,9 +133,9 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 }
 
 // ==============================
-// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA (EVOLUÍDA)
+// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA
 // =======================================================================
-function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
+function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: CategoriaFiltro[]): AnaliseCompleta {
   if (categoriasFiltro.length === 0) return analise;
 
   const filtroNorm = categoriasFiltro.map(c => c.toLowerCase());
@@ -144,9 +147,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
   }
 
-  // =======================================================================
-  // FILTRAR INTERPRETAÇÃO (SEÇÕES)
-  // =======================================================================
+  // FILTRAR INTERPRETAÇÃO
   let interpretacaoFiltrada = analise.interpretacao;
   if (categoriasFiltro.length > 0 && analise.interpretacao) {
     const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=\b(?:[A-ZÀ-Ú]{4,}(?:\s+[A-ZÀ-Ú]+)*)\b)/);
@@ -183,9 +184,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     interpretacaoFiltrada = partes.join('\n\n').trim() || analise.interpretacao;
   }
 
-  // =======================================================================
   // FILTRAR PONTOS CRÍTICOS
-  // =======================================================================
   const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) => {
     const itemMatch = p.match(/^·?\s*([^:：]+):/);
     const item = itemMatch?.[1]?.trim() || p;
@@ -199,17 +198,13 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     });
   });
 
-  // =======================================================================
   // FILTRAR MATCHES
-  // =======================================================================
-  const matchesFiltrados = analise.matches.filter((m: any) => {
+  const matchesFiltrados = analise.matches.filter((m: MatchItem) => {
     const catNorm = (m.categoria || '').toLowerCase();
     return filtroNorm.some(f => catNorm.includes(f) || f.includes(catNorm));
   });
 
-  // =======================================================================
   // FILTRAR TERAPIAS
-  // =======================================================================
   const terapiasFiltradas = analise.terapias.filter((t: any) => {
     const tags = [t.categoria, ...(t.tags || [])].filter(Boolean).map((tag: string) => tag.toLowerCase());
     return tags.some((tag: string) =>
@@ -217,9 +212,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
     );
   });
 
-  // =======================================================================
   // FILTRAR SETORES
-  // =======================================================================
   const setoresFiltrados = analise.setoresAfetados.filter((s: string) => {
     const sNorm = s.toLowerCase();
     return filtroNorm.some(f => sNorm.includes(f) || f.includes(sNorm));
@@ -238,12 +231,13 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
 }
 
 // ==============================
-// 🔥 DETECÇÃO DE SCORES GENÉRICOS
+// 🔥 VERIFICA SE SCORES SÃO GENÉRICOS/DUMMY
 // =======================================================================
 function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
   if (!scores || scores.length === 0) return true;
   if (scores.length === 1) return false;
 
+  // Verifica se todos têm o MESMO score exato (flag de dummy)
   const valoresUnicos = new Set(scores.map(s => s.score_atual));
   if (valoresUnicos.size === 1) {
     const valorUnico = [...valoresUnicos][0];
@@ -251,6 +245,7 @@ function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
     return true;
   }
 
+  // Verifica dominância extrema (>90% com mesmo valor)
   const contagemPorValor = new Map<number, number>();
   for (const s of scores) {
     contagemPorValor.set(s.score_atual, (contagemPorValor.get(s.score_atual) || 0) + 1);
@@ -266,56 +261,9 @@ function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
 }
 
 // ==============================
-// 🔥 EXTRAIR SCORES DOS PONTOS CRÍTICOS
+// 🔥 CÁLCULO DE TENDÊNCIA
 // =======================================================================
-function extrairScoresDosPontosCriticos(pontosCriticos: string[]): Map<string, number> {
-  const map = new Map<string, number>();
-
-  for (const p of pontosCriticos) {
-    let match = p.match(/^·?\s*(.+?)\s*[:：]\s*(\d{1,3})\s*$/);
-    if (!match) match = p.match(/^·?\s*(.+?)\s*[—\-–]\s*(\d{1,3})\s*$/);
-    if (!match) match = p.match(/^·?\s*(.+?)\s*[(（]\s*(\d{1,3})\s*[)）]\s*$/);
-
-    if (match) {
-      const item = match[1].trim().replace(/^·\s*/, '').toLowerCase();
-      const score = parseInt(match[2], 10);
-      if (score >= 0 && score <= 100) {
-        map.set(item, score);
-      }
-    }
-  }
-
-  return map;
-}
-
-// ==============================
-// 🔷 TIPOS NECESSÁRIOS
-// =======================================================================
-type ItemScoreEvolucao = {
-  item: string;
-  categoria: string;
-  score_atual: number;
-  score_anterior: number | null;
-  delta: number;
-  trend: 'novo' | 'melhorou' | 'piorou' | 'estavel';
-  impacto: string;
-};
-
-type ExameRow = {
-  id: string;
-  data_exame?: string | Date;
-  created_at?: string | Date;
-  indice_biosync?: any;
-  resultado_json?: any;
-};
-
-type BaseAnaliseSaudeRow = any;
-type TerapiaRow = any;
-
-// ==============================
-// 🔥 CÁLCULO DE EVOLUÇÃO ENTRE EXAMES
-// =======================================================================
-function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
+function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): ItemScoreEvolucao['trend'] {
   if (scoreAnterior === null) return 'novo';
   const delta = scoreAtual - scoreAnterior;
   if (delta >= 10) return 'melhorou';
@@ -324,37 +272,7 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
 }
 
 // ==============================
-// 🔥 HELPER: VERIFICA SE SCORES SÃO GENÉRICOS/DUMMY
-// =======================================================================
-function ScoresSaoGenericos(scores: ItemScoreEvolucao[]): boolean {
-  if (!scores || scores.length === 0) return true;
-  
-  // Verifica se todos os scores têm valores muito similares (possível dado dummy)
-  const valores = scores.map(s => s.score_atual).filter(v => typeof v === 'number');
-  if (valores.length === 0) return true;
-  
-  const media = valores.reduce((a, b) => a + b, 0) / valores.length;
-  const desvioPadrao = Math.sqrt(
-    valores.reduce((acc, v) => acc + Math.pow(v - media, 2), 0) / valores.length
-  );
-  
-  // Se desvio padrão muito baixo (< 5) e média em faixa suspeita, provavelmente é dummy
-  if (desvioPadrao < 5 && (media < 10 || media > 95)) {
-    return true;
-  }
-  
-  // Verifica se todos os impactos são iguais e genéricos
-  const impactosUnicos = [...new Set(scores.map(s => s.impacto?.toLowerCase().trim()))];
-  if (impactosUnicos.length === 1 && impactosUnicos[0]?.includes('desequilíbrio bioenergético')) {
-    // Se TODOS tiverem o mesmo impacto genérico, pode ser dado não processado
-    return scores.length > 50; // Só considera genérico se houver muitos itens
-  }
-  
-  return false;
-}
-
-// ==============================
-// 🔥 HELPER: EXTRAIR SCORES DO EXAME ANTERIOR (VERSÃO COMPLETA COM FALLBACK)
+// 🔥 EXTRAIR SCORES DO EXAME ANTERIOR
 // =======================================================================
 function extrairScoresExameAnterior(
   examesAnteriores: ExameRow[],
@@ -396,15 +314,13 @@ function extrairScoresExameAnterior(
   const anterior = anterioresValidos[0];
   if (!anterior) return mapa;
 
-  console.log(`🔍 [EVOLUÇÃO] Exame anterior selecionado: ${anterior.id.substring(0, 6)} | ${anterior.data_exame}`);
+  console.log(`🔍 [EVOLUÇÃO] Exame anterior: ${anterior.id.substring(0, 6)} | ${anterior.data_exame}`);
 
-  // =======================================================================
-  // TENTATIVA 1: Buscar indice_biosync.item_scores no banco
-  // =======================================================================
+  // TENTATIVA 1: indice_biosync.item_scores
   const ib = anterior.indice_biosync;
   if (ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0) {
     const items = (ib as any).item_scores as ItemScoreEvolucao[];
-
+    
     for (const item of items) {
       const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
       if (chave && typeof item.score_atual === 'number') {
@@ -413,23 +329,18 @@ function extrairScoresExameAnterior(
     }
 
     if (mapa.size > 0 && !ScoresSaoGenericos(Array.from(mapa.values()))) {
-      console.log(`✅ [EVOLUÇÃO] ${mapa.size} scores carregados do banco`);
+      console.log(`✅ [EVOLUÇÃO] ${mapa.size} scores do banco`);
       return mapa;
     }
   }
 
-  // =======================================================================
-  // TENTATIVA 2: Fallback - Rodar o motor semântico no exame anterior
-  // =======================================================================
+  // TENTATIVA 2: Fallback com motor semântico
   if (base && terapias && base.length > 0) {
     try {
-      console.log(`🔄 [EVOLUÇÃO] Rodando motor semântico no exame anterior...`);
-      // Nota: gerarAnaliseCompleta deve ser importada do módulo principal
-      const analiseAnterior = typeof gerarAnaliseCompleta === 'function' 
-        ? gerarAnaliseCompleta(anterior, base, terapias) 
-        : null;
+      console.log(`🔄 [EVOLUÇÃO] Rodando motor no exame anterior...`);
+      const analiseAnterior = gerarAnaliseCompleta(anterior, base, terapias);
 
-      if (analiseAnterior?.matches?.length > 0) {
+      if (analiseAnterior.matches?.length > 0) {
         for (const m of analiseAnterior.matches) {
           if (m.itemBase && typeof m.score === 'number') {
             const chave = m.itemBase.trim().replace(/[:：]$/, '').toLowerCase();
@@ -445,11 +356,11 @@ function extrairScoresExameAnterior(
           }
         }
         if (mapa.size > 0) {
-          console.log(`✅ [EVOLUÇÃO] Motor gerou ${mapa.size} scores para comparação`);
+          console.log(`✅ [EVOLUÇÃO] Motor gerou ${mapa.size} scores`);
         }
       }
     } catch (e) {
-      console.warn('⚠️ [EVOLUÇÃO] Falha ao executar motor no exame anterior:', e);
+      console.warn('⚠️ [EVOLUÇÃO] Falha no motor anterior:', e);
     }
   }
 
@@ -457,7 +368,7 @@ function extrairScoresExameAnterior(
 }
 
 // ==============================
-// 🔥 HELPER: EXTRAIR GÊNERO DO PACIENTE
+// 🔥 EXTRAIR GÊNERO DO PACIENTE
 // ==============================
 function extrairGeneroPaciente(nomePaciente: string): 'masculino' | 'feminino' | undefined {
   if (!nomePaciente) return undefined;
@@ -522,7 +433,7 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                     title="Clique para restaurar esta terapia ao PDF"
                   >
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 2 }}>
-                      <input type="checkbox" checked={true} readOnly
+                      <input type="checkbox" checked readOnly
                         style={{ cursor: "pointer", accentColor: "#22c55e", width: 16, height: 16 }} />
                       <span style={{ fontSize: 8, opacity: 1, marginTop: 2, color: "#22c55e", fontWeight: 700 }}>✓</span>
                     </div>
@@ -595,14 +506,14 @@ Exemplos:
 }
 
 // ==============================
-// 🔥 CONVERSÃO: Motor Novo → AiStructuredData
+// 🔥 CONVERSÃO: Motor → AiStructuredData
 // ==============================
 function exameRowToAiData(
   row: ExameRow,
   base: BaseAnaliseSaudeRow[],
   terapias: TerapiaRow[],
   terapiasManuais?: string,
-  filtrosAtivos?: string[]
+  filtrosAtivos?: CategoriaFiltro[]
 ): { data: AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {
   const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
   const analise = filtrosAtivos?.length ? filtrarAnalisePorCategoria(analiseRaw, filtrosAtivos) : analiseRaw;
@@ -631,7 +542,7 @@ function exameRowToAiData(
 
   const frequencia_lunara = analise.frequencia_lunara || "";
   const setoresParaJustificativa = filtrosAtivos?.length && filtrosAtivos.length > 0
-    ? analise.setoresAfetados.filter(s => filtrosAtivos.includes(s.toLowerCase()))
+    ? analise.setoresAfetados.filter(s => filtrosAtivos.includes(s as CategoriaFiltro))
     : analise.setoresAfetados;
 
   const pacienteGenero = extrairGeneroPaciente(row.nome_paciente);
@@ -651,7 +562,7 @@ function exameRowToAiData(
 }
 
 // ==============================
-// 🔥 FUNÇÃO buildRelatorioData — AUTO-SUFICIENTE
+// 🔥 BUILD RELATÓRIO DATA (AUTO-SUFICIENTE)
 // =======================================================================
 async function buildRelatorioData(
   row: ExameRow,
@@ -659,7 +570,7 @@ async function buildRelatorioData(
   data: AiStructuredData,
   comparacao?: any,
   motor?: AnaliseCompleta,
-  filtrosAtivos?: string[],
+  filtrosAtivos?: CategoriaFiltro[],
   examesAnteriores?: ExameRow[],
   pacienteGenero?: 'masculino' | 'feminino',
   baseAnaliseIn?: BaseAnaliseSaudeRow[],
@@ -671,7 +582,7 @@ async function buildRelatorioData(
   let terapias = terapiasIn;
 
   if (!baseAnalise?.length || !terapias?.length) {
-    console.log(`🔄 [AUTO] Buscando base/terapias automaticamente`);
+    console.log(`🔄 [AUTO] Buscando base/terapias...`);
     try {
       const [baseData, terapiasData] = await Promise.all([
         baseAnalise?.length ? Promise.resolve(baseAnalise) : listarBaseAnaliseSaude(),
@@ -679,7 +590,7 @@ async function buildRelatorioData(
       ]);
       baseAnalise = baseData;
       terapias = terapiasData;
-      console.log(`✅ [AUTO] Obtidos: base=${baseAnalise.length}, terapias=${terapias.length}`);
+      console.log(`✅ [AUTO] base=${baseAnalise.length}, terapias=${terapias.length}`);
     } catch (e) {
       console.warn('⚠️ [AUTO] Falha ao buscar base/terapias:', e);
     }
@@ -688,14 +599,12 @@ async function buildRelatorioData(
   let itemScoresEvolucao: ItemScoreEvolucao[] = [];
   let fonteUsada = 'nenhuma';
 
-  // =======================================================================
   // FONTE 1: motor.matches (PRIORIDADE)
-  // =======================================================================
   if (motor?.matches && motor.matches.length > 0) {
     const scoresDoMotor: ItemScoreEvolucao[] = motor.matches
-      .filter((m: any) => m.itemBase && typeof m.score === 'number')
-      .map((m: any) => ({
-        item: m.itemBase,
+      .filter((m: MatchItem) => m.itemBase && typeof m.score === 'number')
+      .map((m: MatchItem) => ({
+        item: m.itemBase!,
         categoria: m.categoria || 'geral',
         score_atual: m.score as number,
         score_anterior: null,
@@ -708,19 +617,17 @@ async function buildRelatorioData(
     if (!ScoresSaoGenericos(scoresDoMotor) && scoresDoMotor.length > 0) {
       itemScoresEvolucao = scoresDoMotor;
       fonteUsada = 'motor.matches';
-      console.log(`✅ [SCORES] Fonte: motor.matches — ${scoresDoMotor.length} itens`);
+      console.log(`✅ [SCORES] motor.matches — ${scoresDoMotor.length} itens`);
     }
   }
 
-  // =======================================================================
   // FONTE 2: pontos_criticos com regex
-  // =======================================================================
   if (itemScoresEvolucao.length === 0 && data.pontos_criticos?.length > 0) {
-    const scoresDoTexto = extrairScoresDosPontosCriticos(data.pontos_criticos);
-    if (scoresDoTexto.size > 0) {
-      const valoresUnicos = new Set(scoresDoTexto.values());
+    const map = extrairScoresDosPontosCriticos(data.pontos_criticos);
+    if (map.size > 0) {
+      const valoresUnicos = new Set(map.values());
       if (valoresUnicos.size > 1) {
-        itemScoresEvolucao = Array.from(scoresDoTexto.entries()).map(([item, score]) => ({
+        itemScoresEvolucao = Array.from(map.entries()).map(([item, score]) => ({
           item: item.replace(/^./, c => c.toUpperCase()),
           categoria: 'geral',
           score_atual: score,
@@ -730,14 +637,12 @@ async function buildRelatorioData(
           impacto: 'Desequilíbrio identificado nos pontos críticos',
         }));
         fonteUsada = 'pontos_criticos (regex)';
-        console.log(`✅ [SCORES] Fonte: pontos_criticos — ${itemScoresEvolucao.length} itens`);
+        console.log(`✅ [SCORES] pontos_criticos — ${itemScoresEvolucao.length} itens`);
       }
     }
   }
 
-  // =======================================================================
   // FONTE 3: indice_biosync do banco
-  // =======================================================================
   if (itemScoresEvolucao.length === 0 && row.indice_biosync && typeof row.indice_biosync === 'object') {
     const biosync = row.indice_biosync as Record<string, any>;
     if (Array.isArray(biosync.item_scores) && biosync.item_scores.length > 0) {
@@ -757,21 +662,17 @@ async function buildRelatorioData(
       if (!ScoresSaoGenericos(scoresDoBanco) && scoresDoBanco.length > 0) {
         itemScoresEvolucao = scoresDoBanco;
         fonteUsada = 'indice_biosync (banco)';
-        console.log(`✅ [SCORES] Fonte: indice_biosync — ${scoresDoBanco.length} itens`);
+        console.log(`✅ [SCORES] indice_biosync — ${scoresDoBanco.length} itens`);
       }
     }
   }
 
-  // =======================================================================
-  // FALLBACK FINAL
-  // =======================================================================
+  // FALLBACK
   if (itemScoresEvolucao.length === 0) {
     console.error('❌ [SCORES] NENHUMA fonte com scores válidos!');
   }
 
-  // =======================================================================
   // EVOLUÇÃO: preencher score_anterior
-  // =======================================================================
   let avisoComparacao: string | undefined;
 
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
@@ -800,7 +701,7 @@ async function buildRelatorioData(
         }
         return item;
       });
-      console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com histórico`);
+      console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} com histórico`);
     } else {
       avisoComparacao = "Primeiro exame disponível para comparação. Scores salvos — evolução aparecerá no próximo exame.";
     }
@@ -808,24 +709,19 @@ async function buildRelatorioData(
     avisoComparacao = "Primeiro exame disponível para comparação. Scores salvos — evolução aparecerá no próximo exame.";
   }
 
-  // =======================================================================
-  // ✅ PERSISTIR scores no Supabase
-  // =======================================================================
+  // PERSISTIR scores no Supabase
   if (itemScoresEvolucao.length > 0 && fonteUsada === 'motor.matches') {
-    // Use @ts-ignore em vez de @ts-expect-error (menos rigoroso)
-    // @ts-ignore
-    salvarItemScores(row.id, itemScoresEvolucao).catch(() => { });
+    // @ts-expect-error - fire-and-forget
+    salvarItemScores(row.id, itemScoresEvolucao).catch(() => {});
   }
 
-  // =======================================================================
   // LOG RESUMO
-  // =======================================================================
   if (itemScoresEvolucao.length > 0) {
     const scores = itemScoresEvolucao.map(i => i.score_atual);
     const min = Math.min(...scores);
     const max = Math.max(...scores);
     const media = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
-    console.log(`📊 [RESUMO] Fonte: ${fonteUsada} | Itens: ${itemScoresEvolucao.length} | Min: ${min} | Max: ${max} | Média: ${media}`);
+    console.log(`📊 [RESUMO] ${fonteUsada} | ${itemScoresEvolucao.length} itens | Min: ${min} | Max: ${max} | Média: ${media}`);
   }
 
   return {
@@ -839,11 +735,11 @@ async function buildRelatorioData(
       ? `${data.justificativa || ""}\n\n⚠️ ${avisoComparacao}`
       : (data.justificativa || ""),
     diagnostico: motor ? {
-      problemas: motor.matches.map((m: any) => ({
-        sistema: m.categoria,
-        item: m.itemBase,
-        status: m.gravidade,
-        impacto: m.impacto,
+      problemas: motor.matches.map((m: MatchItem) => ({
+        sistema: m.categoria || '',
+        item: m.itemBase || '',
+        status: m.gravidade || '',
+        impacto: m.impacto || '',
         impacto_fitness: (m as any).impacto_fitness || undefined,
       }))
     } : toDiagnostico(meta.diagnostico),
@@ -864,7 +760,30 @@ function getRelatorioOriginal(meta: Record<string, unknown>, _row: ExameRow): st
 }
 
 // ==============================
-// APP
+// 🔥 EXTRAIR SCORES DOS PONTOS CRÍTICOS (REGEX)
+// =======================================================================
+function extrairScoresDosPontosCriticos(pontosCriticos: string[]): Map<string, number> {
+  const map = new Map<string, number>();
+
+  for (const p of pontosCriticos) {
+    let match = p.match(/^·?\s*(.+?)\s*[:：]\s*(\d{1,3})\s*$/);
+    if (!match) match = p.match(/^·?\s*(.+?)\s*[—\-–]\s*(\d{1,3})\s*$/);
+    if (!match) match = p.match(/^·?\s*(.+?)\s*[(（]\s*(\d{1,3})\s*[)）]\s*$/);
+
+    if (match) {
+      const item = match[1].trim().replace(/^·\s*/, '').toLowerCase();
+      const score = parseInt(match[2], 10);
+      if (score >= 0 && score <= 100) {
+        map.set(item, score);
+      }
+    }
+  }
+
+  return map;
+}
+
+// ==============================
+// APP COMPONENT
 // ==============================
 function App() {
   const [clientName, setClientName] = useState("");
@@ -883,20 +802,20 @@ function App() {
 
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
-  const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
+  const [categoriasFiltro, setCategoriasFiltro] = useState<CategoriaFiltro[]>([]);
   const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
 
-  const toggleCategoria = (cat: string) => {
+  const toggleCategoria = (cat: CategoriaFiltro) => {
     setCategoriasFiltro(prev =>
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
     );
   };
 
-  const estaSelecionado = (cat: string) => todasCategoriasSelecionadas || categoriasFiltro.includes(cat);
+  const estaSelecionado = (cat: CategoriaFiltro) => todasCategoriasSelecionadas || categoriasFiltro.includes(cat);
 
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
@@ -1294,14 +1213,14 @@ function App() {
                         </ul>
                       </div>
 
-                      {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
+                      {analiseMotor && analiseMotor.matches.some((m: MatchItem) => m.impacto_fitness) && (
                         <div>
                           <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             {analiseMotor.matches
-                              .filter((m: any) => m.impacto_fitness)
+                              .filter((m: MatchItem) => m.impacto_fitness)
                               .slice(0, 10)
-                              .map((m: any, i: number) => (
+                              .map((m: MatchItem, i: number) => (
                                 <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
                                   <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
                                     {m.categoria} — {m.itemBase}
@@ -1311,7 +1230,7 @@ function App() {
                                     <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 6 }}>{m.impacto}</div>
                                   )}
                                   <div style={{ fontSize: 11, color: "#38bdf8" }}>
-                                    {Object.entries(m.impacto_fitness).map(([key, val]) => (
+                                    {Object.entries(m.impacto_fitness!).map(([key, val]) => (
                                       <div key={key}>• <b>{key.charAt(0).toUpperCase() + key.slice(1)}:</b> {String(val)}</div>
                                     ))}
                                   </div>
@@ -1518,14 +1437,14 @@ function App() {
                   </ul>
                 </div>
 
-                {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
+                {analiseMotor && analiseMotor.matches.some((m: MatchItem) => m.impacto_fitness) && (
                   <div>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {analiseMotor.matches
-                        .filter((m: any) => m.impacto_fitness)
+                        .filter((m: MatchItem) => m.impacto_fitness)
                         .slice(0, 10)
-                        .map((m: any, i: number) => (
+                        .map((m: MatchItem, i: number) => (
                           <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
                             <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
                               {m.categoria} — {m.itemBase}
@@ -1535,7 +1454,7 @@ function App() {
                               <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 6 }}>{m.impacto}</div>
                             )}
                             <div style={{ fontSize: 11, color: "#38bdf8" }}>
-                              {Object.entries(m.impacto_fitness).map(([key, val]) => (
+                              {Object.entries(m.impacto_fitness!).map(([key, val]) => (
                                 <div key={key}>• <b>{key.charAt(0).toUpperCase() + key.slice(1)}:</b> {String(val)}</div>
                               ))}
                             </div>
