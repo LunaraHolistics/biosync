@@ -24,6 +24,20 @@ import {
 } from "./lib/motorSemantico";
 
 // ==============================
+// 🔥 CATEGORIAS PARA FILTRO
+// ==============================
+const CATEGORIAS_DISPONIVEIS = ['fitness', 'emotional', 'sono', 'imunidade', 'mental'] as const;
+
+// 🔥 MAPEAMENTO: categoria → palavras-chave para filtrar texto (expandido)
+const PALAVRAS_CHAVE_POR_CATEGORIA: Record<string, string[]> = {
+  fitness: ['fisico', 'fitness', 'performance', 'treino', 'musculo', 'forca', 'energia', 'metabolismo', 'peso', 'gordura', 'colesterol', 'viscosidade', 'circulacao', 'coracao', 'vascular', 'miocardio', 'perfusao', 'oxigenio', 'aerobico', 'fadiga', 'resistencia', 'capacidade', 'exercicio', 'atletico', 'cardio', 'respiratorio', 'pulmao', 'sangue', 'arteria', 'veia'],
+  emotional: ['emocional', 'emotional', 'emocao', 'sentimento', 'ansiedade', 'depressao', 'medo', 'culpa', 'vergonha', 'raiva', 'tristeza', 'luto', 'apego', 'magoa', 'estresse', 'humor', 'instabilidade', 'afetivo', 'psicologico', 'trauma', 'frustracao', 'desanimo', 'apatia', 'melancolia', 'saudade', 'solidao', 'rejeicao', 'abandono'],
+  sono: ['sono', 'insomnia', 'insonia', 'dormir', 'descanso', 'repouso', 'letargia', 'cansaco', 'exaustao', 'fadiga', 'acordar', 'noite', 'melatonina', 'despertar', 'ciclo', 'ritmo', 'circadiano', 'sonolencia', 'vigilia', 'cochilo'],
+  imunidade: ['imunidade', 'imune', 'defesa', 'alergia', 'alergeno', 'inflamacao', 'infeccao', 'virus', 'bacteria', 'fungo', 'parasita', 'linfonodo', 'amigdala', 'bao', 'timo', 'imunoglobulina', 'respiratorio', 'gastrointestinal', 'mucosa', 'anticorpo', 'leucocito', 'linfocito', 'resistencia', 'protecao', 'vacina', 'imunizacao'],
+  mental: ['mental', 'cognitivo', 'pensamento', 'memoria', 'concentracao', 'foco', 'razao', 'logica', 'aprendizado', 'nevoa', 'brain fog', 'confusao', 'clareza', 'neurologico', 'cerebro', 'cerebral', 'nervoso', 'sinapse', 'intelecto', 'raciocinio', 'julgamento', 'decisao', 'intuicao', 'percepcao', 'consciencia', 'mente']
+};
+
+// ==============================
 // TIPOS LOCAIS
 // ==============================
 
@@ -35,6 +49,17 @@ type DiagnosticoPdf = {
     impacto: string;
     score?: number;
   }[];
+};
+
+// 🔥 NOVO: Tipo para evolução de itens no PDF
+type ItemScoreEvolucao = {
+  item: string;
+  categoria: string;
+  score_atual: number;
+  score_anterior: number | null;
+  delta: number;
+  trend: 'melhorou' | 'piorou' | 'estavel' | 'novo';
+  impacto: string;
 };
 
 // ==============================
@@ -85,7 +110,7 @@ const COMPARATIVO_VAZIO = {
 // ==============================
 // HELPER NOVO: FILTRAR TERAPIAS OCULTAS NO PDF
 // ==============================
-function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioData {
+function getDataParaPdf( RelatorioData, ocultas: Set<string>): RelatorioData {
   if (ocultas.size === 0) return data;
   return {
     ...data,
@@ -99,11 +124,217 @@ function getDataParaPdf(data: RelatorioData, ocultas: Set<string>): RelatorioDat
 }
 
 // ==============================
+// 🔥 FUNÇÃO DE FILTRO POR CATEGORIA (CORRIGIDA E ROBUSTA)
+// ==============================
+function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: string[]): AnaliseCompleta {
+  if (categoriasFiltro.length === 0) return analise;
+
+  // Coletar todas as palavras-chave dos filtros ativos (incluindo a categoria em si)
+  const palavrasChaveAtivas = new Set<string>();
+  for (const cat of categoriasFiltro) {
+    palavrasChaveAtivas.add(cat.toLowerCase());
+    const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+    palavras.forEach(p => palavrasChaveAtivas.add(p.toLowerCase()));
+  }
+
+  // 🔥 Filtrar interpretação: dividir por títulos de seção conhecidos
+  let interpretacaoFiltrada = analise.interpretacao;
+  if (categoriasFiltro.length > 0) {
+    // Extrair introdução (antes do primeiro título)
+    const introMatch = analise.interpretacao.match(/^([\s\S]*?)(?=\b(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR|ACUPUNTURA|ALERGENOS)\b)/i);
+    const intro = introMatch?.[1]?.trim() || '';
+
+    // Dividir por títulos de seção (regex com títulos embutidos)
+    const regexTitulos = /(?=\b(?:MINERAIS|NIVEL DE CONSCIENCIA HUMANA|CARDIOVASCULAR E CEREBROVASCULAR|ACUPUNTURA|ALERGENOS|COLAGENO|PELE|VITAMINAS|AMINOACIDOS|SISTEMA IMUNOLOGICO|GINECOLOGIA|OLHOS|METAIS PESADOS|SISTEMA ENDOCRINO|PULSO DO CORACAO E CEREBRO|FUNCAO GASTROINTESTINAL|FUNCAO DO FIGADO|COENZIMA|LIPIDIOS SANGUE|LECITINA|FUNCAO DA VESICULA BILIAR|FUNCAO PULMONAR|SISTEMA NERVOSO|DENSIDADE MINERAL OSSEA|DOENCAS OSSEA REUMATOIDE|SEIOS|INDICE DE CRESCIMENTO OSSEO|IMUNIDADE HUMANA|FUNCAO RENAL|DOENCAS OSSEAS|AVALIACAO FISICA BASICA|OBESIDADE|GRANDE FUNCAO DO INTESTINO|TIROIDE|HORMONA MASCULINA|CICLO MENSTRUAL|ACIDO GORDO|FUNCAO PANCREATICA|ACUCAR NO SANGUE|TOXINA HUMANA|ACIDO GORDO ESSENCIAL|FUNCAO RESPIRATORIA|FUNCAO SEXUAL MASCULINA)\b)/i;
+
+    const secoesRaw = analise.interpretacao.split(regexTitulos);
+
+    // Filtrar seções que contêm palavras-chave dos filtros ativos
+    const secoesFiltradas = secoesRaw.filter(secao => {
+      if (!secao.trim()) return false;
+      // Extrair título da seção (primeira palavra em maiúsculas)
+      const tituloMatch = secao.match(/^\b([A-ZÀ-Ú][A-ZÀ-Ú\s]+)\b/);
+      const titulo = tituloMatch?.[1]?.trim() || '';
+
+      // Manter se o título OU o conteúdo contiver palavra-chave ativa
+      const textoLower = secao.toLowerCase();
+      const corresponde = categoriasFiltro.some(cat => {
+        const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+        return titulo.toLowerCase().includes(cat) ||
+          palavras.some(p => textoLower.includes(p.toLowerCase()));
+      });
+
+      return corresponde;
+    });
+
+    // Extrair conclusão (último parágrafo com "Conclusao" ou "Recomenda-se")
+    const conclusaoMatch = analise.interpretacao.match(/(Conclusao[\s\S]*$)/i);
+    const conclusao = conclusaoMatch?.[1]?.trim() || '';
+
+    // Montar interpretação filtrada
+    const partes = [];
+    if (intro) partes.push(intro);
+    if (secoesFiltradas.length > 0) partes.push(...secoesFiltradas);
+    if (conclusao) partes.push(conclusao);
+
+    interpretacaoFiltrada = partes.join('\n\n').trim() || analise.interpretacao;
+  }
+
+  // 🔥 Filtrar pontos críticos: manter apenas os que correspondem às categorias
+  const pontosCriticosFiltrados = analise.pontosCriticos.filter((p: string) => {
+    // Extrair item (antes dos dois pontos) para filtragem mais precisa
+    const itemMatch = p.match(/^·?\s*([^:：]+):/);
+    const item = itemMatch?.[1]?.trim() || p;
+
+    return categoriasFiltro.some(cat => {
+      const palavras = PALAVRAS_CHAVE_POR_CATEGORIA[cat] || [];
+      const textoLower = p.toLowerCase();
+      const itemLower = item.toLowerCase();
+      // Filtrar se a categoria, o item ou qualquer palavra-chave estiver presente
+      return itemLower.includes(cat) ||
+        palavras.some(palavra => textoLower.includes(palavra) || itemLower.includes(palavra));
+    });
+  });
+
+  // 🔥 Filtrar matches por categoria exata
+  const matchesFiltrados = analise.matches.filter((m: any) => categoriasFiltro.includes(m.categoria));
+
+  // 🔥 Filtrar terapias por categoria ou tags
+  const terapiasFiltradas = analise.terapias.filter((t: any) => {
+    const tags = [t.categoria, ...(t.tags || [])].filter(Boolean);
+    return tags.some((tag: string) => categoriasFiltro.includes(tag.toLowerCase()));
+  });
+
+  // 🔥 Filtrar setores afetados
+  const setoresFiltrados = analise.setoresAfetados.filter((s: string) => categoriasFiltro.includes(s.toLowerCase()));
+
+  return {
+    ...analise,
+    interpretacao: interpretacaoFiltrada,
+    // 🔥 Fallback inteligente: se nenhum ponto crítico passar, mostra mensagem indicando filtragem
+    pontosCriticos: pontosCriticosFiltrados.length > 0
+      ? pontosCriticosFiltrados
+      : ['Nenhum ponto crítico identificado para as categorias selecionadas.'],
+    matches: matchesFiltrados,
+    terapias: terapiasFiltradas,
+    setoresAfetados: setoresFiltrados
+  };
+}
+
+// ==============================
+// 🔥 NOVO: CÁLCULO DE EVOLUÇÃO ENTRE EXAMES COM FALLBACK DE SCORES DO BANCO
+// ==============================
+
+function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null): 'melhorou' | 'piorou' | 'estavel' | 'novo' {
+  if (scoreAnterior === null) return 'novo';
+  const delta = scoreAtual - scoreAnterior;
+  if (delta >= 10) return 'melhorou';
+  if (delta <= -10) return 'piorou';
+  return 'estavel';
+}
+
+// 🔥 NOVO: Função para extrair scores do indice_biosync como fallback
+function extrairScoresDoBanco(row: ExameRow): Map<string, number> {
+  const scoresMap = new Map<string, number>();
+  
+  try {
+    const indiceBiosync = row.indice_biosync;
+    if (indiceBiosync && typeof indiceBiosync === 'object' && 'item_scores' in indiceBiosync) {
+      const itemScores = (indiceBiosync as any).item_scores;
+      if (Array.isArray(itemScores)) {
+        for (const item of itemScores) {
+          if (item?.item && typeof item.score_atual === 'number') {
+            // Normalizar nome para comparação
+            const nomeNormalizado = item.item.trim().replace(/[:：]$/, '').toLowerCase();
+            scoresMap.set(nomeNormalizado, item.score_atual);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Erro ao extrair scores do banco:', e);
+  }
+  
+  return scoresMap;
+}
+
+function gerarItemScoresComEvolucao(
+  itensAtuais: Array<{ item: string; categoria: string; score?: number; impacto: string }>,
+  examesAnteriores: ExameRow[],
+  rowAtual?: ExameRow // ← NOVO: Para fallback de scores do banco
+): ItemScoreEvolucao[] {
+  // 🔥 Fallback: extrair scores do banco se disponíveis
+  const scoresDoBanco = rowAtual ? extrairScoresDoBanco(rowAtual) : new Map<string, number>();
+  
+  // Busca o exame anterior mais recente que tenha item_scores
+  const exameAnterior = examesAnteriores
+    .filter(e => e.indice_biosync?.item_scores && Array.isArray(e.indice_biosync.item_scores))
+    .sort((a, b) => new Date(b.data_exame || b.created_at).getTime() - new Date(a.data_exame || b.created_at).getTime())[0];
+
+  // ✅ Se não houver exame anterior com scores, retorna itens atuais sem comparação
+  if (!exameAnterior) {
+    return itensAtuais.map(atual => {
+      // 🔥 Usar score do banco se disponível, senão fallback para 50
+      const nomeNormalizado = atual.item.trim().replace(/[:：]$/, '').toLowerCase();
+      const scoreDoBanco = scoresDoBanco.get(nomeNormalizado);
+      const scoreFinal = atual.score ?? scoreDoBanco ?? 50;
+      
+      return {
+        item: atual.item,
+        categoria: atual.categoria,
+        score_atual: scoreFinal,
+        score_anterior: null,
+        delta: 0,
+        trend: 'novo' as const,
+        impacto: atual.impacto
+      };
+    });
+  }
+
+  const itensAnteriores = (exameAnterior?.indice_biosync?.item_scores as ItemScoreEvolucao[] | undefined) || [];
+  const mapaAnterior = new Map(itensAnteriores.map((i: ItemScoreEvolucao) => [i.item.toLowerCase(), i]));
+
+  return itensAtuais.map(atual => {
+    const chave = atual.item.toLowerCase();
+    const anterior = mapaAnterior.get(chave);
+    
+    // 🔥 Prioridade: score do motor > score do banco > fallback 50
+    const nomeNormalizado = atual.item.trim().replace(/[:：]$/, '').toLowerCase();
+    const scoreDoBanco = scoresDoBanco.get(nomeNormalizado);
+    const scoreAtual = atual.score ?? scoreDoBanco ?? 50;
+    
+    const scoreAnterior = anterior?.score_atual ?? null;
+    const delta = scoreAnterior !== null ? scoreAtual - scoreAnterior : 0;
+    const trend = calcularTendenciaItem(scoreAtual, scoreAnterior);
+
+    return {
+      item: atual.item,
+      categoria: atual.categoria,
+      score_atual: scoreAtual,
+      score_anterior: scoreAnterior,
+      delta,
+      trend,
+      impacto: atual.impacto
+    };
+  });
+}
+
+// ==============================
+// 🔥 HELPER: EXTRAIR GÊNERO DO PACIENTE
+// ==============================
+function extrairGeneroPaciente(nomePaciente: string): 'masculino' | 'feminino' | undefined {
+  if (!nomePaciente) return undefined;
+  const match = nomePaciente.match(/Sexo:\s*(Masculino|Feminino)/i);
+  if (!match) return undefined;
+  return match[1].toLowerCase() as 'masculino' | 'feminino';
+}
+
+// ==============================
 // SEÇÃO PLANO TERAPÊUTICO (COM CHECKBOX E RESTAURAÇÃO)
 // ==============================
 
 function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onToggleOculta }: {
-  data: AiStructuredData;
+   AiStructuredData;
   editavel?: string;
   onChangeEditavel?: (v: string) => void;
   ocultas?: Set<string>;
@@ -122,22 +353,25 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
 
   return (
     <div>
-      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-        <span>PLANO TERAPÊUTICO</span>
-        {ocultas && ocultas.size > 0 && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400 }}>{ocultas.size} terapia(s) ocultada(s)</span>}
+      <div style={{ fontWeight: 900, marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>🌿 PLANO TERAPÊUTICO</span>
+        {ocultas && ocultas.size > 0 && (
+          <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 400, background: "rgba(245, 158, 11, 0.1)", padding: "2px 8px", borderRadius: 4 }}>
+            {ocultas.size} ocultada(s)
+          </span>
+        )}
       </div>
 
       {p.terapias.length > 0 && (
         <>
-          <div style={{ marginBottom: 10, fontSize: 14 }}>
-            <b>Periodicidade do plano:</b> {labelPlanoTipo(p.tipo)}
+          <div style={{ marginBottom: 10, fontSize: 13, color: "#64748b" }}>
+            <b>Periodicidade:</b> {labelPlanoTipo(p.tipo)}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {p.terapias.map((item, i: number) => {
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {p.terapias.map((item: any, i: number) => {
               const idx = String(i);
               const isOculta = ocultas?.has(idx) || false;
 
-              // 🔥 NOVO COMPORTAMENTO: SE ESTIVER OCULTA, MOSTRA RISCADA PARA RESTAURAR
               if (isOculta) {
                 return (
                   <div
@@ -149,9 +383,10 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                       border: "1px dashed #475569",
                       borderRadius: 10,
                       padding: 10,
-                      opacity: 0.5,
+                      opacity: 0.6,
                       cursor: "pointer",
-                      transition: "opacity 0.2s"
+                      transition: "all 0.2s",
+                      background: "rgba(71, 85, 105, 0.05)"
                     }}
                     title="Clique para restaurar esta terapia ao PDF"
                   >
@@ -162,17 +397,16 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                         readOnly
                         style={{ cursor: "pointer", accentColor: "#22c55e", width: 16, height: 16 }}
                       />
-                      <span style={{ fontSize: 8, opacity: 1, marginTop: 2, color: "#22c55e", fontWeight: 700 }}>Restaurar</span>
+                      <span style={{ fontSize: 8, opacity: 1, marginTop: 2, color: "#22c55e", fontWeight: 700 }}>✓</span>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, textDecoration: "line-through" }}>{item.nome}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>Ocultada do PDF. Clique aqui para reverter.</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, textDecoration: "line-through", color: "#94a3b8" }}>{item.nome}</div>
+                      <div style={{ fontSize: 10, color: "#64748b" }}>Ocultada do PDF • Clique para restaurar</div>
                     </div>
                   </div>
                 );
               }
 
-              // COMPORTAMENTO NORMAL (ATIVA)
               return (
                 <div
                   key={i}
@@ -181,7 +415,9 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                     gap: 10,
                     border: "1px solid var(--border)",
                     borderRadius: 10,
-                    padding: 10,
+                    padding: 12,
+                    background: "rgba(255,255,255,0.02)",
+                    transition: "border-color 0.2s"
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 2 }}>
@@ -192,19 +428,21 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
                       style={{ cursor: "pointer", accentColor: "#ef4444", width: 16, height: 16 }}
                       title="Clique para ocultar esta terapia do PDF"
                     />
-                    <span style={{ fontSize: 8, opacity: 0.5, marginTop: 2 }}>Ocultar</span>
+                    <span style={{ fontSize: 8, opacity: 0.6, marginTop: 2, color: "#ef4444" }}>Ocultar</span>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 800, marginBottom: 4 }}>{item.nome}</div>
-                    <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>
-                      <b>Frequência:</b> {item.frequencia || "—"}
+                    <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 13 }}>{item.nome}</div>
+                    <div style={{ fontSize: 12, color: "#0ea5e9", marginBottom: 4 }}>
+                      <b>Frequência:</b> {item.frequencia || "Conforme necessidade"}
                     </div>
-                    <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 6, whiteSpace: "pre-wrap" }}>
                       {item.descricao || "—"}
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.85 }}>
-                      <b>Justificativa:</b> {item.justificativa || "—"}
-                    </div>
+                    {item.justificativa && (
+                      <div style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", borderLeft: "2px solid #334155", paddingLeft: 8 }}>
+                        <b>Por quê:</b> {item.justificativa}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -214,27 +452,32 @@ function SecaoPlanoTerapeutico({ data, editavel, onChangeEditavel, ocultas, onTo
       )}
 
       {onChangeEditavel && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
-            Adicionar/Editar terapias manualmente (será incluído no PDF):
+        <div style={{ marginTop: 16, padding: 12, background: "rgba(30, 41, 59, 0.5)", borderRadius: 10, border: "1px dashed #475569" }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 12, color: "#94a3b8" }}>
+            ✏️ Adicionar terapias manualmente:
           </div>
           <textarea
             value={editavel}
             onChange={(e) => onChangeEditavel(e.target.value)}
-            placeholder="Ex: Acupuntura — Semanal — Para dor e inflamação crônica...
-Ozonioterapia — Quinzenal — Para oxigenação tecidual..."
+            placeholder="Formato: Nome da Terapia — Frequência — Descrição/Justificativa
+
+Exemplos:
+• Acupuntura — Semanal — Para dor e inflamação crônica
+• Ozonioterapia — Quinzenal — Para oxigenação tecidual
+• Fitoterapia — Diário — Suporte hepático e desintox"
             style={{
               width: "100%",
               minHeight: 100,
               padding: 10,
               borderRadius: 8,
               border: "1px solid var(--border)",
-              background: "transparent",
+              background: "rgba(15, 23, 42, 0.5)",
               color: "inherit",
-              fontSize: 13,
+              fontSize: 12,
               lineHeight: "18px",
               resize: "vertical",
               boxSizing: "border-box",
+              fontFamily: "monospace"
             }}
           />
         </div>
@@ -244,18 +487,24 @@ Ozonioterapia — Quinzenal — Para oxigenação tecidual..."
 }
 
 // ==============================
-// CONVERSÃO: Motor Novo → AiStructuredData
+// 🔥 CONVERSÃO: Motor Novo → AiStructuredData COM FILTROS + GÊNERO
 // ==============================
 
 function exameRowToAiData(
   row: ExameRow,
   base: BaseAnaliseSaudeRow[],
   terapias: TerapiaRow[],
-  terapiasManuais?: string
-): AiStructuredData {
-  const analise = gerarAnaliseCompleta(row, base, terapias);
+  terapiasManuais?: string,
+  filtrosAtivos?: string[]
+): {  AiStructuredData; pacienteGenero?: 'masculino' | 'feminino' } {
+  const analiseRaw = gerarAnaliseCompleta(row, base, terapias);
 
-  const terapiasFormatadas = analise.terapias.map((t) => ({
+  // 🔥 APLICA FILTROS NA ANÁLISE ANTES DE CONVERTER
+  const analise = filtrosAtivos?.length
+    ? filtrarAnalisePorCategoria(analiseRaw, filtrosAtivos)
+    : analiseRaw;
+
+  const terapiasFormatadas = analise.terapias.map((t: any) => ({
     nome: t.nome,
     frequencia: (t as any).frequencia || t.frequencia_recomendada || "Conforme necessidade",
     descricao: t.descricao || t.indicacoes || "",
@@ -282,7 +531,16 @@ function exameRowToAiData(
 
   const frequencia_lunara = analise.frequencia_lunara || "";
 
-  return {
+  // 🔥 CORREÇÃO: Justificativa mostra apenas setores filtrados
+  const setoresParaJustificativa = filtrosAtivos?.length && filtrosAtivos.length > 0
+    ? analise.setoresAfetados.filter(s => filtrosAtivos.includes(s.toLowerCase()))
+    : analise.setoresAfetados;
+
+  // 🔥 Extrair gênero do paciente para filtragem no PDF
+  const pacienteGenero = extrairGeneroPaciente(row.nome_paciente);
+
+  // ✅ CORREÇÃO: Retornar objeto com propriedades nomeadas
+  const analiseData: AiStructuredData = {
     interpretacao: analise.interpretacao,
     pontos_criticos: analise.pontosCriticos,
     plano_terapeutico: {
@@ -290,29 +548,76 @@ function exameRowToAiData(
       terapias: terapiasFormatadas,
     },
     frequencia_lunara: frequencia_lunara,
-    justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${analise.setoresAfetados.join(", ") || "nenhum"}.`,
+    justificativa: `Score: ${analise.scoreGeral}/100 — ${analise.statusScore}. Setores: ${setoresParaJustificativa.join(", ") || "nenhum"}.`,
   };
+
+  return {  analiseData, pacienteGenero };
 }
 
-function getRelatorioOriginal(
-  meta: Record<string, unknown>,
-  _row: ExameRow
-): string | undefined {
-  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
-    const val = (meta as any).relatorio_original_html;
-    if (typeof val === "string" && val.length > 0) return val;
-  }
-  return undefined;
-}
-
+// ==============================
+// 🔥 FUNÇÃO buildRelatorioData ATUALIZADA COM FALLBACK DE SCORES DO BANCO
+// ==============================
 function buildRelatorioData(
   row: ExameRow,
   paciente: string,
-  data: AiStructuredData,
+   AiStructuredData,
   comparacao?: any,
-  motor?: AnaliseCompleta
+  motor?: AnaliseCompleta,
+  filtrosAtivos?: string[],
+  examesAnteriores?: ExameRow[],
+  pacienteGenero?: 'masculino' | 'feminino'
 ): RelatorioData {
   const meta = resultadoMeta(row);
+
+  // 🔥 Calcula item_scores com evolução se houver exames anteriores
+  let itemScoresEvolucao: ItemScoreEvolucao[] | undefined;
+  
+  // Verificar se motor tem matches
+  if (motor?.matches && motor.matches.length > 0) {
+    console.log('📊 [buildRelatorioData] Motor matches:', motor.matches.length);
+    console.log('📊 [buildRelatorioData] Amostra:', motor.matches.slice(0, 2));
+    
+    const itensAtuais = motor.matches.map((m: any) => ({
+      item: m.itemBase,
+      categoria: m.categoria,
+      score: m.score, // ← Pode ser undefined, fallback será aplicado em gerarItemScoresComEvolucao
+      impacto: m.impacto || 'Desequilíbrio bioenergético identificado'
+    }));
+    
+    // 🔥 PASSAR rowAtual para fallback de scores do banco
+    itemScoresEvolucao = gerarItemScoresComEvolucao(itensAtuais, examesAnteriores || [], row);
+    
+    console.log('📊 [buildRelatorioData] item_scores gerados:', itemScoresEvolucao?.length);
+    console.log('📊 [buildRelatorioData] Amostra de scores:', itemScoresEvolucao?.slice(0, 3).map(is => ({
+      item: is.item,
+      score: is.score_atual,
+      trend: is.trend
+    })));
+  } else {
+    console.warn('⚠️ [buildRelatorioData] motor.matches vazio ou undefined');
+    
+    // 🔥 Fallback extremo: tentar criar item_scores diretamente do indice_biosync
+    try {
+      const indiceBiosync = row.indice_biosync;
+      if (indiceBiosync && typeof indiceBiosync === 'object' && 'item_scores' in indiceBiosync) {
+        const itemScoresDoBanco = (indiceBiosync as any).item_scores;
+        if (Array.isArray(itemScoresDoBanco) && itemScoresDoBanco.length > 0) {
+          console.log('📊 [buildRelatorioData] Usando fallback: scores direto do banco');
+          itemScoresEvolucao = itemScoresDoBanco.map((is: any) => ({
+            item: is.item,
+            categoria: is.categoria || 'geral',
+            score_atual: is.score_atual ?? 50,
+            score_anterior: is.score_anterior ?? null,
+            delta: is.delta ?? 0,
+            trend: is.trend ?? 'novo',
+            impacto: is.impacto || 'Desequilíbrio bioenergético identificado'
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ [buildRelatorioData] Erro no fallback extremo:', e);
+    }
+  }
 
   return {
     clientName: paciente || "Cliente",
@@ -323,7 +628,7 @@ function buildRelatorioData(
     frequencia_lunara: data.frequencia_lunara || "",
     justificativa: data.justificativa || "",
     diagnostico: motor ? {
-      problemas: motor.matches.map((m) => ({
+      problemas: motor.matches.map((m: any) => ({
         sistema: m.categoria,
         item: m.itemBase,
         status: m.gravidade,
@@ -333,7 +638,26 @@ function buildRelatorioData(
     } : toDiagnostico(meta.diagnostico),
     comparacao,
     relatorio_original_html: getRelatorioOriginal(meta, row),
+    filtros_aplicados: filtrosAtivos && filtrosAtivos.length > 0 ? filtrosAtivos : undefined,
+    // 🔥 NOVO: item_scores com evolução para tabela no PDF
+    item_scores: itemScoresEvolucao,
+    // 🔥 NOVO: Gênero do paciente para filtragem no PDF
+    pacienteGenero
   };
+}
+
+// ✅ CORREÇÃO: Esta declaração FORA da função App() foi REMOVIDA para evitar erro de escopo
+// A declaração correta está DENTRO da função App() abaixo
+
+function getRelatorioOriginal(
+  meta: Record<string, unknown>,
+  _row: ExameRow
+): string | undefined {
+  if (meta && typeof meta === "object" && "relatorio_original_html" in meta) {
+    const val = (meta as any).relatorio_original_html;
+    if (typeof val === "string" && val.length > 0) return val;
+  }
+  return undefined;
 }
 
 // ==============================
@@ -357,9 +681,24 @@ function App() {
 
   const [baseAnalise, setBaseAnalise] = useState<BaseAnaliseSaudeRow[]>([]);
   const [terapias, setTerapias] = useState<TerapiaRow[]>([]);
+  // ✅ CORREÇÃO: categoriasFiltro declarado APENAS UMA VEZ
+  const [categoriasFiltro, setCategoriasFiltro] = useState<string[]>([]);
+  const todasCategoriasSelecionadas = categoriasFiltro.length === 0;
   const [cacheAnalise, setCacheAnalise] = useState<Record<string, AnaliseCompleta>>({});
   const [terapiasEditavel, setTerapiasEditavel] = useState("");
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+
+  // 🔥 TERAPIAS OCULTAS: começa COM TODAS MARCADAS (ocultas por padrão)
   const [terapiasOcultas, setTerapiasOcultas] = useState<Set<string>>(new Set());
+
+  const toggleCategoria = (cat: string) => {
+    setCategoriasFiltro(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const estaSelecionado = (cat: string) => todasCategoriasSelecionadas || categoriasFiltro.includes(cat);
+
   const [dashboard, setDashboard] = useState({
     totalExames: 0,
     examesMesAtual: 0,
@@ -394,16 +733,24 @@ function App() {
     return gerarComparativoInteligente(ordenados);
   }, [examesPaciente]);
 
-  const analiseSelecionadaData = analiseSelecionada
-    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel)
-    : null;
+  // 🔥 CORREÇÃO: analiseSelecionadaData declarado DENTRO da função App() (CORRETO)
+  const analiseResult = analiseSelecionada
+    ? exameRowToAiData(analiseSelecionada, baseAnalise, terapias, terapiasEditavel, categoriasFiltro)
+    : {  null, pacienteGenero: undefined };
 
-  // 🔥 DECLARAÇÃO ÚNICA E CORRETA AQUI
-  const analiseMotor = analiseSelecionada
+  const analiseSelecionadaData = analiseResult.data;
+  const generoSelecionado = analiseResult.pacienteGenero;
+
+  const analiseMotorRaw = analiseSelecionada
     ? obterAnalise(analiseSelecionada)
     : undefined;
 
-  // 🔥 DECLARAÇÃO ÚNICA E CORRETA AQUI
+  // 🔥 APLICA FILTRO À ANÁLISE (para Mapa Técnico)
+  const analiseMotor = analiseMotorRaw && !todasCategoriasSelecionadas
+    ? filtrarAnalisePorCategoria(analiseMotorRaw, categoriasFiltro)
+    : analiseMotorRaw;
+
+  // 🔥 PASSA categoriasFiltro, examesAnteriores E pacienteGenero PARA buildRelatorioData
   const relatorioDataHistorico = analiseSelecionada
     ? buildRelatorioData(
       analiseSelecionada,
@@ -416,9 +763,21 @@ function App() {
         justificativa: "",
       },
       comparativoExamesData,
-      analiseMotor
+      analiseMotor,
+      categoriasFiltro,
+      examesPaciente.filter(e => e.id !== analiseSelecionada?.id),
+      generoSelecionado
     )
     : null;
+
+  // 🔥 DEBUG AVANÇADO: Verificar scores no console
+  useEffect(() => {
+    if (relatorioDataHistorico?.item_scores) {
+      const scoresUnicos = [...new Set(relatorioDataHistorico.item_scores.map(is => is.score_atual))];
+      console.log('📊 [DEBUG FINAL] Scores únicos no PDF:', scoresUnicos.sort((a, b) => a - b));
+      console.log('📊 [DEBUG FINAL] Itens com score < 60:', relatorioDataHistorico.item_scores.filter(is => is.score_atual < 60).map(is => `${is.item}: ${is.score_atual}`));
+    }
+  }, [relatorioDataHistorico]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -454,7 +813,10 @@ function App() {
       setAnaliseSelecionada(ultimo);
       setExamesPaciente(list);
       setTerapiasEditavel("");
-      setTerapiasOcultas(new Set());
+      setCategoriasFiltro([]);
+      const todasOcultas = new Set<string>();
+      list.forEach((_, i) => todasOcultas.add(String(i)));
+      setTerapiasOcultas(todasOcultas);
       setModalOpen(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao buscar última análise.");
@@ -475,6 +837,9 @@ function App() {
         setTodosExames(examesData);
         setBaseAnalise(baseData);
         setTerapias(terapiasData);
+        const todasOcultas = new Set<string>();
+        terapiasData.forEach((_, i) => todasOcultas.add(String(i)));
+        setTerapiasOcultas(todasOcultas);
       } catch (e: unknown) {
         setHistoryError(e instanceof Error ? e.message : "Erro ao carregar dados.");
       }
@@ -523,7 +888,7 @@ function App() {
     setHistoryError(null);
     setHistoryLoading(true);
     setTerapiasEditavel("");
-    setTerapiasOcultas(new Set());
+    setCategoriasFiltro([]);
     try {
       const list = await listarExamesPorPaciente(nome);
       const listOrdenada = [...list].sort(
@@ -532,6 +897,9 @@ function App() {
           new Date(a.data_exame || a.created_at).getTime()
       );
       setExamesPaciente(listOrdenada);
+      const todasOcultas = new Set<string>();
+      listOrdenada.forEach((_, i) => todasOcultas.add(String(i)));
+      setTerapiasOcultas(todasOcultas);
     } catch (e: unknown) {
       setHistoryError(e instanceof Error ? e.message : "Erro ao carregar exames.");
     } finally {
@@ -636,15 +1004,30 @@ function App() {
                               {scoreMotor.statusScore} — {scoreMotor.scoreGeral}/100 ({scoreMotor.itensAlterados.length} alterados)
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button className="counter" onClick={() => { setAnaliseSelecionada(a); setTerapiasEditavel(""); setTerapiasOcultas(new Set()); setModalOpen(true); }} style={{ marginBottom: 0 }}>
+                              <button className="counter" onClick={() => {
+                                setAnaliseSelecionada(a);
+                                setTerapiasEditavel("");
+                                const todasOcultas = new Set<string>();
+                                examesPaciente.forEach((_, i) => todasOcultas.add(String(i)));
+                                setTerapiasOcultas(todasOcultas);
+                                setCategoriasFiltro([]);
+                                setModalOpen(true);
+                              }} style={{ marginBottom: 0 }}>
                                 Ver
                               </button>
                               <button
                                 className="counter"
                                 onClick={() => {
                                   setGerandoPdf(true);
-                                  const data = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel);
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", data, comparativoExamesData, obterAnalise(a)));
+
+                                  // 🔥 LOGS DE DEBUG - ABRA O CONSOLE DO NAVEGADOR (F12)
+                                  console.log('🔍 [DEBUG] Filtros ativos:', categoriasFiltro);
+                                  console.log('🔍 [DEBUG] Pontos críticos filtrados:', analiseSelecionadaData?.pontos_criticos);
+                                  console.log('🔍 [DEBUG] Setores filtrados:', analiseMotor?.setoresAfetados);
+                                  console.log('🔍 [DEBUG] Matches filtrados:', analiseMotor?.matches?.map(m => m.categoria));
+
+                                  const analiseResult = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
+                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", analiseResult.data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id), analiseResult.pacienteGenero));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
                                 disabled={gerandoPdf}
@@ -683,14 +1066,13 @@ function App() {
                         </ul>
                       </div>
 
-                      {/* 🔥 NOVO BLOCO: IMPACTO FITNESS NO PREVIEW */}
                       {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
                         <div>
                           <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             {analiseMotor.matches
                               .filter((m: any) => m.impacto_fitness)
-                              .slice(0, 10) // Limita a 10 para não poluir a tela
+                              .slice(0, 10)
                               .map((m: any, i: number) => (
                                 <div key={i} style={{ background: "rgba(2, 132, 199, 0.1)", padding: "10px", borderRadius: 6, borderLeft: "3px solid #0284c7" }}>
                                   <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: "#fff" }}>
@@ -729,7 +1111,9 @@ function App() {
                           <div style={{ fontWeight: 900, marginBottom: 6 }}>SETORES AFETADOS</div>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {analiseMotor.setoresAfetados.map((s: string) => (
-                              <span key={s} style={{ background: "var(--border, #1e293b)", padding: "3px 10px", borderRadius: 6, fontSize: 13 }}>{s}</span>
+                              <span key={s} style={{ background: "rgba(56, 189, 248, 0.15)", border: "1px solid rgba(56, 189, 248, 0.3)", padding: "3px 10px", borderRadius: 6, fontSize: 13, color: "#38bdf8" }}>
+                                {s}
+                              </span>
                             ))}
                           </div>
                         </div>
@@ -754,22 +1138,14 @@ function App() {
                           id="btn-pdf-lateral"
                           className="counter"
                           onClick={() => {
-                            const btn = document.getElementById('btn-pdf-lateral');
-                            if (btn) btn.innerText = "⏳ Gerando PDF...";
-
-                            // 🔥 O SEGREDO: Pinta na tela PRIMEIRO, depois trava no PDF
-                            requestAnimationFrame(async () => {
-                              try {
-                                await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
-                              } catch (e) {
-                                console.error(e);
-                              } finally {
-                                if (btn) btn.innerText = "Baixar PDF";
-                              }
-                            });
+                            setGerandoPdf(true);
+                            if (relatorioDataHistorico) gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
+                            setGerandoPdf(false);
                           }}
+                          disabled={!relatorioDataHistorico || gerandoPdf}
+                          style={{ marginBottom: 0 }}
                         >
-                          Baixar PDF
+                          Gerar PDF
                         </button>
                       ) : null}
                     </div>
@@ -825,7 +1201,6 @@ function App() {
                     <span>Score {analiseMotor.scoreGeral}/100 — {analiseMotor.statusScore}</span>
                     <span>{analiseMotor.itensAlterados.length} alterados | {analiseMotor.terapias.length} terapias</span>
 
-                    {/* 🔥 NOVO BADGE DE IMC PARA O PERSONAL TRAINER */}
                     {analiseMotor.paciente.imc && (
                       <span style={{
                         background: analiseMotor.paciente.imc >= 25 ? "rgba(239, 68, 68, 0.2)" : "rgba(34, 197, 94, 0.2)",
@@ -847,10 +1222,8 @@ function App() {
                   id="btn-pdf-modal"
                   className="counter"
                   onClick={() => {
-                    const btn = document.getElementById('btn-pdf-modal');
-                    if (btn) btn.innerText = "⏳ Gerando PDF...";
-
-                    requestAnimationFrame(async () => {
+                    setGerandoPdf(true);
+                    setTimeout(async () => {
                       try {
                         if (relatorioDataHistorico) {
                           await gerarRelatorioPDF(getDataParaPdf(relatorioDataHistorico, terapiasOcultas));
@@ -858,18 +1231,42 @@ function App() {
                       } catch (e) {
                         console.error(e);
                       } finally {
-                        if (btn) btn.innerText = "Gerar PDF";
+                        setGerandoPdf(false);
                       }
-                    });
+                    }, 50);
                   }}
-                  disabled={!relatorioDataHistorico}
+                  disabled={!relatorioDataHistorico || gerandoPdf}
                   style={{ marginBottom: 0 }}
                 >
-                  Gerar PDF
+                  {gerandoPdf ? <><span className="mystic-loader"></span> Gerando Relatório...</> : "Gerar PDF"}
                 </button>
                 <button className="counter" onClick={() => setModalOpen(false)} style={{ marginBottom: 0 }}>
                   Fechar
                 </button>
+              </div>
+            </div>
+
+            {/* 🔥 FILTROS POR CATEGORIA */}
+            <div style={{ marginBottom: 16, padding: 12, background: '#1e293b', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.8, fontWeight: 600 }}>📊 Filtrar por categoria:</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {CATEGORIAS_DISPONIVEIS.map(cat => (
+                  <label key={cat} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', cursor: 'pointer',
+                    borderRadius: 6, fontSize: 12, background: estaSelecionado(cat) ? '#0ea5e9' : '#334155',
+                    border: estaSelecionado(cat) ? '1px solid #38bdf8' : '1px solid transparent', transition: 'all 0.2s'
+                  }}>
+                    <input type="checkbox" checked={categoriasFiltro.includes(cat)} onChange={() => toggleCategoria(cat)}
+                      style={{ accentColor: '#0ea5e9', width: 14, height: 14, margin: 0 }} />
+                    <span>{cat === 'emotional' ? 'Emocional' : cat}</span>
+                  </label>
+                ))}
+                {categoriasFiltro.length > 0 && (
+                  <button onClick={() => setCategoriasFiltro([])}
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12, textDecoration: 'underline', marginLeft: 'auto' }}>
+                    Limpar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -895,7 +1292,6 @@ function App() {
                   </ul>
                 </div>
 
-                {/* 🔥 AQUI ESTÁ O IMPACTO FITNESS NO LUGAR CERTO */}
                 {analiseMotor && analiseMotor.matches.some((m: any) => m.impacto_fitness) && (
                   <div>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>MAPA TÉCNICO E IMPACTO FITNESS</div>
