@@ -333,14 +333,12 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
 function extrairScoresExameAnterior(
   examesAnteriores: ExameRow[],
   dataExameAtual?: string | Date,
-  base?: BaseAnaliseSaudeRow[],
-  terapias?: TerapiaRow[]
+  idExameAtual?: string
 ): Map<string, ItemScoreEvolucao> {
   const mapa = new Map<string, ItemScoreEvolucao>();
 
   if (!examesAnteriores || examesAnteriores.length === 0) return mapa;
 
-  // ✅ Parsing local (sem bug UTC)
   function parseDataLocal(valor: string | Date): number {
     if (valor instanceof Date) return valor.getTime();
     const str = String(valor).split('T')[0];
@@ -353,13 +351,71 @@ function extrairScoresExameAnterior(
 
   const dataAtualMs = dataExameAtual ? parseDataLocal(dataExameAtual) : Infinity;
 
-  // Buscar exames estritamente anteriores
+  const anterior = examesAnteriores
+    .filter(e => {
+      if (idExameAtual && e.id === idExameAtual) return false;
+      const dataExameMs = parseDataLocal(e.data_exame || e.created_at);
+      if (dataExameMs === dataAtualMs) {
+        return new Date(e.created_at).getTime() < Date.now();
+      }
+      return dataExameMs < dataAtualMs;
+    })
+    .sort((a, b) =>
+      parseDataLocal(b.data_exame || b.created_at) -
+      parseDataLocal(a.data_exame || a.created_at)
+    )[0];
+
+  if (!anterior) return mapa;
+
+  const ib = anterior.indice_biosync;
+  if (ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0) {
+    for (const item of (ib as any).item_scores as ItemScoreEvolucao[]) {
+      const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
+      if (chave && typeof item.score_atual === 'number') {
+        mapa.set(chave, item);
+      }
+    }
+    console.log(`📊 [EVOLUÇÃO] ${mapa.size} scores do exame ${anterior.data_exame} (${anterior.id.substring(0, 6)})`);
+  }
+
+  return mapa;
+}
+
+// ==============================
+// 🔥 HELPER: EXTRAIR SCORES DO EXAME ANTERIOR (VERSÃO COMPLETA)
+// =======================================================================
+
+function extrairScoresExameAnteriorCompleto(
+  examesAnteriores: ExameRow[],
+  dataExameAtual?: string | Date,
+  idExameAtual?: string,
+  base?: BaseAnaliseSaudeRow[],
+  terapias?: TerapiaRow[]
+): Map<string, ItemScoreEvolucao> {
+  const mapa = new Map<string, ItemScoreEvolucao>();
+
+  if (!examesAnteriores || examesAnteriores.length === 0) return mapa;
+
+  function parseDataLocal(valor: string | Date): number {
+    if (valor instanceof Date) return valor.getTime();
+    const str = String(valor).split('T')[0];
+    const partes = str.split('-');
+    if (partes.length === 3 && partes[0].length === 4) {
+      return new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2])).getTime();
+    }
+    return new Date(valor).getTime();
+  }
+
+  const dataAtualMs = dataExameAtual ? parseDataLocal(dataExameAtual) : Infinity;
+
   const anterioresValidos = examesAnteriores.filter(e => {
+    if (idExameAtual && e.id === idExameAtual) return false;
     const dataExameMs = parseDataLocal(e.data_exame || e.created_at);
+    if (dataExameMs === dataAtualMs) {
+      return new Date(e.created_at).getTime() < Date.now();
+    }
     return dataExameMs < dataAtualMs;
   });
-
-  if (anterioresValidos.length === 0) return mapa;
 
   // Ordena do mais recente para o mais antigo
   anterioresValidos.sort((a, b) =>
@@ -369,12 +425,25 @@ function extrairScoresExameAnterior(
 
   const anterior = anterioresValidos[0];
 
+  console.log(`🔍 [EVOLUÇÃO] Exame selecionado como anterior:`);
+  console.log(`   ID: ${anterior.id.substring(0, 6)}`);
+  console.log(`   Data: ${anterior.data_exame}`);
+  console.log(`   Created: ${anterior.created_at?.substring(0, 16)}`);
+  console.log(`   Tem item_scores: ${!!(anterior.indice_biosync as any)?.item_scores}`);
+
   // =======================================================================
   // TENTATIVA 1: Buscar indice_biosync.item_scores
   // =======================================================================
   const ib = anterior.indice_biosync;
   if (ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0) {
     const items = (ib as any).item_scores as ItemScoreEvolucao[];
+
+    // ✅ VERIFICAÇÃO: amostra dos scores para log
+    console.log(`📊 [EVOLUÇÃO] Scores do anterior (5 primeiros):`);
+    items.slice(0, 5).forEach(item => {
+      console.log(`   → "${item.item}": ${item.score_atual}`);
+    });
+
     for (const item of items) {
       const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
       if (chave && typeof item.score_atual === 'number') {
@@ -383,21 +452,27 @@ function extrairScoresExameAnterior(
     }
 
     if (mapa.size > 0) {
-      console.log(`📊 [EVOLUÇÃO] Encontrados ${mapa.size} scores no indice_biosync do exame anterior`);
+      console.log(`✅ [EVOLUÇÃO] Encontrados ${mapa.size} scores no banco`);
       return mapa;
     }
   }
 
   // =======================================================================
-  // TENTATIVA 2: Rodar o motor no exame anterior (FALLBACK)
+  // TENTATIVA 2: Rodar o motor (FALLBACK)
   // =======================================================================
   if (base && terapias && base.length > 0) {
-    console.log(`🔄 [EVOLUÇÃO] Exame anterior sem item_scores — rodando motor para gerar scores...`);
+    console.log(`🔄 [EVOLUÇÃO] Rodando motor no exame anterior...`);
 
     try {
       const analiseAnterior = gerarAnaliseCompleta(anterior, base, terapias);
 
       if (analiseAnterior.matches && analiseAnterior.matches.length > 0) {
+        // ✅ VERIFICAÇÃO: amostra dos scores gerados
+        console.log(`📊 [EVOLUÇÃO] Scores gerados pelo motor (5 primeiros):`);
+        analiseAnterior.matches.slice(0, 5).forEach(m => {
+          console.log(`   → "${m.itemBase}": ${m.score}`);
+        });
+
         for (const m of analiseAnterior.matches) {
           if (m.itemBase && typeof m.score === 'number') {
             const chave = m.itemBase.trim().replace(/[:：]$/, '').toLowerCase();
@@ -414,14 +489,14 @@ function extrairScoresExameAnterior(
         }
 
         if (mapa.size > 0) {
-          console.log(`✅ [EVOLUÇÃO] Motor gerou ${mapa.size} scores para o exame anterior`);
+          console.log(`✅ [EVOLUÇÃO] Motor gerou ${mapa.size} scores`);
         }
       }
     } catch (e) {
-      console.warn('⚠️ [EVOLUÇÃO] Falha ao rodar motor no exame anterior:', e);
+      console.warn('⚠️ [EVOLUÇÃO] Falha no motor:', e);
     }
   } else {
-    console.warn(`⚠️ [EVOLUÇÃO] Sem item_scores E sem dados para fallback (base=${base?.length || 0}, terapias=${terapias?.length || 0})`);
+    console.warn(`⚠️ [EVOLUÇÃO] Sem dados para fallback (base=${base?.length ?? 0}, terapias=${terapias?.length ?? 0})`);
   }
 
   return mapa;
@@ -754,62 +829,44 @@ async function buildRelatorioData(
     console.error('❌ [SCORES] NENHUMA fonte com scores válidos!');
   }
 
-   // =======================================================================
-  // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
-  if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
-    console.log(`🔍 [DIAG] Exames anteriores: ${examesAnteriores.length}, base: ${baseAnalise?.length ?? 0}, terapias: ${terapias?.length ?? 0}`);
+  // EVOLUÇÃO: preencher score_anterior ou marcar como primeiro exame
+  // =======================================================================
+  let avisoComparacao: string | undefined;
 
+  if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
     const mapaAnterior = extrairScoresExameAnterior(
       examesAnteriores,
       row.data_exame || row.created_at,
-      baseAnalise,
-      terapias
+      row.id
     );
-    let preenchidos = 0;
-    let iguais = 0;
-    let diferentes = 0;
 
-    console.log(`🔍 [DIAG] Mapa anterior: ${mapaAnterior.size} itens`);
-
-    itemScoresEvolucao = itemScoresEvolucao.map(item => {
-      const chave = item.item.trim().replace(/[:：]$/, '').toLowerCase();
-      const anterior = mapaAnterior.get(chave);
-
-      if (anterior) {
-        preenchidos++;
-        const scoreAnterior = anterior.score_atual;
-        const delta = item.score_atual - scoreAnterior;
-
-        // ✅ LOG DETALHADO: mostra cada comparação
-        const tagDelta = delta === 0 ? ' IGUAIS' : ` Δ=${delta >= 0 ? '+' : ''}${delta}`;
-        console.log(`   ↔ "${item.item}": atual=${item.score_atual} vs anterior=${scoreAnterior}${tagDelta}`);
-
-        if (delta === 0) iguais++;
-        else diferentes++;
-
-        return {
-          ...item,
-          score_anterior: scoreAnterior,
-          delta,
-          trend: calcularTendenciaItem(item.score_atual, scoreAnterior),
-        };
-      }
-
-      return item;
-    });
-
-    console.log(`📊 [EVOLUÇÃO] ${preenchidos} preenchidos | ${iguais} iguais | ${diferentes} diferentes`);
-
-    if (iguais > 0 && diferentes === 0) {
-      console.warn('⚠️ [EVOLUÇÃO] TODOS os scores são idênticos! Possíveis causas:');
-      console.warn('   1. Os dois exames têm os mesmos itens com a mesma gravidade');
-      console.warn('   2. O motor gera scores baseados apenas no nome do item (não na gravidade real)');
-      console.warn('   3. Verificar se os resultado_json dos 2 exames são realmente diferentes');
+    if (mapaAnterior.size > 0) {
+      let preenchidos = 0;
+      itemScoresEvolucao = itemScoresEvolucao.map(item => {
+        const chave = item.item.trim().replace(/[:：]$/, '').toLowerCase();
+        const anterior = mapaAnterior.get(chave);
+        if (anterior) {
+          preenchidos++;
+          const delta = item.score_atual - anterior.score_atual;
+          return {
+            ...item,
+            score_anterior: anterior.score_atual,
+            delta,
+            trend: calcularTendenciaItem(item.score_atual, anterior.score_atual),
+          };
+        }
+        return item;
+      });
+      console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com anterior`);
+    } else {
+      avisoComparacao = "Primeiro exame deste paciente disponível para comparação. Os scores atuais foram salvos — no próximo exame, a tabela de evolução será gerada automaticamente.";
     }
+  } else if (itemScoresEvolucao.length > 0) {
+    avisoComparacao = "Primeiro exame deste paciente disponível para comparação. Os scores atuais foram salvos — no próximo exame, a tabela de evolução será gerada automaticamente.";
   }
 
-    // =======================================================================
+  // =======================================================================
   // ✅ PERSISTIR scores no Supabase para futuras comparações
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && fonteUsada === 'motor.matches') {
@@ -825,7 +882,6 @@ async function buildRelatorioData(
     const max = Math.max(...scores);
     const media = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
     const unicos = new Set(scores).size;
-
     console.log(`📊 [RESUMO] Fonte: ${fonteUsada} | Itens: ${itemScoresEvolucao.length} | Min: ${min} | Max: ${max} | Média: ${media} | Únicos: ${unicos}`);
   }
 
@@ -836,7 +892,9 @@ async function buildRelatorioData(
     pontos_criticos: data.pontos_criticos ?? [],
     plano_terapeutico: data.plano_terapeutico,
     frequencia_lunara: data.frequencia_lunara || "",
-    justificativa: data.justificativa || "",
+    justificativa: avisoComparacao
+      ? `${data.justificativa || ""}\n\n⚠️ ${avisoComparacao}`
+      : (data.justificativa || ""),
     diagnostico: motor ? {
       problemas: motor.matches.map((m: any) => ({
         sistema: m.categoria,

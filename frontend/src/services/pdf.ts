@@ -1098,6 +1098,29 @@ export async function gerarRelatorioPDF(
 
     onProgress?.(60, "Processando comparativo...");
 
+    // 4b. AVISO: sem dados anteriores
+    if (!data.item_scores || data.item_scores.length === 0) {
+      const justificativaComAviso = data.justificativa?.includes("⚠️");
+
+      if (justificativaComAviso) {
+        blocks.push(
+          criarBlocoHTML(`
+            <div style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px;">
+              <div style="font-size: 13px; font-weight: 800; color: ${PDFConfig.colors.info}; margin-bottom: 6px;">
+                📋 Informação sobre Evolução
+              </div>
+              <div style="font-size: 11px; color: #1e40af; line-height: 1.6;">
+                ${data.justificativa.split('⚠️ ')[1]?.trim() || "Este é o primeiro exame disponível para comparação."}
+              </div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 8px; font-style: italic;">
+                Ao gerar o próximo exame deste paciente, os scores deste exame serão salvos automaticamente e a tabela comparativa de evolução aparecerá no relatório.
+              </div>
+            </div>
+          `)
+        );
+      }
+    }
+
     // 5. COMPARATIVO
     const comparativoHTML = extrairComparativoHTML(data.comparacao);
     if (comparativoHTML) {
