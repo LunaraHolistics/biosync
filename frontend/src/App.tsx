@@ -11,10 +11,11 @@ import {
   listarExamesPorPaciente,
   listarTerapias,
   listarBaseAnaliseSaude,
+  salvarAnaliseCurada,
+  salvarItemScores,  // ← ADICIONAR
   type ExameRow,
   type TerapiaRow,
   type BaseAnaliseSaudeRow,
-  salvarAnaliseCurada,
 } from "./services/db";
 
 import {
@@ -753,7 +754,7 @@ async function buildRelatorioData(
     console.error('❌ [SCORES] NENHUMA fonte com scores válidos!');
   }
 
-  // =======================================================================
+   // =======================================================================
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
@@ -766,6 +767,8 @@ async function buildRelatorioData(
       terapias
     );
     let preenchidos = 0;
+    let iguais = 0;
+    let diferentes = 0;
 
     console.log(`🔍 [DIAG] Mapa anterior: ${mapaAnterior.size} itens`);
 
@@ -777,6 +780,14 @@ async function buildRelatorioData(
         preenchidos++;
         const scoreAnterior = anterior.score_atual;
         const delta = item.score_atual - scoreAnterior;
+
+        // ✅ LOG DETALHADO: mostra cada comparação
+        const tagDelta = delta === 0 ? ' IGUAIS' : ` Δ=${delta >= 0 ? '+' : ''}${delta}`;
+        console.log(`   ↔ "${item.item}": atual=${item.score_atual} vs anterior=${scoreAnterior}${tagDelta}`);
+
+        if (delta === 0) iguais++;
+        else diferentes++;
+
         return {
           ...item,
           score_anterior: scoreAnterior,
@@ -788,19 +799,21 @@ async function buildRelatorioData(
       return item;
     });
 
-    if (preenchidos > 0) {
-      console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com anterior preenchido`);
-    } else {
-      console.warn('⚠️ [EVOLUÇÃO] Nenhum item bateu');
-      if (mapaAnterior.size === 0) {
-        console.warn('⚠️ [EVOLUÇÃO] Mapa vazio — exame anterior não gerou scores');
-      } else {
-        const atuais = itemScoresEvolucao.slice(0, 3).map(i => i.item.trim().replace(/[:：]$/, '').toLowerCase());
-        const anteriores = [...mapaAnterior.keys()].slice(0, 3);
-        console.warn(`⚠️ [EVOLUÇÃO] Atuais: [${atuais.join(', ')}]`);
-        console.warn(`⚠️ [EVOLUÇÃO] Anteriores: [${anteriores.join(', ')}]`);
-      }
+    console.log(`📊 [EVOLUÇÃO] ${preenchidos} preenchidos | ${iguais} iguais | ${diferentes} diferentes`);
+
+    if (iguais > 0 && diferentes === 0) {
+      console.warn('⚠️ [EVOLUÇÃO] TODOS os scores são idênticos! Possíveis causas:');
+      console.warn('   1. Os dois exames têm os mesmos itens com a mesma gravidade');
+      console.warn('   2. O motor gera scores baseados apenas no nome do item (não na gravidade real)');
+      console.warn('   3. Verificar se os resultado_json dos 2 exames são realmente diferentes');
     }
+  }
+
+    // =======================================================================
+  // ✅ PERSISTIR scores no Supabase para futuras comparações
+  // =======================================================================
+  if (itemScoresEvolucao.length > 0 && fonteUsada === 'motor.matches') {
+    salvarItemScores(row.id, itemScoresEvolucao).catch(() => {});
   }
 
   // =======================================================================
