@@ -169,7 +169,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
       const textoLower = secao.toLowerCase();
 
       // Verifica se ALGUMA palavra-chave ativa aparece no texto da seção
-      const temKeywordAtiva = [...palavrasChaveAtivas].some(kw => 
+      const temKeywordAtiva = [...palavrasChaveAtivas].some(kw =>
         kw.length > 2 && textoLower.includes(kw)
       );
 
@@ -224,7 +224,7 @@ function filtrarAnalisePorCategoria(analise: AnaliseCompleta, categoriasFiltro: 
   // =======================================================================
   const terapiasFiltradas = analise.terapias.filter((t: any) => {
     const tags = [t.categoria, ...(t.tags || [])].filter(Boolean).map((tag: string) => tag.toLowerCase());
-    return tags.some((tag: string) => 
+    return tags.some((tag: string) =>
       filtroNorm.some(f => tag.includes(f) || f.includes(tag))
     );
   });
@@ -330,54 +330,93 @@ function calcularTendenciaItem(scoreAtual: number, scoreAnterior: number | null)
 }
 
 // ==============================
-// 🔥 EXTRAIR SCORES DO EXAME ANTERIOR (COM PROTEÇÃO CONTRA VIAGEM NO TEMPO)
+// 🔥 EXTRAIR SCORES DO EXAME ANTERIOR (COM FALLBACK PELO MOTOR)
+// =======================================================================
+// Se o exame anterior NÃO tem indice_biosync.item_scores (ex: inserido via extensão),
+// roda o motor rapidamente para gerar scores de comparação.
 // =======================================================================
 
-/**
- * Busca scores do exame anterior para preencher evolução.
- * Recebe dataExameAtual para IGNORAR exames mais recentes (evita deltas invertidos).
- */
 function extrairScoresExameAnterior(
-  examesAnteriores: ExameRow[], 
-  dataExameAtual?: string | Date
+  examesAnteriores: ExameRow[],
+  dataExameAtual?: string | Date,
+  base?: BaseAnaliseSaudeRow[],
+  terapias?: TerapiaRow[]
 ): Map<string, ItemScoreEvolucao> {
   const mapa = new Map<string, ItemScoreEvolucao>();
 
   if (!examesAnteriores || examesAnteriores.length === 0) return mapa;
 
-  // Define o "presente" como a data do exame que está sendo visualizado
   const dataAtualMs = dataExameAtual ? new Date(dataExameAtual).getTime() : Infinity;
 
-  // Filtra apenas exames que têm item_scores E são estritamente ANTERIORES
+  // Buscar exames estritamente anteriores
   const anterioresValidos = examesAnteriores.filter(e => {
-    const ib = e.indice_biosync;
-    const temScores = ib && typeof ib === 'object' && 'item_scores' in ib 
-      && Array.isArray((ib as any).item_scores) 
-      && (ib as any).item_scores.length > 0;
-    if (!temScores) return false;
-
     const dataExameMs = new Date(e.data_exame || e.created_at).getTime();
-    // Estritamente anterior (descarta mesmo dia e futuros)
-    return dataExameMs < dataAtualMs; 
+    return dataExameMs < dataAtualMs;
   });
 
   if (anterioresValidos.length === 0) return mapa;
 
-  // Ordena do mais recente para o mais antigo (pega o imediatamente anterior)
-  anterioresValidos.sort((a, b) => 
-    new Date(b.data_exame || b.created_at).getTime() - 
+  // Ordena do mais recente para o mais antigo
+  anterioresValidos.sort((a, b) =>
+    new Date(b.data_exame || b.created_at).getTime() -
     new Date(a.data_exame || a.created_at).getTime()
   );
 
-  // Pega o exame mais recente que seja ANTERIOR ao atual
   const anterior = anterioresValidos[0];
-  const items = (anterior.indice_biosync as any).item_scores as ItemScoreEvolucao[];
-  
-  for (const item of items) {
-    const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
-    if (chave && typeof item.score_atual === 'number') {
-      mapa.set(chave, item);
+
+  // =======================================================================
+  // TENTATIVA 1: Buscar indice_biosync.item_scores (dados já processados)
+  // =======================================================================
+  const ib = anterior.indice_biosync;
+  if (ib && typeof ib === 'object' && 'item_scores' in ib && Array.isArray((ib as any).item_scores) && (ib as any).item_scores.length > 0) {
+    const items = (ib as any).item_scores as ItemScoreEvolucao[];
+    for (const item of items) {
+      const chave = (item.item || '').trim().replace(/[:：]$/, '').toLowerCase();
+      if (chave && typeof item.score_atual === 'number') {
+        mapa.set(chave, item);
+      }
     }
+
+    if (mapa.size > 0) {
+      console.log(`📊 [EVOLUÇÃO] Encontrados ${mapa.size} scores no indice_biosync do exame anterior`);
+      return mapa;
+    }
+  }
+
+  // =======================================================================
+  // TENTATIVA 2: Rodar o motor no exame anterior para gerar scores (FALLBACK)
+  // =======================================================================
+  if (base && terapias && base.length > 0) {
+    console.log(`🔄 [EVOLUÇÃO] Exame anterior sem item_scores — rodando motor para gerar scores de comparação...`);
+
+    try {
+      const analiseAnterior = gerarAnaliseCompleta(anterior, base, terapias);
+
+      if (analiseAnterior.matches && analiseAnterior.matches.length > 0) {
+        for (const m of analiseAnterior.matches) {
+          if (m.itemBase && typeof m.score === 'number') {
+            const chave = m.itemBase.trim().replace(/[:：]$/, '').toLowerCase();
+            mapa.set(chave, {
+              item: m.itemBase,
+              categoria: m.categoria || 'geral',
+              score_atual: m.score,
+              score_anterior: null,
+              delta: 0,
+              trend: 'novo',
+              impacto: m.impacto || ''
+            });
+          }
+        }
+
+        if (mapa.size > 0) {
+          console.log(`✅ [EVOLUÇÃO] Motor gerou ${mapa.size} scores para o exame anterior`);
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ [EVOLUÇÃO] Falha ao rodar motor no exame anterior:', e);
+    }
+  } else {
+    console.warn('⚠️ [EVOLUÇÃO] Exame anterior sem item_scores e sem base/terapias disponíveis para fallback');
   }
 
   return mapa;
@@ -602,7 +641,9 @@ function buildRelatorioData(
   motor?: AnaliseCompleta,
   filtrosAtivos?: string[],
   examesAnteriores?: ExameRow[],
-  pacienteGenero?: 'masculino' | 'feminino'
+  pacienteGenero?: 'masculino' | 'feminino',
+  baseAnalise?: BaseAnaliseSaudeRow[],  // ← ADICIONAR
+  terapias?: TerapiaRow[]               // ← ADICIONAR
 ): RelatorioData {
   const meta = resultadoMeta(row);
 
@@ -708,8 +749,13 @@ function buildRelatorioData(
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
-    // ✅ CORREÇÃO: Passa a data do exame atual para ignorar exames futuros
-    const mapaAnterior = extrairScoresExameAnterior(examesAnteriores, row.data_exame || row.created_at);
+    // ✅ Passa base + terapias para fallback do motor se necessário
+    const mapaAnterior = extrairScoresExameAnterior(
+      examesAnteriores,
+      row.data_exame || row.created_at,
+      baseAnalise,  // ← NOVO: para fallback do motor
+      terapias       // ← NOVO: para fallback do motor
+    );
     let preenchidos = 0;
 
     itemScoresEvolucao = itemScoresEvolucao.map(item => {
@@ -728,7 +774,7 @@ function buildRelatorioData(
         };
       }
 
-      return item; // Mantém sem score_anterior (trend = 'novo')
+      return item;
     });
 
     if (preenchidos > 0) {

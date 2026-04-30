@@ -620,45 +620,195 @@ export function gerarTabelaEvolucao(
 // =======================================================================
 
 const EXPLICACOES_ITENS: Record<string, { titulo: string; explicacao: string; recomendacao: string }> = {
+  // ==============================
+  // SONO E RELAXAMENTO
+  // ==============================
   "Magnésio": {
     titulo: "Magnésio (Relaxamento e Sono)",
     explicacao: "O magnésio é essencial para o relaxamento muscular, produção de melatonina e regulação do sistema nervoso. Deficiência causa insônia, ansiedade, tensão muscular, cãibras e fadiga crônica.",
-    recomendacao: "Suplementação com magnésio quelado (300-400mg/dia), alimentos ricos (castanhas, espinafre, abacate), banhos de sal grosso, evitar café após 14h."
+    recomendacao: "Suplementação com magnésio quelado ou glicinato (300-400mg/dia), alimentos ricos (castanhas, espinafre, abacate), banhos de sal grosso, evitar café após 14h."
   },
   "Triptofano": {
-    titulo: "Triptofano",
-    explicacao: "Aminoácido precursor da serotonina e melatonina. Essencial para indução e qualidade do sono. Baixos níveis causam insônia, depressão e ansiedade.",
-    recomendacao: "Alimentos ricos (banana, aveia, leite, peru, castanhas), suplementação (500-1000mg antes de dormir), evitar proteínas pesadas à noite."
+    titulo: "Triptofano (Precursor de Serotonina e Melatonina)",
+    explicacao: "Aminoácido essencial precursor da serotonina (bem-estar) e melatonina (sono). Baixos níveis causam insônia, depressão, ansiedade e compulsão alimentar. O corpo não produz triptofano — precisa vir da dieta.",
+    recomendacao: "Alimentos ricos (banana, aveia, leite morno, peru, castanhas, cacau), suplementação (500-1000mg antes de dormir com carboidrato leve), evitar proteínas pesadas à noite que competem pela absorção."
   },
   "Fadiga visual": {
-    titulo: "Fadiga Visual",
-    explicacao: "Cansaço mental e ocular que prejudica o ciclo sono-vigília. Excesso de telas, luz azul e esforço visual constante ativam o sistema nervoso simpático, dificultando o relaxamento noturno.",
-    recomendacao: "Regra 20-20-20 (a cada 20min, olhar 20 pés por 20 seg), filtro de luz azul após 18h, óleos essenciais de lavanda, pausas ativas."
+    titulo: "Fadiga Visual (Cansaço Ocular e Mental)",
+    explicacao: "Cansaço visual crônico prejudica o ciclo sono-vigília. Excesso de telas e luz azul ativam o sistema nervoso simpático, inibem a produção de melatonina e dificultam o relaxamento noturno.",
+    recomendacao: "Regra 20-20-20 (a cada 20min, olhar 20 pés por 20 seg), filtro de luz azul após 18h, óleos essenciais de lavanda nos olhos fechados, pausas ativas a cada hora."
   },
   "Equilíbrio Hepático": {
     titulo: "Equilíbrio Hepático (Metabolismo e Sono)",
-    explicacao: "Fígado sobrecarregado prejudica desintoxicação noturna, metabolismo de hormônios e produção de bile. Sono entre 23h-3h é crucial para regeneração hepática.",
-    recomendacao: "Evitar álcool e alimentos processados, chás digestivos (boldo, carqueja), jantar leve até 19h, dormir antes de 23h."
+    explicacao: "O fígado realiza a desintoxicação noturna entre 23h e 3h. Quando sobrecarregado, o metabolismo de hormônios é prejudicado, a bile fica espessa e o sono é fragmentado. Fígado desregulado = sono ruim.",
+    recomendacao: "Evitar álcool e processados, chás digestivos (boldo, carqueja, dente-de-leão), jantar leve até 19h, dormir antes de 23h para permitir a regeneração hepática."
   },
-  "Amor": {
-    titulo: "Amor (Nível de Consciência)",
-    explicacao: "Estado emocional de conexão, compaixão e aceitação. Score baixo indica bloqueios emocionais, dificuldade em se conectar ou ressentimentos não resolvidos.",
-    recomendacao: "Práticas de gratidão, terapia de perdão, meditação do coração, journaling emocional, flores de Bach (Walnut, Holly)."
+  "Melatonina": {
+    titulo: "Melatonina (Hormônio do Sono)",
+    explicacao: "Hormônio produzido pela pineal durante a noite. Regula o ritmo circadiano e induz o sono profundo. Luz artificial à noite, estresse e idade reduz sua produção. Baixa melatonina = insônia + envelhecimento acelerado.",
+    recomendacao: "Escurecer ambiente 1h antes de dormir, evitar telas, suplementação sublingual (0.3-1mg — doses baixas são mais eficazes), manter horário regular de sono."
+  },
+  "GABA": {
+    titulo: "GABA (Neurotransmissor Inibitório)",
+    explicacao: "O GABA é o principal neurotransmissor calmante do cérebro. Reduz a excitabilidade neuronal, promove relaxamento e induz o sono. Deficiência causa ansiedade, insônia, pensamentos acelerados e tensão muscular.",
+    recomendacao: "Suplementação com GABA (100-300mg antes de dormir), L-teanina (200mg), alimentos fermentados (kefir, chucrute), meditação e respiração profunda que estimulam produção natural."
+  },
+  "Serotonina": {
+    titulo: "Serotonina (Neurotransmissor do Bem-Estar)",
+    explicacao: "Regula humor, sono, apetite e cognição. 95% é produzida no intestino (eixo intestino-cérebro). Baixa serotonina causa depressão, ansiedade, compulsão, insônia e dor aumentada.",
+    recomendacao: "Cuidar da microbiota intestinal (probióticos, fibras), exposição solar matinal (estimula produção), exercício físico regular, triptofano na dieta, evitar excesso de açúcar que consome triptofano."
+  },
+  "Cortisol": {
+    titulo: "Cortisol (Hormônio do Estresse)",
+    explicacao: "O cortisol deve ser alto de manhã e baixo à noite. Quando cronicamente elevado (estresse crônico), destrói músculo, acumula gordura abdominal, suprime imunidade e bloqueia o sono profundo.",
+    recomendacao: "Reduzir estresse (meditação, respiração 4-7-8), evitar cafeína em excesso, exercício moderado (não intenso à noite), ashwagandha (300mg), adaptógenos, dormir 7-8h."
+  },
+  "Sistema nervoso": {
+    titulo: "Sistema Nervoso (Autônomo)",
+    explicacao: "Dividido em simpático (luta/fuga) e parassimpático (descanso/digestão). Desequilíbrio com predomínio simpático causa taquicardia, insônia, ansiedade e má digestão. O corpo fica 'travado' no modo alerta.",
+    recomendacao: "Ativar o parassimpático: respiração diafragmática lenta (4-7-8), meditação, banho morno antes de dormir, massagem, yoga suave, reduzir estímulos digitais."
+  },
+
+  // ==============================
+  // EMOÇÕES E NÍVEL DE CONSCIÊNCIA
+  // ==============================
+  "Apatia": {
+    titulo: "Apatia (Nível de Consciência: 20)",
+    explicacao: "A apatia é um estado de ausência de energia emocional e motivação. Indica esgotamento do sistema nervoso, possível depressão mascarada ou desconexão entre pensamento e ação. A pessoa 'funciona' mas não sente.",
+    recomendacao: "Investigar causas: depressão, burnout, deficiência de dopamina/serotonina, problemas tireoidianos. Terapia cognitivo-comportamental, exercício leve (caminhada), exposição solar, suplementação com vitamina D e omega-3."
+  },
+  "Culpa": {
+    titulo: "Culpa (Nível de Consciência: 30)",
+    explicacao: "A culpa crônica é uma emoção tóxica que consome energia mental e física. Está ligada a padrões de pensamento ruminativo, perfeccionismo e traumas de infância. Corroa a autoestima e gera tensão muscular crônica.",
+    recomendacao: "Terapia de perdão (perdoar a si mesmo), journaling de gratidão, flores de Bach (Pine para autocrítica, Walnut para mudanças), identificar e desafiar crenças irracionais sobre responsabilidade."
+  },
+  "Vergonha": {
+    titulo: "Vergonha (Nível de Consciência: 20)",
+    explicacao: "A vergonha é a emoção mais destrutiva para a autoestima. Diferente da culpa (eu fiz algo errado), a vergonha diz 'eu sou errado'. Causa retração social, ansiedade, hipervigilância e problemas psicossomáticos.",
+    recomendacao: "Trabalhar com terapeuta especializado em vergonha tóxica, praticar autocompaixão (exercícios de Kristin Neff), identidade separada do desempenho, florais de Bach (Crab Apple para limpeza de autoimagem)."
   },
   "Medo": {
-    titulo: "Medo (Nível de Consciência)",
-    explicacao: "Emoção de proteção que, em excesso, paralisa e limita. Score baixo indica ansiedade generalizada, fobias ou insegurança crônica.",
-    recomendacao: "Exposição gradual, técnicas de grounding, florais de Bach (Mimulus, Rock Rose), suplementação com magnésio e L-teanina."
+    titulo: "Medo (Nível de Consciência: 100)",
+    explicacao: "O medo é uma emoção de proteção natural, mas quando crônico paralisa a vida. Ativa o sistema nervoso simpático constantemente, gerando cortisol elevado, insônia, tensão muscular, problemas digestivos e fobias.",
+    recomendacao: "Exposição gradual ao medo, técnicas de grounding (5-4-3-2-1), EMDR para traumas, suplementação com magnésio e L-teanina, florais de Bach (Mimulus para medos conhecidos, Rock Rose para pânico)."
   },
+  "Raiva": {
+    titulo: "Raiva (Nível de Consciência: 150)",
+    explicacao: "A raiva reprimida ou crônica afeta o fígado (medicina chinesa), aumenta a pressão arterial, causa dores de cabeça e inflamação. Quando expressa destrutivamente, danifica relacionamentos. Quando reprimida, vira depressão.",
+    recomendacao: "Canais saudáveis de expressão: exercício intenso, artes marciais, escrita terapêutica. Identificar gatilhos, aprender comunicação não-violenta, florais de Bach (Cherry Plum para perda de controle, Holly para raiva por inveja)."
+  },
+  "Tristeza": {
+    titulo: "Tristeza (Nível de Consciência: 75)",
+    explicacao: "A tristeza é uma emoção natural de processamento de perdas. Porém, quando prolongada além de 2 semanas, pode indicar depressão. Afeta o sistema imunológico, a energia e a motivação. Tristeza crônica consome serotonina.",
+    recomendacao: "Se > 2 semanas: avaliação profissional para depressão. Terapia, exercício aeróbico (20min já eleva serotonina), exposição solar, conexão social, evitar isolamento. Florais de Bach (Mustard para tristeza sem causa, Star of Bethlehem para luto)."
+  },
+  "Ansiedade": {
+    titulo: "Ansiedade (Nível de Consciência: 100)",
+    explicacao: "A ansiedade crônica mantém o cérebro em estado de alerta permanente, esgotando neurotransmissores (GABA, serotonina). Causa palpitações, insônia, tensão muscular, problemas digestivos e névoa mental. Pode ser causada por desequilíbrio bioquímico.",
+    recomendacao: "Avaliar deficiências (magnésio, vitamina B6, ferro, zinco), reduzir cafeína, exercício regular, terapia cognitivo-comportamental, suplementação (L-teanina 200mg, ashwagandha 300mg, magnésio quelado), técnicas de respiração."
+  },
+  "Estresse": {
+    titulo: "Estresse (Eixo HPA Desregulado)",
+    explicacao: "O estresse crônico sobrecarrega o eixo hipotálamo-hipófise-adrenal (HPA), mantendo cortisol elevado. Isso destrói músculo, acumula gordura visceral, suprime imunidade, prejudica memória e bloqueia o sono reparador.",
+    recomendacao: "Medicação: reduzir fontes de estresse quando possível. Suplementação: ashwagandha, rhodiola, magnésio. Técnicas: meditação (10min/dia já reduz cortisol), respiração 4-7-8, exercício moderado, dormir 7-8h, adaptógenos."
+  },
+  "Frustração": {
+    titulo: "Frustração (Nível de Consciência: 125)",
+    explicacao: "A frustração surge quando expectativas não são atendidas. Crônica, gera irritabilidade, agressividade, desânimo e desistência. Está ligada à dopamina — quando a recompensa esperada não vem, o cérebro 'desliga' a motivação.",
+    recomendacao: "Revisar expectativas (são realistas?), praticar aceitação radical, celebrar pequenas conquistas, terapia para padrões de pensamento rígido, florais de Bach (Impatiens para impaciência, Willow para ressentimento)."
+  },
+  "Insegurança": {
+    titulo: "Insegurança (Autoestima Fragilizada)",
+    explicacao: "A insegurança crônica tem raiz em experiências de rejeição, comparação social excessiva e vínculos infantis instáveis. Ativa o mesmo circuito neural que a dor física. Causa ansiedade social, perfeccionismo e evitação de desafios.",
+    recomendacao: "Terapia focada em autoestima e esquemas cognitivos, reduzir comparação social (limitar redes), praticar autocompaixão, florais de Bach (Larch para falta de confiança, Cerato para buscar aprovação), construir pequenas vitórias."
+  },
+  "Solidão": {
+    titulo: "Solidão (Nível de Consciência: 50)",
+    explicacao: "A solidão crônica é tão prejudicial à saúde quanto fumar 15 cigarros/dia (estudos). Ativa respostas inflamatórias crônicas, eleva cortisol, prejudica imunidade e aumenta risco cardiovascular. Não é sobre estar só — é sobre se sentir desconectado.",
+    recomendacao: "Conexão social de qualidade (não quantidade), grupos de interesse compartilhado, voluntariado, terapia para padrões de isolamento, adotar um animal de estimação, florais de Bach (Water Violet para isolamento por orgulho, Heather para necessidade de atenção)."
+  },
+  "Amor": {
+    titulo: "Amor (Nível de Consciência: 500)",
+    explicacao: "O amor é o estado emocional mais elevado mensurável. Indica capacidade de conexão, empatia e aceitação incondicional. Score baixo sugere bloqueios emocionais, ressentimentos não resolvidos, medo de vulnerabilidade ou desconexao de si mesmo.",
+    recomendacao: "Práticas de gratidão diária, terapia de perdão, meditação do coração (tapping no centro do peito), journaling emocional, flores de Bach (Walnut para adaptação, Holly para inveja/ciúme, Chicory para amor possessivo)."
+  },
+  "Dor": {
+    titulo: "Dor (Nível de Consciência: 75)",
+    explicacao: "A dor emocional crônica ativa as mesmas áreas cerebrais que a dor física. Pode ser causada por traumas não processados, luto não resolvido, abuso ou abandono. Quando reprimida, se manifesta como sintomas físicos (psicossomática).",
+    recomendacao: "Não reprimir — permitir sentir. Terapia EMDR para traumas, journaling emocional, florais de Bach (Star of Bethlehem para choque/trauma, Rescue Remedy para crises), atividade física como liberação, buscar ajuda profissional se persistir."
+  },
+  "Desejo": {
+    titulo: "Desejo (Nível de Consciência: 125)",
+    explicacao: "O desejo é a força motivacional básica, mas quando desregulado vira compulsão, apego e insatisfação crônica. Está ligado à dopamina — o 'neurotransmissor da busca'. Score baixo indica apatia ou desesperança; muito alto indica compulsão.",
+    recomendacao: "Equilibrar dopamina: evitar 'superestímulos' (redes, pornografia, açúcar, compras), praticar jejum de dopamina periódico, definir metas realistas com recompensas intermediárias, mindfulness para observar impulsos sem agir."
+  },
+  "Orgulho": {
+    titulo: "Orgulho (Nível de Consciência: 175)",
+    explicacao: "O orgulho saudável fortalece a autoestima. O orgulho tóxico (arrogância) cria rigidez, dificulta pedir ajuda e danifica relacionamentos. Quando baseado em aparências, é frágil e gera ansiedade de manutenção.",
+    recomendacao: "Distinguir orgulho saudável de arrogância, praticar humildade ativa, reconhecer próprias limitações com serenidade, florais de Bach (Vine para autoritarismo, Beech para intolerância), desenvolver empatia genuína."
+  },
+  "Coragem": {
+    titulo: "Coragem (Nível de Consciência: 200)",
+    explicacao: "A coragem é o ponto de inflexão — primeiro nível onde a energia é construtiva (acima de 200). Indica capacidade de agir apesar do medo. Score baixo sugere paralisia por medo, evitação de conflitos e submissão excessiva.",
+    recomendacao: "Exposição gradual a situações desafiadoras, fixar metas pequenas e alcançáveis, celebrar cada ato de coragem, florais de Bach (Mimulus para medos conhecidos, Larch para falta de confiança), terapia para identificar e superar bloqueios."
+  },
+  "Aceitação": {
+    titulo: "Aceitação (Nível de Consciência: 350)",
+    explicacao: "A aceitação não é conformismo — é reconhecer a realidade sem resistência interna. Score baixo indica luta constante contra o que é, negação, raiva reprimida ou dificuldade em lidar com mudanças. A aceitação libera energia para ação eficaz.",
+    recomendacao: "Praticar aceitação radical (DBT), distinguir o que pode/muda mudar do que não pode, oração da serenidade, terapia focada em flexibilidade psicológica, florais de Bach (Walnut para adaptação a mudanças, Walnut + Oak para resistência)."
+  },
+
+  // ==============================
+  // MINERAIS E VITAMINAS
+  // ==============================
   "Potássio": {
-    titulo: "Potássio",
-    explicacao: "Mineral essencial para função muscular, nervosa e equilíbrio eletrolítico. Deficiência causa cãibras, fadiga, arritmias e sono fragmentado.",
-    recomendacao: "Alimentos ricos (banana, batata-doce, abacate, espinafre, feijão), evitar diuréticos em excesso."
+    titulo: "Potássio (Equilíbrio Eletrolítico)",
+    explicacao: "Mineral essencial para função muscular, nervosa e equilíbrio hidroeletrolítico. Deficiência causa cãibras, fadiga, arritmias, sono fragmentado e pressão alta. Perde-se em suor, diuréticos e estresse.",
+    recomendacao: "Alimentos ricos (banana, batata-doce, abacate, espinafre, feijão, tomate), evitar diuréticos em excesso, suplementar apenas se prescrito (excesso de potássio é perigoso para rins)."
   },
+  "Cálcio": {
+    titulo: "Cálcio (Estrutura Óssea e Sinalização Neural)",
+    explicacao: "Além dos ossos, o cálcio é crucial para contração muscular, coagulação e transmissão nervosa. Deficiência causa osteoporose, cãibras, unhas fracas e problemas cardíacos. Necessita vitamina D para absorção.",
+    recomendacao: "Laticínios, brócolis, sardinha com osso, gergelim, tofu. Suplementar com vitamina D3 (2000-4000 UI). Evitar excesso de sódio que aumenta excreção de cálcio."
+  },
+  "Zinco": {
+    titulo: "Zinco (Imunidade e Reparação Tecidual)",
+    explicacao: "Essencial para imunidade, cicatrização, saúde da pele e produção hormonal. Deficiência causa queda de imunidade, queda de cabelo, unhas fracas, acne, alteração do paladar e fadiga. Vegéticos são mais vulneráveis.",
+    recomendacao: "Ostras, carnes vermelhas, sementes de abóbora, nozes, leguminosas. Suplementação: picolinato de zinco 15-30mg/dia (não exceder 40mg sem orientação). Associar com cobre para equilíbrio."
+  },
+  "Ferro": {
+    titulo: "Ferro (Transporte de Oxigênio)",
+    explicacao: "Componente da hemoglobina que carrega oxigênio no sangue. Deficiência causa anemia, fadiga crônica, palidez, falta de ar, queda de cabelo e unhas em colher. Mulheres menstruantes são o grupo mais afetado.",
+    recomendacao: "Carnes vermelhas, fígado, feijão, lentilha, espinafre. Associar com vitamina C (laranja, limão) para aumentar absorção. Evitar chá/café nas refeições (inibem absorção). Suplementar apenas com dosagem confirmada por exame."
+  },
+
+  // ==============================
+  // SISTEMAS FISIOLÓGICOS
+  // ==============================
   "Metais Pesados": {
-    titulo: "Metais Pesados",
-    explicacao: "Acúmulo de chumbo, mercúrio, cádmio e alumínio causa toxicidade sistêmica, fadiga crônica, névoa mental e distúrbios do sono.",
-    recomendacao: "Desintoxicação com coentro, chlorella, zeolita, sauna, evitar peixes contaminados, panelas de alumínio."
+    titulo: "Metais Pesados (Toxicidade Sistêmica)",
+    explicacao: "Acúmulo de chumbo, mercúrio, cádmio e alumínio causa toxicidade sistêmica crônica. Sintomas: fadiga crônica, névoa mental, dores articulares, distúrbios do sono, problemas de pele e desequilíbrio hormonal. Fontes: peixes grandes, panelas alumínio, vacinas, cosméticos.",
+    recomendacao: "Desintoxicação: coentro (+chlorella para quelar e excretar), zeolita, sauna, evitar peixes predadores (atum, tubarão), trocar panelas de alumínio por aço inox/ferro, filtrar água, checking odontológico para amálgamas."
+  },
+  "Colesterol": {
+    titulo: "Colesterol (Metabolismo Lipídico)",
+    explicacao: "O colesterol é essencial (hormônios, membranas celulares, vitamina D). O problema é o desequilíbrio: LDL alto + HDL baixo = risco cardiovascular. Inflamação crônica e estresse oxidativo são as verdadeiras causas de placa arterial, não apenas o colesterol.",
+    recomendacao: "Reduzir açúcar e processados (maior causa de inflamação), aumentar fibras (aveia, leguminosas), exercício aeróbico regular, ômega-3 (peixe, sardinha), dormir bem. O colesterol dietético tem pouco impacto no sanguíneo."
+  },
+  "Glicemia": {
+    titulo: "Glicemia (Equilíbrio do Açúcar no Sangue)",
+    explicacao: "A glicemia desregulada (resistência à insulina) é a porta de entrada para diabetes tipo 2, síndrome metabólica, esteatose hepática e inflamação crônica. Causa fadiga após refeições, ganho de peso abdominal e fome frequente.",
+    recomendacao: "Reduzir carboidratos refinados e açúcar, priorizar proteína e gordura boa no café da manhã, exercício muscular (aumenta sensibilidade à insulina), canela (1-2g/dia melhora sensibilidade), jejum intermitente (se orientado), cromo picolinato."
+  },
+  "Tiroide": {
+    titulo: "Tiroide (Regulador Metabólico Central)",
+    explicacao: "A tireoide controla o metabolismo de TODAS as células. Hipotireoidismo causa fadiga, ganho de peso, frio excessivo, queda de cabelo, depressão e colesterol alto. Hipertireoidismo causa taquicardia, ansiedade, emagrecimento e insônia.",
+    recomendacao: "Exames completos (TSH, T3 livre, T4 livre, anti-TPO), selênio (200mcg/dia para tireoidite de Hashimoto), evitar soja em excesso, iodo adequado (sal iodado, peixe), gerenciar estresse (cortisol suprime conversão T4→T3)."
+  },
+  "Fígado": {
+    titulo: "Fígado (Central de Desintoxicação)",
+    explicacao: "O fígado realiza mais de 500 funções: desintoxicação, produção de bile, metabolismo de hormônios, armazenamento de vitaminas. Quando sobrecarregado (álcool, processados, estresse), causa fadiga, digestão ruim, pele amarelada, colesterol alto e insônia.",
+    recomendacao: "Evitar álcool e ultraprocessados, chás hepatoprotetores (boldo, carqueja, dente-de-leão, alcachofra), comer brócolis e alho (ativam enzimas desintoxicantes), jantar leve, manter hidratação, considerar NAC (N-acetilcisteína)."
   },
 };
 
