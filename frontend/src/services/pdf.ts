@@ -129,24 +129,49 @@ export class DataValidationError extends PDFGenerationError {
 // =======================================================================
 
 /**
- * Formata data para padrão pt-BR com fallback seguro
+ * Formata data para padrão pt-BR com fallback seguro.
+ * Detecta automaticamente se a data tem hora significativa.
  */
 export function formatDate(value: string | Date | undefined | null): string {
-  if (!value) return new Date().toLocaleString("pt-BR");
+  if (!value) return new Date().toLocaleDateString("pt-BR");
 
   try {
-    const d = typeof value === "string" ? new Date(value) : value;
-    if (Number.isNaN(d.getTime())) return new Date().toLocaleString("pt-BR");
+    // ✅ Parsing local para datas sem timezone (evita shift UTC→Brasil)
+    let d: Date;
+    if (typeof value === "string") {
+      // Se é apenas data (YYYY-MM-DD), parsear como local
+      const parts = value.split('T')[0].split('-');
+      if (parts.length === 3 && parts[0].length === 4) {
+        d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      } else {
+        d = new Date(value);
+      }
+    } else {
+      d = value;
+    }
+
+    if (Number.isNaN(d.getTime())) return new Date().toLocaleDateString("pt-BR");
+
+    // ✅ Só mostrar hora se for diferente de meia-noite
+    const temHora = d.getHours() !== 0 || d.getMinutes() !== 0;
+
+    if (temHora) {
+      return new Intl.DateTimeFormat("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(d);
+    }
 
     return new Intl.DateTimeFormat("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
     }).format(d);
   } catch {
-    return new Date().toLocaleString("pt-BR");
+    return new Date().toLocaleDateString("pt-BR");
   }
 }
 
@@ -824,13 +849,32 @@ export function gerarSecaoExplicativa(itemScores: ItemScoreEvolucao[]): string {
 
   const htmlExplicacoes = itensCriticos.map(is => {
     const nome = normalizarNomeItem(is.item);
-    const info = EXPLICACOES_ITENS[nome] || {
-      titulo: nome.replace(/^./, c => c.toUpperCase()),
-      explicacao: isItemEmocional(nome)
-        ? "Estado emocional que influencia qualidade de vida, sono e bem-estar. Score baixo indica necessidade de trabalho emocional e autocuidado."
-        : "Desequilíbrio bioenergético que impacta sono, energia e bem-estar geral.",
-      recomendacao: "Avaliação profissional recomendada para protocolo personalizado."
-    };
+
+    // ✅ CORREÇÃO: Lookup case-insensitive — normaliza as chaves da tabela também
+    let info = EXPLICACOES_ITENS[nome];
+    if (!info) {
+      // Busca por chave exata capitalizada
+      const chaveCapitalizada = nome.replace(/^./, c => c.toUpperCase());
+      info = EXPLICACOES_ITENS[chaveCapitalizada];
+    }
+    if (!info) {
+      // Busca por substring em qualquer chave
+      const chaveEncontrada = Object.keys(EXPLICACOES_ITENS).find(k =>
+        k.toLowerCase() === nome || nome.includes(k.toLowerCase()) || k.toLowerCase().includes(nome)
+      );
+      info = chaveEncontrada ? EXPLICACOES_ITENS[chaveEncontrada] : undefined;
+    }
+
+    // Fallback apenas se NENHUMA busca funcionar
+    if (!info) {
+      info = {
+        titulo: nome.replace(/^./, c => c.toUpperCase()),
+        explicacao: isItemEmocional(nome)
+          ? "Estado emocional que influencia qualidade de vida, sono e bem-estar. Score baixo indica necessidade de trabalho emocional e autocuidado."
+          : "Desequilíbrio bioenergético que impacta sono, energia e bem-estar geral.",
+        recomendacao: "Avaliação profissional recomendada para protocolo personalizado."
+      };
+    }
 
     const corBadge = is.score_atual < 30 ? PDFConfig.colors.error
       : is.score_atual < 50 ? "#f97316"

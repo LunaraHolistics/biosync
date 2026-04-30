@@ -749,14 +749,33 @@ function buildRelatorioData(
   // PREENCHER score_anterior COM DADOS DO EXAME ANTERIOR
   // =======================================================================
   if (itemScoresEvolucao.length > 0 && examesAnteriores && examesAnteriores.length > 0) {
-    // ✅ Passa base + terapias para fallback do motor se necessário
+    // ✅ Diagnóstico: quantos exames anteriores existem e quais datas?
+    console.log(`🔍 [DIAG EVOLUÇÃO] Exames anteriores disponíveis: ${examesAnteriores.length}`);
+    examesAnteriores.forEach((e, i) => {
+      const dataE = e.data_exame || e.created_at;
+      const ib = e.indice_biosync;
+      const temScores = ib && typeof ib === 'object' && 'item_scores' in ib;
+      console.log(`  [${i}] id=${e.id.substring(0, 5)} data=${dataE} tem_indice_biosync=${!!ib} tem_item_scores=${temScores}`);
+    });
+    console.log(`🔍 [DIAG EVOLUÇÃO] Data do exame atual: ${row.data_exame || row.created_at}`);
+    console.log(`🔍 [DIAG EVOLUÇÃO] baseAnalise disponível: ${baseAnalise?.length || 0} itens`);
+    console.log(`🔍 [DIAG EVOLUÇÃO] terapias disponível: ${terapias?.length || 0} itens`);
+
     const mapaAnterior = extrairScoresExameAnterior(
       examesAnteriores,
       row.data_exame || row.created_at,
-      baseAnalise,  // ← NOVO: para fallback do motor
-      terapias       // ← NOVO: para fallback do motor
+      baseAnalise,
+      terapias
     );
     let preenchidos = 0;
+
+    console.log(`🔍 [DIAG EVOLUÇÃO] Mapa anterior retornou: ${mapaAnterior.size} itens`);
+    if (mapaAnterior.size > 0) {
+      const amostras = [...mapaAnterior.entries()].slice(0, 3);
+      for (const [chave, val] of amostras) {
+        console.log(`  → "${chave}": score=${val.score_atual}`);
+      }
+    }
 
     itemScoresEvolucao = itemScoresEvolucao.map(item => {
       const chave = item.item.trim().replace(/[:：]$/, '').toLowerCase();
@@ -779,7 +798,20 @@ function buildRelatorioData(
 
     if (preenchidos > 0) {
       console.log(`📊 [EVOLUÇÃO] ${preenchidos}/${itemScoresEvolucao.length} itens com score anterior preenchido`);
+    } else {
+      console.warn('⚠️ [EVOLUÇÃO] NENHUM item bateu entre exame atual e anterior!');
+      console.warn('⚠️ [EVOLUÇÃO] Chaves do atual (5 primeiras):');
+      itemScoresEvolucao.slice(0, 5).forEach(i => {
+        const chave = i.item.trim().replace(/[:：]$/, '').toLowerCase();
+        console.warn(`  → "${chave}" (score=${i.score_atual})`);
+      });
+      console.warn('⚠️ [EVOLUÇÃO] Chaves do anterior (5 primeiras):');
+      [...mapaAnterior.keys()].slice(0, 5).forEach(k => {
+        console.warn(`  → "${k}"`);
+      });
     }
+  } else {
+    console.log(`🔍 [DIAG EVOLUÇÃO] Bloco de evolução ignorado: itemScores=${itemScoresEvolucao.length} examesAnteriores=${examesAnteriores?.length || 0}`);
   }
 
   // =======================================================================
@@ -1176,7 +1208,18 @@ function App() {
                                 onClick={() => {
                                   setGerandoPdf(true);
                                   const analiseResult = exameRowToAiData(a, baseAnalise, terapias, terapiasEditavel, categoriasFiltro);
-                                  gerarRelatorioPDF(buildRelatorioData(a, pacienteSelecionado || "Cliente", analiseResult.data, comparativoExamesData, obterAnalise(a), categoriasFiltro, examesPaciente.filter(e => e.id !== a.id), analiseResult.pacienteGenero));
+                                  gerarRelatorioPDF(buildRelatorioData(
+                                    a,
+                                    pacienteSelecionado || "Cliente",
+                                    analiseResult.data,
+                                    comparativoExamesData,
+                                    obterAnalise(a),
+                                    categoriasFiltro,
+                                    examesPaciente.filter(e => e.id !== a.id),
+                                    analiseResult.pacienteGenero,
+                                    baseAnalise,  // ← ADICIONAR
+                                    terapias       // ← ADICIONAR
+                                  ));
                                   setTimeout(() => setGerandoPdf(false), 3000);
                                 }}
                                 disabled={gerandoPdf}
