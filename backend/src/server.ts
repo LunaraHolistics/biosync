@@ -15,6 +15,7 @@ console.log(`📦 NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🔑 Variáveis disponíveis: ${Object.keys(process.env).filter(k => !k.startsWith('npm_') && !k.startsWith('NODE_')).join(', ')}`);
 
 // Validação de chaves críticas
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const requiredKeys = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GEMINI_API_KEY', 'APP_SECRET_KEY'];
 const missingKeys = requiredKeys.filter(key => !process.env[key]);
 
