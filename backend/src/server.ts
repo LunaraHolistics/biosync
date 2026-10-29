@@ -45,15 +45,48 @@ const app = express();
 
 // 1. CORS - Aceitar extensão Chrome e frontend Vite
 app.use(cors({
-  origin: [
-    'http://localhost:5173',      // Vite dev
-    'http://localhost:3000',      // Backend local
-    'https://biosync-nu.vercel.app',  // Frontend produção
-    'chrome-extension://*',       // Extensão Chrome (qualquer ID)
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+  origin: (origin, callback) => {
+    const allowedFromEnv = process.env.FRONTEND_URL
+      ?.split(',')
+      .map(s => s.trim())
+      .filter(Boolean) ?? [];
+
+    const allowed = new Set([
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:5500',
+      'http://127.0.0.1:5500',
+      'https://biosync-nu.vercel.app',
+      ...allowedFromEnv
+    ]);
+
+    // Requests sem Origin: curl, PowerShell, health checks internos
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Páginas abertas como file:// enviam Origin: null
+    if (origin === 'null') {
+      return callback(null, true);
+    }
+
+    // Extensão Chrome
+    if (/^chrome-extension:\/\//.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Frontends permitidos
+    if (allowed.has(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn(`⚠️ CORS bloqueou origin: ${origin}`);
+    return callback(new Error('CORS não permitido'), false);
+  },
+  credentials: false,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  maxAge: 86400
 }));
 
 // 2. Body parsers
